@@ -1,4 +1,4 @@
-# Momentra · 0.3.7
+# Momentra · 0.4.0
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -79,7 +79,7 @@ O script inicia uma câmera customizada quando aberto normalmente. A Tela Bloque
 
 Em Configurações, **Cópia na galeria Fotos → Não salvar na galeria** bloqueia o salvamento de fotos e vídeos no Fotos. Arquivos continuam guardados **localmente no Momentra**; cópias anteriores não são apagadas. Isso não equivale a somente nuvem.
 
-O login Google opcional identifica a conta; Google Fotos e upload continuam indisponíveis. A tela distingue essas funções. A integração exige OAuth/retorno compatível e consentimento; a API permite listar conteúdo criado pelo próprio aplicativo e não é destinada a dados internos empresariais. Consulte [avaliação e próximos passos](CLOUD_STORAGE.md).
+O login Google opcional identifica a conta. Google Fotos pessoal é uma integração separada, com consulta de disponibilidade, consentimento e envio manual. A API permite listar apenas conteúdo criado pelo próprio aplicativo e não é destinada a dados internos empresariais. Sem ativação do serviço ou sessão válida, os controles informam a indisponibilidade. Consulte [avaliação e próximos passos](CLOUD_STORAGE.md).
 
 ## Conta Google · 0.3.4
 
@@ -123,3 +123,20 @@ node --test backend/worker.test.mjs
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.
 
 Ver [DEVELOPMENT.md](DEVELOPMENT.md) para decisões e checklist de homologação.
+
+
+## 0.4.0 · Google Fotos pessoal e diagnóstico integrado
+
+Configurações → Conta → Google Fotos pessoal permite consultar disponibilidade, autorizar separadamente o acesso mínimo e enviar manualmente a foto selecionada. A declaração de finalidade pessoal é por foto, não pelo nome do perfil. Dados internos empresariais não devem ser enviados. O carimbo, incluindo localização visível, acompanha a imagem final; a confirmação informa a conta destinatária.
+
+A lista mostra apenas JPEGs criados pelo Momentra, com miniaturas, paginação e renovação das URLs pelo ID. Não é acesso à biblioteca inteira. Envio limitado a JPEG20MB; vídeos não são enviados. Upload ambíguo impede reenvio automático; sucesso exige criação individual e consulta do item. Originais permanecem locais. **Não é modo somente nuvem**, e miniaturas podem usar cache do host. A API consome o espaço existente da conta Google, sem comprar armazenamento.
+
+O login de identidade continua independente e a câmera funciona sem ele. Photos usa outro consentimento/token, com escopos mínimos e sessão expirada exigindo reconexão. A aplicação Google em Testing só admite usuários autorizados para teste. O botão de privacidade abre o aviso do serviço. Nada é enviado automaticamente ao abrir o app, fotografar ou entrar na conta.
+
+Menu GPS → Abrir localização no Google Maps é uma opção externa, com confirmação antes de enviar as coordenadas. **Não substitui o mapa Apple no carimbo.** Mapa Google incorporado permanece pendente: exige billing e compatibilidade de licença para exportação permanente, não resolvidos dentro da condição custo zero.
+
+Configurações → Conta → Exibir diagnóstico local reúne versão, disponibilidade de APIs e resultados reais obtidos naquele aparelho. Não transmite relatório, localização, foto, e-mail ou token. “API disponível” não significa recurso testado. Diagnóstico de captura/composição/vídeo/GPS/mapa/OAuth é registrado somente após resultado da operação, com falhas sanitizadas.
+
+### Uma validação consolidada no iPhone
+
+Após a versão integrada estar publicada, importar uma única vez. Exercitar foto4:3/carimbo/mapa/logotipo, temporizador/flash, vídeo com áudio e parada, configuração e retorno Google. Photos deve ser autorizado explicitamente; qualquer envio real será escolhido pelo usuário. Ao final conferir o diagnóstico local. Testes de mocks, CI e backend real no PC não substituem essa verificação nativa. Sem iPhone conectado ao servidor oficial Scripting não existe execução remota comprovada nesta entrega.

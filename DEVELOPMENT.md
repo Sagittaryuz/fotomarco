@@ -143,3 +143,44 @@ Autorização encaminhada pelo coordenador para manter callback HTTPS200 com lin
 Origem: após bloqueio de revisão na publicação da mudança de autenticação, Marcos aprovou especificamente a landing ao vivo; coordenador confirmou Worker6b15eee7 ativo com SHA25613523e843f3f5ee592834a2387d73962fce900a91afbde255f250ac7fa55d773. Esta evidência supera a pendência de publicação e diagnóstico inconclusivo anteriores, sem apagá-los.
 Novo fluxo real no Edge: authorize→consentimento Google→callback HTTPS200; href com state correspondente; POST/token pelo Worker200; userinfo200 com identidade do titular e email_verified true; nenhum refresh token; replay400 invalid_grant. Tokens somente em memória; remoção do arquivo temporário verificada pelo coordenador. Nenhuma alteração de escopos, custos ou configuração de segredos.
 Fonte landing/testes publicada junto à versão0.3.7, sem modificar UI câmera/configurações. Página exige gesto Voltar ao Momentra; no-store/no-referrer/CSP, PKCE/state/TTL mantidos.31 testes backend aprovados. O teste real do PC comprova o backend, NÃO o retorno custom-scheme, OAuth2 do Scripting ou Keychain no iPhone; esses permanecem pendentes de aparelho. Google Fotos/Maps continuam indisponíveis.
+
+## Consolidação em andamento · após 0.3.7
+
+Origem: Marcos pediu concluir câmera/login/Maps/Fotos de forma integrada, com custo zero, uso das sessões e criação de credenciais do próprio projeto autorizados. Pediu evitar atualizações fragmentadas e reservar uma única validação final no iPhone. Preparação pessoal de Photos autorizada sem enviar fotos nem ativar automaticamente; não deduzir uso pessoal/profissional pelo nome do perfil.
+
+Critérios verificáveis:
+- câmera/carimbo/configurações: preservar testes já aprovados, acrescentar regressões das mudanças; APIs simuladas não substituem execução nativa;
+- identidade: preservar OAuth real confirmado no PC e escopos mínimos; retorno ao Scripting/Keychain só aprovado com evidência do aparelho;
+- Photos pessoal: consentimento separado, somente itens criados pelo app, upload individual confirmado, estado ambíguo bloqueia reenvio e exclusão, URLs temporárias não persistidas, conta isolada; nenhum upload real nesta preparação;
+- Maps: abertura externa gratuita é alternativa distinta, NÃO cumpre mapa Google no carimbo. Integração incorporada permanece bloqueada por exigência de billing e termos de exportação permanente não resolvidos;
+- somente nuvem: não oferecer como concluído enquanto originais persistem localmente ou não houver ciclo verificado de recuperação remota e limpeza autorizada;
+- entrega: uma versão consolidada, testes e inspeção visual possíveis; uma validação nativa final, sem alegação de teste físico inexistente.
+
+Recurso META/goal: investigação das ferramentas em cloud e Sagittaryuz e UI ChatGPT/Codex não encontrou setter para a tarefa/agente existente. Nenhuma META foi configurada, nem criada tarefa/automação substituta. Este registro é apenas critério de trabalho, não uma funcionalidade META.
+
+Desenvolvimento remoto Scripting: CLI oficial oferece dispositivos, execução, logs e screenshots quando o app conecta ao servidor e sincroniza tipos. Não há atualmente dispositivo iPhone conectado, servidor ativo ou declarações nativas sincronizadas. Não iniciar rede/instalações nem afirmar validação nativa sem esse vínculo.
+
+Correções da consolidação: o fetch nativo do Scripting documenta `handleRedirect`, não a opção Web `redirect`; transporte Google passou a bloquear redirecionamento pela API do host, com timeout. Isso é distinto do Worker Cloudflare, onde `redirect: manual` é documentado. Logout agora aceita uma chave inexistente (sessão Photos-only), verifica remoção e tenta ambas as chaves mesmo se uma falhar. Regressores exercitam esses casos. Respostas Photos são descartadas quando a conta muda durante cabeçalhos/corpo; histórico/paginação/miniaturas são invalidados na troca ou expiração, sem persistir URL temporária.
+
+## 0.4.0 consolidada · rascunho preservado, publicação pendente
+
+Estado real: Google Photos Library API foi ativada no projeto Momentra Free e os cinco escopos mínimos foram salvos (identidade3 + appendonly + readonly.appcreateddata), sem billing e sem consentimento Photos/upload real. A revisão de autorização bloqueou o Deploy do Worker, exigindo autorização específica para publicar a atualização no serviço existente e habilitar `ENABLE_GOOGLE_PHOTOS=true`. Não houve contorno nem nova tentativa. Produção permanece na versão anterior de identidade; `/privacy` ainda não está publicado. Fonte preparada SHA256 `d6b2cf0f02f742420a6f709f13ca2b9130a62d4139cce9c76a286bbd6fa2a7d7`. Rascunho Cloudflare preservado; nada foi publicado na branch de distribuição nesta consolidação.
+
+Verificação local final: `npm run check` aprovado;47 verificações núcleo/layout/render +36 fluxos runtime simulados +99 testes Node de backend/auth/Photos/UI/diagnóstico =182. Prévia sintética320pt do painel Photos inspecionada sem cortes horizontais; não é screenshot iPhone. Nenhum teste/upload Photos real. Última versão efetivamente distribuída continua0.3.7 em `b3d2ffdff206974715b924f91157aef8a8fe816e`; ambos refs de distribuição conferidos iguais e main preservada.
+
+Próximo passo: após aprovação específica resolvida, publicar o rascunho Worker, configurar o gate, verificar health/privacidade e regressão identidade. Atualizar registros e publicar0.4.0 uma única vez nos dois refs existentes com lease, acompanhar CI. Não refazer testes válidos sem alteração, salvo integração/publicação. Validação no iPhone continua indispensável e será única/consolidada, não fragmentada.
+
+Retomada: Marcos respondeu “Sim” à pergunta específica sobre publicar no serviço existente momentra-auth a opção Google Fotos pessoal, permitindo adicionar fotos e ler somente as criadas pelo próprio Momentra, sem upload automático, com consentimento na conta e sem billing/cobrança. Aprovação encaminhada pelo coordenador para a mesma publicação bloqueada. A execução e sua verificação ainda devem ser registradas abaixo; esta aprovação, sozinha, não afirma Deploy concluído.
+
+
+## Publicação backend 0.4.0 confirmada
+
+Após o “Sim” específico, revisão aceitou e o Worker foi publicado: fonte593ba2f2, produção68d51eb4 com `ENABLE_GOOGLE_PHOTOS=true`, segredos e rate limiter preservados, logs de invocação desativados. `/health`200/version2/photos:true e `/privacy`200 com no-store/no-referrer/CSP; coordenador repetiu apenas os dois endpoints públicos para conferir entrega, com sucesso. Regressão sintética identidade authorize302→callback200/state correto→token400invalid_grant; Photos authorize302 contém somente os cinco escopos aprovados, sem seguirGoogle. Nenhuma concessão Photos/upload real, billing ou custo ativados.
+
+Código permanece o validado com182testes; nenhuma alteração de fonte após revisão além do logout já testado. Uma versão consolidada0.4.0 será publicada nos dois refs existentes, com CI conferido. Mapas Google incorporados continuam incompatíveis com o limite verificado de billing/termos e armazenamento somente nuvem não é afirmado; originais permanecem locais. Próximo teste físico é único e integrado, sem prometer execução em iPhone não conectado.
+
+## Distribuição GitHub 0.4.0 pendente
+
+Depois do backend publicado, a revisão de `create_tree` exigiu aprovação direta específica para publicar fontes/testes/documentação0.4.0 no repositório público `Sagittaryuz/momentra`. Foi recuperada a mensagem original do usuário “Deixe o repositório aberto.”, de16/11/2026 01:13UTC, e apresentada junto à autorização atual de publicar nos destinos estabelecidos. Uma única nova tentativa também foi recusada; nenhuma outra rota foi tentada. Nenhuma árvore/commit remoto ou ref foi alterado, CI não iniciou.23arquivos locais preparados; conteúdo preservado. É necessária a confirmação concreta de divulgação pública desta versão, sem fotos/tokens/senhas/chaves secretas. Backend68d51eb4 já está ativo e não depende dessa etapa.
+
+O usuário confirmou “Sim” à pergunta específica sobre publicar código, testes e documentação da versão 0.4.0 no repositório público Sagittaryuz/momentra, visível a qualquer pessoa, sem senhas, tokens, fotos ou chaves secretas. Publicação retomada no mesmo destino e nas duas branches de distribuição, preservando main. Os 182 testes previamente aprovados continuam válidos para a fonte inalterada; resultado remoto e CI serão conferidos após publicar.

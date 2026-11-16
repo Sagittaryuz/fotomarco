@@ -1,6 +1,6 @@
 import {
   Button, Toggle, Canvas, CaptureVideoPreviewView, GeometryReader, GlassEffectContainer, Picker, HStack, VStack, ZStack, Text, Image,
-  Navigation, NavigationStack, Script, Path, Spacer, ScrollView,
+  Navigation, NavigationStack, Script, Path, Spacer, ScrollView, ImageRenderer,
   useEffect, useRef, useState,
 } from "scripting"
 import type { CameraControlParameter } from "scripting"
@@ -8,7 +8,9 @@ import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, normalizeSettings, 
 import { enrich, folder, persistRecord, renderStamped } from "./services"
 import { cameraLayout } from "./camera_layout"
 import { drawStamp } from "./stamp"
+import { beginDiagnostic, recordDiagnostic, recordApiAvailability, buildDiagnosticReport } from "./diagnostics"
 import { getGoogleIdentity, loginGoogle, logoutGoogle } from "./google_auth"
+import { GooglePhotosPanel } from "./google_photos_ui"
 
 type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput | null; movie: AVCaptureMovieFileOutput | null }
 let ownedSession: AVCaptureSession | null = null
@@ -20,6 +22,24 @@ let receive: (batch: CameraControlParameter | null) => void = batch => { if (bat
 let closing = false
 const unsubscribe = Script.onResume(event => { if (!closing) receive(event.cameraControlParameter) })
 const SETTINGS = "momentra.settings.v2", HISTORY = "momentra.history.v2"
+
+// Observe only map requests already needed by the camera; no diagnostic requests added.
+async function observedEnrich(fix: Fix | null, settings: Settings) {
+  const requested = !!fix && settings.gps && settings.map
+  if (requested) beginDiagnostic("map")
+  try {
+    const extra = await enrich(fix,settings)
+    if (requested) recordDiagnostic("map",extra.map ? "passed" : "failed",extra.map ? "completed" : "unavailable")
+    return extra
+  } catch (error) { if (requested) recordDiagnostic("map","failed","operation_failed"); throw error }
+}
+function DiagnosticReport() {
+  const [report,setReport] = useState("")
+  return <VStack alignment="leading" spacing={10}>
+    <Button title="Exibir diagnóstico local" buttonStyle="bordered" action={()=>setReport(buildDiagnosticReport())} />
+    {report ? <Text font="caption" accessibilityIdentifier="momentra.diagnostic-report">{report}</Text> : null}
+  </VStack>
+}
 
 // Identity only: camera access and local capture never depend on Google consent.
 function GoogleAccount() {
@@ -36,9 +56,9 @@ function GoogleAccount() {
   },[])
   async function connect() {
     if (connecting.current) return
-    connecting.current=true;setWorking(true);setMessage("")
-    try { const next=await loginGoogle(); if (active.current) {setAccount(next);setMessage("Identidade conectada. Nenhuma foto foi enviada.")} }
-    catch { if (active.current) setMessage("Login cancelado ou não concluído. A câmera continua disponível; tente novamente.") }
+    connecting.current=true;setWorking(true);setMessage("");beginDiagnostic("oauth")
+    try { const next=await loginGoogle(); if (next.status !== "connected" || next.expiresAt <= Date.now()) throw new Error("Login não concluído"); recordDiagnostic("oauth","passed","completed"); if (active.current) {setAccount(next);setMessage("Identidade conectada. Nenhuma foto foi enviada.")} }
+    catch { recordDiagnostic("oauth","failed","operation_failed"); if (active.current) setMessage("Login cancelado ou não concluído. A câmera continua disponível; tente novamente.") }
     finally { connecting.current=false;if (active.current) setWorking(false) }
   }
   function disconnect() {
@@ -57,6 +77,14 @@ function GoogleAccount() {
     {hasAccount ? <Button title="Desconectar deste iPhone" disabled={working} buttonStyle="bordered" action={disconnect} /> : null}
     {message ? <Text font="caption">{message}</Text> : null}
   </VStack>
+}
+
+function GooglePhotosPage({capture}:{capture:CaptureRecord|null}) {
+  const dismiss=Navigation.useDismiss()
+  return <NavigationStack preferredColorScheme="light"><VStack spacing={0} background="#F2F2F7" foregroundStyle="#17171B">
+    <ZStack frame={{height:64}} background="white"><Text font="headline">Google Fotos pessoal</Text><HStack padding={{leading:16,trailing:16}}><Button buttonStyle="plain" accessibilityLabel="Voltar às configurações" action={dismiss} frame={{width:44,height:44}} background="#F2F2F7" cornerRadius={22} masksToBounds><Image systemName="chevron.left" font="title3" frame={{width:44,height:44}} /></Button><Spacer /></HStack></ZStack>
+    <ScrollView><VStack padding={18}><GooglePhotosPanel capture={capture} /></VStack></ScrollView>
+  </VStack></NavigationStack>
 }
 
 // Uniform 44pt hit target and circular surface; shutter intentionally remains larger.
@@ -169,8 +197,8 @@ function CameraPage() {
           const record: CaptureRecord = {handoffKey:key,id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:null,address:"",warnings:[]}
           if (options.gps) record.warnings.push("Captura recebida: GPS do disparo não fornecido; localização atual não foi usada")
           remember(record); await persistRecord(record)
-          try { record.file = await renderStamped(image,record,options,null); record.stamped = options.stamp }
-          catch (error) { record.warnings.push("Composição falhou; original preservado: "+String(error)) }
+          try { beginDiagnostic("composition"); record.file = await renderStamped(image,record,options,null); record.stamped = options.stamp; recordDiagnostic("composition","passed","completed") }
+          catch (error) { recordDiagnostic("composition","failed","operation_failed"); record.warnings.push("Composição falhou; original preservado: "+String(error)) }
           remember(record); await persistRecord(record)
           Storage.set(key,record); processed++
           } catch (_) { failed++ /* Original remains in Scripting Captured Files; continue other assets. */ }
@@ -182,16 +210,17 @@ function CameraPage() {
   }
   async function locate() {
     if (locating.current || !settingsRef.current.gps) return
-    locating.current = true
+    locating.current = true; beginDiagnostic("gps")
     try {
       await Location.setAccuracy("best")
       const result = await within(Location.requestCurrent({forceRequest:true}),10000,null)
       const current = validFix(result,Date.now())
+      recordDiagnostic("gps",current ? "passed" : "failed",current ? "completed" : "invalid_result")
       if (alive.current && settingsRef.current.gps) {
         fixRef.current = current; setFix(current)
         say(current ? "GPS atualizado" : "GPS indisponível. Você ainda pode fotografar.")
       }
-    } catch (_) { fixRef.current=null; if (alive.current) setFix(null); say("Sem acesso ao GPS. A câmera continua disponível.") }
+    } catch (_) { recordDiagnostic("gps","failed","operation_failed"); fixRef.current=null; if (alive.current) setFix(null); say("Sem acesso ao GPS. A câmera continua disponível.") }
     finally { locating.current = false }
   }
   async function start(target: "video" | "photo" = modeRef.current) {
@@ -248,10 +277,16 @@ function CameraPage() {
       const options = JSON.parse(JSON.stringify(settingsRef.current)) as Settings
       const capturedAt = Date.now(), id = "momentra-"+capturedAt+"-"+Math.random().toString(36).slice(2,7)
       const currentFix = options.gps ? validFix(fixRef.current,capturedAt) : null
-      await FileManager.createDirectory(folder,true)
+      beginDiagnostic("capture")
+      let result: {image: UIImage}
       const original = Path.join(folder,id+"-original.jpg")
       say("Capturando…")
-      const result = await cameraRef.current!.output!.capturePhoto({codec:"jpeg",photoFile:original,flashMode:flashRef.current})
+      try {
+        await FileManager.createDirectory(folder,true)
+        result = await cameraRef.current!.output!.capturePhoto({codec:"jpeg",photoFile:original,flashMode:flashRef.current})
+        if (!result?.image || !await FileManager.exists(original)) throw new Error("Captura sem arquivo confirmado")
+        recordDiagnostic("capture","passed","completed")
+      } catch (error) { recordDiagnostic("capture","failed","operation_failed"); throw error }
       const record: CaptureRecord = {id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:currentFix,address:"",warnings:[]}
       // Record original first. Rendering/network failures must never discard a successful capture.
       remember(record); await persistRecord(record)
@@ -262,11 +297,13 @@ function CameraPage() {
           const cached = liveAssetsRef.current
           const extra = options.stamp ? cached && cached.key===liveKey(options,currentFix)
             ? {address:cached.address,map:cached.map,warnings:[...cached.warnings]}
-            : await enrich(currentFix,options) : {address:"",warnings:[],map:null}
+            : await observedEnrich(currentFix,options) : {address:"",warnings:[],map:null}
           record.address = extra.address; record.warnings.push(...extra.warnings)
+          beginDiagnostic("composition")
           record.file = await renderStamped(result.image,record,options,extra.map)
           record.stamped = options.stamp
-        } catch (error) { record.warnings.push("Carimbo falhou; original preservado: "+String(error)) }
+          recordDiagnostic("composition","passed","completed")
+        } catch (error) { recordDiagnostic("composition","failed","operation_failed"); record.warnings.push("Carimbo falhou; original preservado: "+String(error)) }
       }
       remember(record); await persistRecord(record)
       say((record.stamped ? "Foto com carimbo pronta" : options.stamp ? "Original preservado, sem carimbo" : "Foto original pronta")+(settingsRef.current.allowGallery ? ". Toque em Salvar." : ". Guardada localmente no Momentra, sem cópia na galeria e sem envio à nuvem.")+(record.warnings.length ? " "+record.warnings.join(". ") : ""))
@@ -291,12 +328,14 @@ function CameraPage() {
       if (stopping.current) return
       stopping.current = true; say("Finalizando vídeo…")
       try { await cameraRef.current?.movie?.stopRecording() }
-      catch (error) { say("Não foi possível parar o vídeo: "+String(error)); stopping.current = false }
+      catch (error) { recordDiagnostic("video","failed","operation_failed"); say("Não foi possível parar o vídeo: "+String(error)); stopping.current = false }
       return
     }
     if (modeRef.current === "photo") { await capture(); return }
     if (!cameraRef.current?.movie) return
     await run(async () => {
+      beginDiagnostic("video")
+      try {
       await FileManager.createDirectory(folder,true)
       const path = Path.join(folder,"momentra-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)+".mov")
       recordingRef.current = true; setRecording(true); stopping.current = false
@@ -304,9 +343,12 @@ function CameraPage() {
       try {
         ownedMovie = cameraRef.current!.movie!
         const file = await ownedMovie.startRecording(path)
+        if (!file || !await FileManager.exists(file)) throw new Error("Vídeo sem arquivo confirmado")
+        recordDiagnostic("video","passed","completed")
         const video = {file,saved:false}; rememberVideo(video)
         say(settingsRef.current.allowGallery ? "Vídeo guardado no Momentra. Toque em Salvar vídeo. Sem carimbo." : "Vídeo guardado localmente no Momentra, sem galeria e sem envio à nuvem. Sem carimbo.")
       } finally { ownedMovie = null; recordingRef.current = false; setRecording(false); stopping.current = false }
+      } catch (error) { recordDiagnostic("video","failed","operation_failed"); throw error }
     })
   }
   function rememberVideo(video: {file:string;saved:boolean}) {
@@ -401,8 +443,8 @@ function CameraPage() {
         <Group title="Armazenamento" note="Ativado permite salvar manualmente no Fotos; não salva automaticamente nem indica permissão do iOS. Desativado bloqueia Salvar e Salvar vídeo, sem apagar cópias anteriores. As capturas continuam locais no Momentra, não na nuvem.">
           <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
         </Group>
-        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /></VStack></Group>
-        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos e armazenamento somente na nuvem ainda não estão disponíveis. Nenhuma foto é enviada ao Google. A captura e o carimbo usam armazenamento local; os arquivos permanecem no Momentra.</Text>
+        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /><Button title="Google Fotos pessoal" buttonStyle="bordered" action={()=>{void Navigation.present({element:<GooglePhotosPage capture={lastRef.current} />})}} /><DiagnosticReport /></VStack></Group>
+        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos pessoal depende de ativação do serviço, consentimento separado e envio manual da foto selecionada. Armazenamento somente na nuvem não está disponível: originais e fotos finais permanecem no Momentra.</Text>
         <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>Momentra · As opções acima são funções reais do aplicativo. Permissões do sistema são solicitadas apenas ao usar o recurso correspondente.</Text>
       </VStack></ScrollView>
     </VStack></NavigationStack>
@@ -457,7 +499,7 @@ function CameraPage() {
   async function gpsMenu() {
     await run(async () => {
       const s = settingsRef.current
-      const choice = await Dialog.actionSheet({title:"Localização",message:"GPS é capturado no aparelho. Endereço e mapa usam os serviços Apple quando o GPS está ligado. A foto nunca é enviada.",actions:[{label:s.gps ? "Desligar GPS" : "Ativar GPS"},{label:"Atualizar GPS agora"},{label:s.map ? "Desligar mapa de satélite" : "Ativar mapa de satélite"}],cancelButton:true})
+      const choice = await Dialog.actionSheet({title:"Localização",message:"GPS é capturado no aparelho. Endereço e mapa usam os serviços Apple quando o GPS está ligado. A foto nunca é enviada.",actions:[{label:s.gps ? "Desligar GPS" : "Ativar GPS"},{label:"Atualizar GPS agora"},{label:s.map ? "Desligar mapa de satélite" : "Ativar mapa de satélite"},{label:"Abrir localização no Google Maps (externo)"}],cancelButton:true})
       if (choice === null) return
       if (choice === 0) {
         update({...s,gps:!s.gps}); fixRef.current = null; setFix(null)
@@ -465,10 +507,18 @@ function CameraPage() {
       } else if (choice === 1) {
         if (!s.gps) update({...s,gps:true})
         await locate()
-      } else {
+      } else if (choice === 2) {
         update({...s,map:!s.map,gps:!s.map ? true : s.gps})
         if (!s.map && !s.gps) await locate()
         else say(s.map ? "Mapa desativado" : "Mapa será incluído quando disponível")
+      } else if (choice === 3) {
+        const current=s.gps ? validFix(fixRef.current,Date.now()) : null
+        if (!current) {say("Atualize o GPS antes de abrir o Google Maps.");return}
+        const approved=await Dialog.actionSheet({title:"Abrir no Google Maps",message:"A localização atual será enviada ao Google para abrir o mapa externo. Isso não altera o mapa Apple no carimbo nem envia sua foto.",actions:[{label:"Abrir localização no Google Maps"}],cancelButton:true})
+        if (approved !== 0) return
+        const url="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(current.latitude+","+current.longitude)
+        const opened=await Safari.openURL(url)
+        say(opened ? "Localização aberta no Google Maps. O carimbo continua usando mapa Apple." : "Não foi possível abrir o Google Maps.")
       }
     })
   }
@@ -508,7 +558,7 @@ function CameraPage() {
       if (!key) {lastRequest="";liveAssetsRef.current=null;setLiveAssets(null)}
       else if (!loading && options.stamp && modeRef.current === "photo" && key!==lastRequest) {
         loading=true;lastRequest=key
-        void enrich(current,JSON.parse(JSON.stringify(options))).then(extra=>{
+        void observedEnrich(current,JSON.parse(JSON.stringify(options))).then(extra=>{
           if (!cancelled && key===liveKey(settingsRef.current,validFix(fixRef.current,Date.now()))) {
             const value={key,address:extra.address,map:extra.map,warnings:extra.warnings};liveAssetsRef.current=value;setLiveAssets(value)
           }
@@ -521,6 +571,12 @@ function CameraPage() {
   },[])
   useEffect(() => {
     alive.current = true
+    recordApiAvailability("capture",typeof AVCapturePhotoOutput !== "undefined" && typeof AVCaptureSession !== "undefined")
+    recordApiAvailability("composition",typeof ImageRenderer !== "undefined" && typeof ImageRenderer.toJPEGData === "function")
+    recordApiAvailability("video",typeof AVCaptureMovieFileOutput !== "undefined")
+    recordApiAvailability("gps",typeof Location !== "undefined" && typeof Location.requestCurrent === "function")
+    recordApiAvailability("map",typeof MapSnapshotter !== "undefined" && typeof MapSnapshotter.take === "function")
+    recordApiAvailability("oauth",typeof OAuth2 !== "undefined")
     receive = batch => {
       if (!alive.current || closing) return
       if (batch) {

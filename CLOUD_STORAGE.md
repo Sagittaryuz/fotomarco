@@ -1,8 +1,30 @@
 # Armazenamento e Google Fotos · avaliação 16/11/2026
 
-## Estado atual · 0.3.7
+## Estado atual · 0.4.0
+
+Backend publicado após aprovação específica: Worker `68d51eb4`, fonte `593ba2f2`, com Photos opcional habilitado. Library API e cinco escopos mínimos configurados no projeto dedicado; nenhum billing/custo ativado. `/health`200 confirma version2/photos:true; `/privacy`200 com no-store/no-referrer/CSP. Conferência independente do coordenador confirmou os dois endpoints públicos.
+
+Produção aceita authorize de identidade e de Photos com os conjuntos exatos. Regressão sintética de identidade chegou ao callback com state correto e código falso foi rejeitado400. Não houve novo consentimento Photos, upload real ou teste nativo nesta etapa. O teste real de identidade anterior permanece evidência histórica, não prova de upload/retorno iPhone. Envio pessoal requer consentimento na conta e confirmação da foto no app; nada é automático. Somente nuvem e mapa Google incorporado seguem explicitamente não concluídos.
+
+## Base confirmada · 0.3.7 (histórico)
 
 Login Google de identidade implementado, com backend dedicado publicado no Cloudflare Workers (`https://momentra-auth.mrpires72.workers.dev`). Escopos somente `openid email profile`; sem Photos, Maps, refresh token, upload ou exclusão. Credenciais servidor protegidas como secrets e tokens do app no Keychain. Câmera funciona sem login. Fluxo real do backend confirmado no PC: consentimento Google, callback HTTPS200 com state correspondente, troca de token pelo Worker200, identidade verificada200, ausência de refresh token e replay rejeitado400. A página exige tocar Voltar ao Momentra para retornar ao aplicativo. Retorno ao Scripting e Keychain no iPhone permanecem sem teste físico. As avaliações históricas abaixo descrevem o estado das versões anteriores, não ausência atual de infraestrutura.
+
+## Consolidação 0.4.0
+
+Integração pessoal Google Fotos opcional: escopos `photoslibrary.appendonly` e `photoslibrary.readonly.appcreateddata`, consentimento separado, token em Keychain por conta. Não usa escopo de edição nem acesso geral à biblioteca. Envio manual da foto escolhida, JPEG até 20 MB, sem vídeos, sem upload de histórico/automático. O nome do perfil não prova a finalidade; a interface exige declaração explícita de uso pessoal para cada envio. Usos internos empresariais não devem ser enviados.
+
+O módulo confirma upload dos bytes, criação individual e consulta pelo ID remoto. Persistência anterior à criação impede repetir operação ambígua após falha/reinício. Sem confirmação não apaga arquivos. IDs são mantidos, URLs temporárias de imagem não; listagem pagina somente itens criados pelo app. Todas as cópias locais continuam preservadas: **não é armazenamento somente nuvem**.
+
+A API usa espaço disponível da conta Google; não adiciona armazenamento grátis nem compra Google One. Limites/quota podem bloquear operações. Aplicação OAuth em Testing permanece limitada a usuários de teste autorizados, sem equivalência a verificação pública. Esta preparação foi exercitada com mocks, sem enviar nenhuma foto real.
+
+Fontes reavaliadas: [política de uso pessoal](https://developers.google.com/photos/support/api-policy), [autorização](https://developers.google.com/photos/overview/authorization), [upload](https://developers.google.com/photos/library/guides/upload-media), [acesso e validade de URLs](https://developers.google.com/photos/library/guides/access-media-items), [quota](https://developers.google.com/photos/overview/api-limits-quotas).
+
+### Google Maps: limite preservado
+
+Maps URLs abre localização no aplicativo/navegador gratuitamente sem chave, após gesto e informação explícitos. É separado do mapa Apple no carimbo e **não satisfaz a incorporação Google solicitada**. Embed e SDK têm SKUs gratuitos, mas exigem billing; Static tem franquia seguida de cobrança. Não há garantia de custo zero usando apenas alertas. Não foi confirmada licença para exportar permanentemente o mapa Google em JPEG. Logo não ativar billing nem substituir o carimbo por conteúdo Google sem resolver as duas condições.
+
+Fontes: [Maps URLs](https://developers.google.com/maps/documentation/urls/get-started), [Embed](https://developers.google.com/maps/documentation/embed/quickstart), [Maps iOS](https://developers.google.com/maps/documentation/ios-sdk/usage-and-billing), [Static](https://developers.google.com/maps/documentation/maps-static/usage-and-billing), [termos](https://cloud.google.com/maps-platform/terms).
 
 ## Entregue na 0.3.1 (histórico)
 
@@ -48,3 +70,7 @@ Maps Static exige API habilitada, credencial e billing no projeto. Não foi habi
 Incorporar permanentemente mapa Google ao JPEG é distinto de exibir mapa: termos limitam armazenamento/exportação e exigem atribuição. Confirmar licença aplicável antes de implementar esse uso; não basta uma chave válida. [Termos Google Maps, seção 3.2](https://cloud.google.com/maps-platform/terms).
 
 Para Google authentication, identificar projeto autorizado e callback admitido no host Scripting. O caminho alternativo é backend HTTPS do projeto e OAuth web seguro, com segredo no servidor, sessão vinculada e retorno autenticado; o destino/backend ainda não existe no projeto. [OAuth web oficial](https://developers.google.com/identity/protocols/oauth2/web-server). Não substitui consentimento nem habilita automaticamente Google Photos/Maps. O mapa ativo continua Apple e Google permanece explicitamente pendente.
+
+## Bloqueio anterior da preparação0.4.0 (resolvido para publicação do backend)
+
+Library API ativada e cinco escopos mínimos salvos no projeto dedicado sem billing. Publicação do Worker/gate bloqueada pela revisão de autorização; rascunho mantido. Logo Photos segue indisponível no serviço atual, e `/privacy` só ficará acessível após publicação. Nenhum consentimento Photos nem upload real foi executado. O script0.4.0 permanece local aguardando essa publicação para evitar entrega fragmentada; versão distribuída continua0.3.7.

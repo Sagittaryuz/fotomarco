@@ -1,6 +1,10 @@
-# Momentra identity broker (not yet native-validated)
+# Momentra OAuth broker (not yet native-validated)
 
-One dependency-free module: `worker.mjs`. Deployment is NOT performed by these files. This is identity-only: `openid email profile`. No photos, Maps, uploads, refresh tokens, account-management operations or database.
+One dependency-free module: `worker.mjs`. Deployment is NOT performed by these files. Default is identity-only (`openid email profile`). Version 0.4.0 additionally supports an opt-in exact personal Photos scope set when `ENABLE_GOOGLE_PHOTOS` is the string `true`: identity plus `photoslibrary.appendonly` and `photoslibrary.readonly.appcreateddata`. Scope set is authenticated inside both envelopes and must match the provider token response exactly. Basic login never adds Photos automatically. The broker handles OAuth only, not photo uploads, Maps, refresh tokens, account-management operations or a database.
+
+`GET /privacy` serves a static Portuguese notice with hardened no-store/CSP headers. `GET /health` reports service version and `capabilities.photos`, not successful Google setup or native validation. App Photos tokens use separate device-local Keychain and an allowlisted Google transport; every operation binds the account and cancels on account changes. Scripting fetch uses documented `handleRedirect` rather than Web `redirect`; Cloudflare still uses its documented `redirect: manual`.
+
+The sections below retain identity architecture and historical test evidence; the new exact Photos scope set is an explicit second mode, not unrestricted scope forwarding.
 
 ## Dedicated destination and setup
 
@@ -10,6 +14,7 @@ Google OAuth client type: Web application. Authorized redirect URI exactly:
 `https://momentra-auth.mrpires72.workers.dev/callback`
 
 Environment:
+- `ENABLE_GOOGLE_PHOTOS`: optional plain string `true` only after dedicated Google Photos Library API/scopes have been configured; absent/other values disable Photos. No automatic consent or upload.
 - `GOOGLE_CLIENT_ID`: public OAuth client ID, `486055841789-ogbp6b16gvl0nhtcdun8fvla56p5e0rc.apps.googleusercontent.com`.
 - `GOOGLE_CLIENT_SECRET`: Cloudflare secret, never repository/code/log/chat.
 - `BROKER_SECRET`: independent cryptographically random **32 bytes**, encoded base64url **without padding** (43 characters), stored as Cloudflare secret. Rotation invalidates pending logins, not Google grants.
