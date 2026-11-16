@@ -1,4 +1,4 @@
-# Momentra · 0.6.1
+# Momentra · 0.7.0 (em desenvolvimento)
 
 Câmera para **Scripting PRO no iPhone**, com visor livre, padrões editáveis e carimbo gravado na foto.
 
@@ -193,3 +193,14 @@ A câmera solicita ao Scripting apresentação em tela cheia, oculta a barra de 
 A tela cheia depende também do contêiner e da versão do Scripting. Os ajustes não comprovam que uma janela externa pequena tenha sido corrigida no iPhone; não há dispositivo conectado para essa verificação. O indicador de início pode reaparecer por decisão do iOS. O atalho instalado não foi alterado: a rota documentada acima evita `run_single` durante gravações.
 
 Fontes: [controles de tela e apresentação](https://scriptingapp.github.io/guide/View%20Modifiers/Status%20Bar%20%26%20System%20Overlays) e [áreas seguras](https://scriptingapp.github.io/guide/View%20Modifiers/Safe%20Area).
+
+
+## 0.7.0 · Em desenvolvimento, não distribuída
+
+A referência mais recente orienta os controles Foto/Vídeo, ações inferiores, visor ampliado e bloco inferior com mapa e texto. As posições e tamanhos salvos são preservados. A câmera frontal é opcional e sua troca é bloqueada durante gravação; se a troca falhar, o aplicativo tenta recuperar a câmera anterior. Zoom do Camera Control é opcional quando suportado; botões de níveis fixos ainda não são fornecidos.
+
+GPS e mapa continuam opcionais. A bússola só usa uma leitura recente e válida anterior ao disparo. A API de localização documentada pelo Scripting não fornece altitude nem precisão horizontal; estes valores não são inventados.
+
+A consulta manual opcional MET Norway exige GPS válido e, antes da primeira chamada, a leitura e aceite dos termos pelo responsável. A consulta envia coordenadas truncadas e IP ao fornecedor; os valores são previsões, a pressão é ao nível do mar e a atribuição CC BY 4.0 acompanha o carimbo. O serviço é gratuito conforme sua documentação, sujeito aos próprios termos e disponibilidade. Os testes até agora usam respostas simuladas; não houve aceite humano nem chamada real.
+
+A apresentação física do Scripting, troca de câmera, gestos, zoom, GPS, bússola, consulta meteorológica, login Google e envio de fotos não foram validados neste iPhone. A versão publicada permanece 0.6.1. Prévia sintética e testes de host simulado não são screenshots nem execução nativa.

@@ -1,9 +1,9 @@
 {
   "name": "momentra-validation",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
-    "test": "node tests/run.cjs && node tests/runtime.cjs",
+    "test": "node tests/run.cjs && node tests/runtime.cjs && node tests/meteorology.cjs",
     "check": "node tools/check.cjs"
   },
   "devDependencies": {

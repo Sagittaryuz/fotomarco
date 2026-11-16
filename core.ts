@@ -1,5 +1,6 @@
+import type { ModelWeather } from "./meteorology"
 // Pure data/layout logic. No device services or network calls.
-export const VERSION = "0.6.1"
+export const VERSION = "0.7.0"
 export const PROFILE_IDS = ["HAMOA", "PIRESCO", "PESSOAL"] as const
 export type ProfileID = typeof PROFILE_IDS[number]
 export type Profile = { title: string; note: string; logoPath: string | null; accent: string }
@@ -13,9 +14,10 @@ export type Settings = {
   position: "bottom" | "top"; size: "compact" | "regular"; profiles: Record<ProfileID, Profile>
 }
 export type Fix = { latitude: number; longitude: number; timestamp: number }
-export type CaptureRecord = { storageIntent?: "local" | "cloud"; handoffKey?: string; id: string; original: string; file: string; capturedAt: number; profile: ProfileID; stamped: boolean; saved: boolean; fix: Fix | null; address: string; warnings: string[] }
+export type HeadingSample = { degrees: number; observedAt: number }
+export type CaptureRecord = { forecast?: ModelWeather | null; heading?: HeadingSample | null; storageIntent?: "local" | "cloud"; handoffKey?: string; id: string; original: string; file: string; capturedAt: number; profile: ProfileID; stamped: boolean; saved: boolean; fix: Fix | null; address: string; warnings: string[] }
 export function defaults(): Settings {
-  return { storageMode:"local", allowGallery:true, mapScale:"large", mapCorner:"top-left", logoCorner:"bottom-right", profile: "HAMOA", stamp: true, gps: false, map: false, timestampFont: "system", timestampFormat: "numeric", timestampCorner: "top-right", aspectRatio: "4:3", position: "top", size: "regular", profiles: {
+  return { storageMode:"local", allowGallery:true, mapScale:"medium", mapCorner:"bottom-left", logoCorner:"bottom-right", profile: "HAMOA", stamp: true, gps: false, map: false, timestampFont: "system", timestampFormat: "numeric", timestampCorner: "bottom-right", aspectRatio: "4:3", position: "bottom", size: "regular", profiles: {
     HAMOA: { title: "HAMOA", note: "", logoPath: null, accent: "#6FDED2" },
     PIRESCO: { title: "PIRESCO ENGENHARIA", note: "", logoPath: null, accent: "#E8C787" },
     PESSOAL: { title: "MOMENTRA", note: "", logoPath: null, accent: "#BBAAFF" },
@@ -72,15 +74,17 @@ export function stampLines(settings: Settings, record: CaptureRecord, live = fal
   const p = settings.profiles[record.profile]
   const timestamp = dateLabel(record.capturedAt,settings.timestampFormat)
   const timeLines = settings.timestampFormat === "long" ? timestamp.split(" às ") : [timestamp]
-  return [p.title, p.note, ...timeLines, settings.gps ? live && !record.fix ? "GPS indisponível" : coordinates(record.fix) : "Localização desativada", settings.gps ? cleanText(record.address, 120) : ""].filter(Boolean)
+  const f=settings.gps ? record.forecast : null
+  const forecast = f ? [f.temperatureC !== null ? `${f.temperatureC.toFixed(1)} °C` : "", f.humidityPercent !== null ? `${Math.round(f.humidityPercent)}%` : "", f.windMs !== null ? `${(f.windMs*3.6).toFixed(1)} km/h` : "", f.seaLevelHpa !== null ? `${f.seaLevelHpa.toFixed(1)} hPa (nível do mar)` : ""].filter(Boolean).join(" · ") : ""
+  return [p.title, p.note, settings.gps ? cleanText(record.address, 120) : "", settings.gps ? live && !record.fix ? "GPS indisponível" : coordinates(record.fix) : "Localização desativada", ...timeLines, forecast ? "Previsão: "+forecast : "", forecast ? "MET Norway · CC BY 4.0 · creativecommons.org/licenses/by/4.0/" : "", settings.gps && record.heading ? `Direção: ${Math.round(record.heading.degrees)}°` : ""].filter(Boolean)
 }
-export function layoutStamp(width: number, height: number, lineCount: number, settings: Settings, hasMap: boolean, hasLogo: boolean, textWidth?: number) {
+export function layoutStamp(width: number, height: number, lineCount: number, settings: Settings, hasMap: boolean, hasLogo: boolean, textWidth?: number, maxWidth?: number) {
   const unit = Math.min(width, height) / 1000
   const pad = 26 * unit, font = (settings.size === "compact" ? 22 : 29) * unit
   const line = font * 1.4, side = hasMap ? 170 * unit : 0, logo = hasLogo ? 70 * unit : 0
   const h = Math.max(line * lineCount, side, logo) + 2 * pad
   const extras = 2*pad + (side ? side+pad : 0) + (logo ? logo+pad : 0)
-  const w = Math.min(width-2*pad, Math.max(280*unit,(textWidth ?? 620*unit)+extras))
+  const w = Math.min(width-2*pad, maxWidth ?? width, Math.max(280*unit,(textWidth ?? 620*unit)+extras))
   const x = settings.timestampCorner.endsWith("right") ? width-w-pad : pad
   const y = settings.timestampCorner.startsWith("top") ? pad : height-h-pad
   return { x, y, w, h, pad, font, line, side, logo, textX: x + pad + (logo ? logo + pad : 0), textY: y + pad, textW: w - 2*pad - (side ? side+pad : 0) - (logo ? logo+pad : 0) }
@@ -108,11 +112,12 @@ export function timestampFont(font: Settings["timestampFont"], size: number): nu
 }
 
 export type OverlayRect = {x:number;y:number;w:number;h:number}
-export function layoutOverlays(width:number,height:number,settings:Settings,stamp:OverlayRect,hasMap:boolean,hasLogo:boolean) {
+export function layoutOverlays(width:number,height:number,settings:Settings,stamp:OverlayRect,hasMap:boolean,hasLogo:boolean,alignMapWithStamp=false) {
   const unit=Math.min(width,height)/1000, pad=26*unit
   const placed:OverlayRect[]=[stamp]
-  const overlaps=(a:OverlayRect,b:OverlayRect)=>a.x<b.x+b.w+pad && a.x+a.w+pad>b.x && a.y<b.y+b.h+pad && a.y+a.h+pad>b.y
-  function place(side:number,corner:Corner):OverlayRect {
+  const epsilon=1e-7*Math.max(width,height)
+  const overlaps=(a:OverlayRect,b:OverlayRect)=>a.x<b.x+b.w+pad-epsilon && a.x+a.w+pad>b.x+epsilon && a.y<b.y+b.h+pad-epsilon && a.y+a.h+pad>b.y+epsilon
+  function place(side:number,corner:Corner,align=false):OverlayRect {
     const bottom=corner.startsWith("bottom")
     const rect={x:corner.endsWith("right")?width-pad-side:pad,y:bottom?height-pad-side:pad,w:side,h:side}
     // Stack toward the interior whenever any existing overlay intersects, including opposite-corner wide text.
@@ -122,8 +127,9 @@ export function layoutOverlays(width:number,height:number,settings:Settings,stam
       rect.y=bottom?Math.min(...collisions.map(p=>p.y))-pad-side:Math.max(...collisions.map(p=>p.y+p.h))+pad
     }
     rect.y=Math.max(pad,Math.min(height-pad-side,rect.y))
+    if(align) rect.y=Math.max(pad,Math.min(height-pad-side,stamp.y+pad))
     placed.push(rect);return rect
   }
-  return {map:hasMap?place(({small:140,medium:220,large:300}[settings.mapScale])*unit,settings.mapCorner):null,
+  return {map:hasMap?place(({small:140,medium:220,large:300}[settings.mapScale])*unit,settings.mapCorner,alignMapWithStamp):null,
     logo:hasLogo?place(90*unit,settings.logoCorner):null}
 }

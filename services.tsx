@@ -14,7 +14,7 @@ export async function enrich(fix: Fix | null, settings: Settings): Promise<{addr
     try {
       const places = await within(Location.reverseGeocode({latitude:fix.latitude,longitude:fix.longitude,locale:"pt-BR"}),4000,null)
       const p = places?.[0]
-      address = p ? [[p.thoroughfare,p.subThoroughfare].filter(Boolean).join(" "),p.subLocality,p.locality,p.administrativeArea].filter(Boolean).join(" · ") : ""
+      address = p ? [[p.thoroughfare,p.subThoroughfare].filter(Boolean).join(" "),p.subLocality,[p.locality,p.administrativeArea].filter(Boolean).join(" "),p.postalCode,p.country].filter(Boolean).join(" · ") : ""
       if (address) geoCache = {key,address}
     } catch (_) { /* Coordinates remain valid without geocoding. */ }
     if (!address) warnings.push("Endereço indisponível; coordenadas preservadas")

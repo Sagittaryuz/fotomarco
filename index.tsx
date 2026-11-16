@@ -4,8 +4,9 @@ import {
   useEffect, useRef, useState,
 } from "scripting"
 import type { CameraControlParameter } from "scripting"
-import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, normalizeSettings, validFix, coordinates, cleanText, within } from "./core"
+import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, HeadingSample, normalizeSettings, validFix, coordinates, cleanText, within } from "./core"
 import { enrich, folder, persistRecord, renderStamped } from "./services"
+import { requestMetForecast, metCoordinateKey, ModelWeather } from "./meteorology"
 import { cameraLayout } from "./camera_layout"
 import { drawStamp } from "./stamp"
 import { beginDiagnostic, recordDiagnostic, recordApiAvailability, buildDiagnosticReport } from "./diagnostics"
@@ -101,6 +102,7 @@ function CameraPage() {
   const resumeRequested = useRef(false)
   const startAborted = useRef(false)
   const cameraRef = useRef<Camera | null>(null)
+  const cameraPosition = useRef<"back" | "front">("back")
   const alive = useRef(true), locked = useRef(false), locating = useRef(false), settingsOpen = useRef(false)
   const [busy, setBusy] = useState(false)
   const [initializing, setInitializing] = useState(true)
@@ -111,6 +113,10 @@ function CameraPage() {
   const settingsRef = useRef(settings)
   const [fix, setFix] = useState<Fix | null>(null)
   const fixRef = useRef<Fix | null>(null)
+  const [forecast,setForecast] = useState<{key:string;value:ModelWeather}|null>(null)
+  const forecastRef = useRef<{key:string;value:ModelWeather}|null>(null)
+  const headingRef = useRef<HeadingSample | null>(null)
+  const headingOps = useRef<Promise<void>>(Promise.resolve())
   const [last, setLast] = useState<CaptureRecord | null>(null)
   const lastRef = useRef<CaptureRecord | null>(null)
   const [preview, setPreview] = useState(false)
@@ -228,7 +234,7 @@ function CameraPage() {
   async function start(target: "video" | "photo" = modeRef.current) {
     initializingRef.current = true; setInitializing(true)
     try {
-      const device = AVCaptureDevice.default("video")
+      const device = cameraPosition.current === "front" ? AVCaptureDevice.defaultDevice("builtInWideAngleCamera","video","front") : AVCaptureDevice.default("video")
       if (!device) throw new Error("Câmera indisponível neste aparelho")
       const session = new AVCaptureSession(); ownedSession = session
       const output = target === "photo" ? new AVCapturePhotoOutput() : null
@@ -242,11 +248,21 @@ function CameraPage() {
         session.sessionPreset = target === "photo" ? "photo" : "high"
         if (!session.canAddInput(input) || !session.canAddOutput(activeOutput)) throw new Error("Não foi possível configurar a câmera")
         session.addInput(input); session.addOutput(activeOutput)
+        // Optional host-provided Camera Control zoom; unsupported devices keep capture working.
+        try {
+          if (session.supportsControls && typeof AVCaptureSystemZoomSlider !== "undefined") {
+            const zoom = new AVCaptureSystemZoomSlider(device)
+            if (session.canAddControl(zoom)) session.addControl(zoom)
+          }
+        } catch (_) { /* Zoom capability is optional. */ }
         if (audio) {
           if (!session.canAddInput(audio)) throw new Error("Não foi possível configurar o áudio")
           session.addInput(audio)
         }
       })
+      if (session.supportsControls && typeof session.setControlsDelegate === "function") {
+        try { session.setControlsDelegate({didBecomeActive(){},willEnterFullscreenAppearance(){},willExitFullscreenAppearance(){},didBecomeInactive(){}}) } catch (_) { /* Optional system control. */ }
+      }
       await session.startRunning()
       if (!alive.current || closing || startAborted.current) {
         await session.stopRunning(); session.dispose()
@@ -279,6 +295,10 @@ function CameraPage() {
       const options = JSON.parse(JSON.stringify(settingsRef.current)) as Settings
       const capturedAt = Date.now(), id = "momentra-"+capturedAt+"-"+Math.random().toString(36).slice(2,7)
       const currentFix = options.gps ? validFix(fixRef.current,capturedAt) : null
+      const candidate = currentFix && forecastRef.current?.key === metCoordinateKey(currentFix.latitude,currentFix.longitude) ? forecastRef.current.value : null
+      const forecast = candidate && candidate.updatedAt<=capturedAt && candidate.validAt<=capturedAt && capturedAt-candidate.validAt<=7200000 ? {...candidate} : null
+      const headingValue = headingRef.current
+      const heading = options.gps && headingValue && headingValue.observedAt <= capturedAt && capturedAt-headingValue.observedAt <= 10000 ? {...headingValue} : null
       beginDiagnostic("capture")
       let result: {image: UIImage}
       const original = Path.join(folder,id+"-original.jpg")
@@ -289,7 +309,7 @@ function CameraPage() {
         if (!result?.image || !await FileManager.exists(original)) throw new Error("Captura sem arquivo confirmado")
         recordDiagnostic("capture","passed","completed")
       } catch (error) { recordDiagnostic("capture","failed","operation_failed"); throw error }
-      const record: CaptureRecord = {storageIntent:options.storageMode,id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:currentFix,address:"",warnings:[]}
+      const record: CaptureRecord = {storageIntent:options.storageMode,id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:currentFix,address:"",heading,forecast,warnings:[]}
       // Record original first. Rendering/network failures must never discard a successful capture.
       remember(record); await persistRecord(record)
       if (options.gps && !currentFix) record.warnings.push("GPS indisponível no disparo")
@@ -323,6 +343,26 @@ function CameraPage() {
       modeRef.current = next; setMode(next)
       say(next === "video" ? "Preparando vídeo e microfone…" : "Preparando câmera…")
       startPending = start(next); await startPending
+    })
+  }
+  async function flipCamera() {
+    if (initializingRef.current || locked.current || recordingRef.current || closing || !cameraRef.current) return
+    const next = cameraPosition.current === "back" ? "front" : "back"
+    if (next === "front") {
+      try {
+        if (typeof AVCaptureDevice.defaultDevice !== "function" || !AVCaptureDevice.defaultDevice("builtInWideAngleCamera","video","front")) { say("Câmera frontal indisponível neste aparelho."); return }
+      } catch (_) { say("Câmera frontal indisponível neste aparelho."); return }
+    }
+    await run(async()=>{
+      const old=cameraRef.current!
+      await old.session.stopRunning(); cameraRef.current=null;setCamera(null);old.session.dispose();if(ownedSession===old.session)ownedSession=null
+      cameraPosition.current=next;setTorch(false);setPreview(false)
+      startPending=start(modeRef.current);await startPending
+      if (!cameraRef.current && !closing && alive.current) {
+        cameraPosition.current=next === "front" ? "back" : "front"
+        startPending=start(modeRef.current);await startPending
+        say(cameraRef.current ? "Troca indisponível; câmera anterior restaurada." : "Não foi possível iniciar a câmera.")
+      }
     })
   }
   async function shutter() {
@@ -443,8 +483,9 @@ function CameraPage() {
           <Row symbol="calendar" color="#F28B32"><Picker title="Data e hora" value={value.timestampFormat} onChanged={next=>change({timestampFormat:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="numeric">Numérico</Text><Text tag="long">Data por extenso · hora h/min/s</Text></Picker></Row><Rule />
           <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do timestamp" value={value.timestampCorner} onChanged={next=>change({timestampCorner:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
         </Group>
-        <Group title="Localização e mapa" note="GPS é uma opção do Momentra, não o estado da permissão do iOS. Ao ativar, o aparelho pode pedir autorização. Endereço e mapa usam serviços Apple; a foto não é enviada. Sem GPS válido, nenhum mapa é inventado.">
+        <Group title="Localização e mapa" note="GPS é uma opção do Momentra, não o estado da permissão do iOS. Ao ativar, o aparelho pode pedir autorização. Endereço e mapa usam serviços Apple; a foto não é enviada. Sem GPS válido, nenhum mapa é inventado. A API de localização disponível não informa precisão nem altitude para o carimbo.">
           <Row symbol="location.fill" color="#F28B32"><Toggle title="GPS" value={value.gps} onChanged={next=>{change({gps:next}); if (next) void locate(); else {fixRef.current=null;setFix(null)}}} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row><Rule />
+          <Row symbol="cloud.sun.fill" color="#E59C25"><VStack alignment="leading"><Button title="Consultar previsão MET Norway" disabled={busy || !value.gps} action={()=>{void consultForecast()}} /><Text font="caption">Consulta manual: dados de modelo e pressão ao nível do mar. MET Norway · CC BY 4.0.</Text><Button title="Termos e fontes meteorológicas" action={()=>{void Safari.openURL("https://docs.api.met.no/doc/TermsOfService")}} /></VStack></Row><Rule />
           <Row symbol="map.fill" color="#4EBF64"><Toggle title="Mapa de satélite" value={value.map} onChanged={next=>change({map:next})} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row><Rule />
           <Row symbol="arrow.up.left.and.arrow.down.right" color="#3478F6"><Picker title="Tamanho do mapa" value={value.mapScale} onChanged={next=>change({mapScale:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="small">Pequeno</Text><Text tag="medium">Médio</Text><Text tag="large">Grande</Text></Picker></Row><Rule />
           <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do mapa" value={value.mapCorner} onChanged={next=>change({mapCorner:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
@@ -571,9 +612,47 @@ function CameraPage() {
       say(result.length ? "Arquivo exportado" : "Exportação cancelada; foto preservada")
     })
   }
+  async function consultForecast() {
+    if (locked.current || closing || recordingRef.current) return
+    const fix= settingsRef.current.gps ? validFix(fixRef.current,Date.now()) : null
+    if (!fix) {say("Ative o GPS e aguarde localização para consultar a previsão.");return}
+    if (Storage.get("momentra.met.terms.v1") !== true) {
+      const choice=await Dialog.actionSheet({title:"Previsão MET Norway",message:"A consulta envia coordenadas aproximadas e seu IP à MET Norway. A previsão é um modelo; pressão é ao nível do mar. Leia os termos antes de aceitar. Fonte: MET Norway, CC BY 4.0.",actions:[{label:"Ler termos da MET Norway"},{label:"Li e aceito os termos"}],cancelButton:true})
+      if(choice===0){await Safari.openURL("https://docs.api.met.no/doc/TermsOfService");return}
+      if(choice!==1)return
+      if(!Storage.set("momentra.met.terms.v1",true)){say("Não foi possível guardar a escolha.");return}
+    }
+    await run(async()=>{
+      say("Consultando previsão MET Norway…")
+      const key=metCoordinateKey(fix.latitude,fix.longitude)
+      const value=await requestMetForecast({enabled:true,foreground:true,latitude:fix.latitude,longitude:fix.longitude,now:Date.now(),store:{get:k=>Storage.get(k),set:(k,v)=>Storage.set(k,v)},transport:(url,options)=>fetch(url,options)})
+      const current=settingsRef.current.gps ? validFix(fixRef.current,Date.now()) : null
+      if (!current || metCoordinateKey(current.latitude,current.longitude)!==key) {say("Localização mudou; previsão descartada.");return}
+      const next=value ? {key,value} : null;forecastRef.current=next;setForecast(next)
+      say(value ? "Previsão MET Norway disponível para o carimbo." : "Previsão indisponível; a foto continua disponível.")
+    })
+  }
   function liveKey(options: Settings, current: Fix | null) {
     return options.gps && current ? [current.latitude,current.longitude,current.timestamp,options.map].join(":") : ""
   }
+  useEffect(()=>{
+    let cancelled=false, started=false
+    const listener=(value: {trueHeading:number;headingAccuracy:number;timestamp:Date})=>{
+      if (cancelled) return
+      const time = value?.timestamp ? new Date(value.timestamp).getTime() : NaN, degrees=value?.trueHeading
+      if (Number.isFinite(time) && Number.isFinite(degrees) && degrees>=0 && degrees<360 && Number.isFinite(value?.headingAccuracy) && value.headingAccuracy>=0) headingRef.current={degrees,observedAt:time}
+      else headingRef.current=null
+    }
+    if (settings.gps && mode === "photo" && typeof Location.startUpdatingHeading === "function" && typeof Location.addHeadingListener === "function" && typeof Location.removeHeadingListener === "function" && typeof Location.stopUpdatingHeading === "function") {
+      headingOps.current=headingOps.current.then(async()=>{
+        if(cancelled)return
+        await Location.startUpdatingHeading()
+        if(cancelled){Location.stopUpdatingHeading();return}
+        Location.addHeadingListener(listener);started=true
+      }).catch(()=>{})
+    }
+    return ()=>{cancelled=true;headingRef.current=null;headingOps.current=headingOps.current.then(()=>{if(started){Location.removeHeadingListener(listener);Location.stopUpdatingHeading()}}).catch(()=>{})}
+  },[settings.gps,mode])
   useEffect(()=>{
     let cancelled=false, timer:ReturnType<typeof setTimeout>|undefined, loading=false, lastRequest="", gpsAt=Date.now()
     async function tick() {
@@ -634,24 +713,30 @@ function CameraPage() {
     <VStack frame={{maxWidth:"infinity",maxHeight:"infinity"}} background="black" ignoresSafeArea accessibilityHidden />
     <GeometryReader>{geometry => {
       const width = geometry.size.width, height = geometry.size.height
-      const layout = cameraLayout(width,height,mode === "video" ? "16:9" : settings.aspectRatio), compact = layout.compact
+      const protectTop = mode === "photo" && settings.stamp && (settings.timestampCorner.startsWith("top") || (settings.gps && settings.map && settings.mapCorner.startsWith("top")) || (!!settings.profiles[settings.profile].logoPath && settings.logoCorner.startsWith("top")))
+      const layout = cameraLayout(width,height,mode === "video" ? "16:9" : settings.aspectRatio,!protectTop), compact = layout.compact
       const currentFix=settings.gps ? validFix(fix,liveNow) : null
       const assets=liveAssets?.key===liveKey(settings,currentFix) && currentFix ? liveAssets : null
       const logoPath=settings.profiles[settings.profile].logoPath
       if (logoCache.current.path!==logoPath) logoCache.current={path:logoPath,image:logoPath ? UIImage.fromFile(logoPath) : null}
-      const liveRecord:CaptureRecord={id:"live-preview",original:"",file:"",capturedAt:liveNow,profile:settings.profile,stamped:false,saved:false,fix:currentFix,address:assets?.address??"",warnings:[]}
+      const liveForecast=currentFix && forecast?.key===metCoordinateKey(currentFix.latitude,currentFix.longitude) && forecast.value.validAt<=liveNow && liveNow-forecast.value.validAt<=7200000 ? forecast.value : null
+      const liveRecord:CaptureRecord={id:"live-preview",original:"",file:"",capturedAt:liveNow,profile:settings.profile,stamped:false,saved:false,fix:currentFix,address:assets?.address??"",forecast:liveForecast,heading:settings.gps && headingRef.current && headingRef.current.observedAt<=liveNow && liveNow-headingRef.current.observedAt<=10000 ? headingRef.current : null,warnings:[]}
 
-      const toolbar = (<GlassEffectContainer><HStack spacing={layout.toolbarGap} frame={{width:layout.contentWidth,height:layout.toolbar}} padding={{leading:12,trailing:12}}>
+      const toolbar = (<GlassEffectContainer><HStack frame={{width:layout.contentWidth,height:layout.toolbar}}><HStack spacing={layout.toolbarGap} frame={{width:layout.contentWidth-24,height:layout.toolbar}}>
           <Button buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Flash" accessibilityValue={flash} action={()=>{void flashMenu()}}><Image systemName={flash === "off" ? "bolt.slash.fill" : flash === "auto" ? "bolt.badge.a" : "bolt.fill"} foregroundStyle={flash === "off" ? "white" : "#FFD60A"} font="title3" frame={{width:44,height:44}} /></Button>
           <Button buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Temporizador" accessibilityValue={timer ? timer+" segundos" : "Desligado"} action={()=>{void timerMenu()}}><VStack spacing={0} frame={{width:44,height:44}}><Image systemName="timer" font="title3" />{timer ? <Text font="caption2">{timer+"s"}</Text> : null}</VStack></Button>
           <Button title={settings.aspectRatio} buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Proporção" action={()=>{void ratioMenu()}} font="caption" />
           <Button buttonStyle="plain" {...circularControl()} disabled={busy} accessibilityLabel="Configurações" action={()=>{void openSettings()}}><Image systemName="gearshape" font="title3" frame={{width:44,height:44}} /></Button>
-        </HStack></GlassEffectContainer>)
-      const statusBar = (<HStack spacing={8} frame={{width:layout.contentWidth,height:layout.status}} padding={{leading:12,trailing:12}}>
+        </HStack></HStack></GlassEffectContainer>)
+      const statusBar = (<HStack frame={{width:layout.contentWidth,height:layout.status}}><HStack spacing={8} frame={{width:layout.contentWidth-24,height:layout.status}}>
           <ScrollView><VStack alignment="leading" spacing={2}><Text font="caption2" foregroundStyle="#D0D0D0">{status}</Text>{showGoogleIntro ? <Button title="Google opcional · configurar" font="caption2" buttonStyle="plain" disabled={busy} action={()=>{void openSettings()}} /> : null}</VStack></ScrollView>
+          <Button {...circularControl()} buttonStyle="plain" accessibilityLabel={mode === "photo" ? last?.saved ? "Salva ✓" : "Salvar" : lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"}
+            disabled={!settings.allowGallery || busy || (mode === "photo" ? !last || last.saved || last.storageIntent === "cloud" : !lastVideo || lastVideo.saved)} action={()=>{if (mode === "photo") void save(); else void saveVideo()}}>
+            <Image systemName={(mode === "photo" ? last?.saved : lastVideo?.saved) ? "checkmark.circle" : "square.and.arrow.down"} font="title3" frame={{width:44,height:44}} />
+          </Button>
           {mode === "photo" ? <Button {...circularControl()} accessibilityLabel="Exportar" buttonStyle="plain" disabled={!last || last.storageIntent === "cloud" || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" font="title3" frame={{width:44,height:44}} /></Button> : null}
           <Button {...circularControl()} buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" font="title3" frame={{width:44,height:44}} /></Button>
-        </HStack>)
+        </HStack></HStack>)
       const viewfinder = (<ZStack frame={{width:layout.viewWidth,height:layout.viewHeight}}>
           {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspectFill" frame={{width:layout.viewWidth,height:layout.viewHeight}} masksToBounds /> : <Text font="callout">{status}</Text>}
           {camera && mode === "photo" && settings.stamp && !preview ? <Canvas opaque={false} frame={{width:layout.viewWidth,height:layout.viewHeight}} accessibilityIdentifier="momentra.live-overlay" accessibilityHidden draw={ctx=>drawStamp(ctx,layout.viewWidth,layout.viewHeight,settings,liveRecord,settings.map && assets?.map ? {image:assets.map} : null,logoCache.current.image ? {image:logoCache.current.image} : null,true)} /> : null}
@@ -659,10 +744,12 @@ function CameraPage() {
 
         </ZStack>)
       const captureControls = (<HStack frame={{width:layout.captureWidth,height:layout.shutter}}>
-          <Button {...circularControl()} buttonStyle="plain" accessibilityLabel={preview ? "Câmera" : "Prévia"} disabled={busy || mode === "video" || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}}>
+          <VStack spacing={2}><Button {...circularControl()} buttonStyle="plain" accessibilityLabel={preview ? "Câmera" : "Prévia"} disabled={busy || mode === "video" || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}}>
             {previewImage ? <Image image={previewImage} resizable scaleToFill frame={{width:44,height:44}} cornerRadius={22} masksToBounds /> : <Image systemName="photo" font="title3" frame={{width:44,height:44}} />}
-          </Button>
+          </Button>{!compact ? <Text font="caption2" accessibilityHidden>{preview ? "Câmera" : "Prévia"}</Text> : null}</VStack>
           <Spacer />
+          {!layout.landscape ? <VStack spacing={2}><Button {...circularControl()} buttonStyle="plain" accessibilityLabel="Escolher padrão" disabled={busy || mode === "video"} action={()=>{void chooseProfile()}}><Image systemName="square.on.square" font="title3" frame={{width:44,height:44}} /></Button>{!compact ? <Text font="caption2" accessibilityHidden>Padrão</Text> : null}</VStack> : null}
+          {!layout.landscape ? <Spacer /> : null}
         <Button buttonStyle="plain" disabled={(!recording && !countdown && busy) || !camera}
           accessibilityLabel={countdown ? "Cancelar temporizador" : recording ? "Parar gravação" : mode === "photo" ? "Fotografar" : "Gravar vídeo"}
           accessibilityHint={mode === "photo" ? "Captura uma foto com o padrão selecionado" : "Toque novamente para parar"}
@@ -674,19 +761,18 @@ function CameraPage() {
           </ZStack>
         </Button>
           <Spacer />
-          <Button {...circularControl()} buttonStyle="plain" accessibilityLabel={mode === "photo" ? last?.saved ? "Salva ✓" : "Salvar" : lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"}
-            disabled={!settings.allowGallery || busy || (mode === "photo" ? !last || last.saved || last.storageIntent === "cloud" : !lastVideo || lastVideo.saved)} action={()=>{if (mode === "photo") void save(); else void saveVideo()}}>
-            <Image systemName={(mode === "photo" ? last?.saved : lastVideo?.saved) ? "checkmark.circle" : "square.and.arrow.down"} font="title3" frame={{width:44,height:44}} />
-          </Button>
+          {!layout.landscape ? <VStack spacing={2}><Button {...circularControl()} buttonStyle="plain" accessibilityLabel="Localização e mapa" disabled={busy || mode === "video"} action={()=>{void gpsMenu()}}><Image systemName="map" font="title3" frame={{width:44,height:44}} /></Button>{!compact ? <Text font="caption2" accessibilityHidden>Mapa</Text> : null}</VStack> : null}
+          {!layout.landscape ? <Spacer /> : null}
+          <VStack spacing={2}><Button {...circularControl()} buttonStyle="plain" accessibilityLabel="Trocar câmera" disabled={busy || initializing || recording || !camera} action={()=>{void flipCamera()}}><Image systemName="camera.rotate" font="title3" frame={{width:44,height:44}} /></Button>{!compact ? <Text font="caption2" accessibilityHidden>Virar</Text> : null}</VStack>
         </HStack>)
       const modePicker = (<Picker title="Modo de captura" value={mode} onChanged={(next: "video" | "photo")=>{void changeMode(next)}} pickerStyle="segmented" disabled={initializing || busy || recording} frame={{width:layout.modeWidth,height:layout.mode}} cornerRadius={24} accessibilityLabel="Modo de captura">
-          <Text tag="video">Vídeo</Text><Text tag="photo">Câmera</Text>
+          <Text tag="photo">Foto</Text><Text tag="video">Vídeo</Text>
         </Picker>)
       return <VStack spacing={0} background="black" foregroundStyle="white" frame={{width,height}}>
         {layout.landscape ? <HStack spacing={layout.gap} frame={{width,height}}>
           <VStack spacing={layout.stackGap} frame={{width:layout.contentWidth,height}}>{toolbar}{viewfinder}{statusBar}</VStack>
           <VStack spacing={12} frame={{width:layout.captureWidth,height}}>{modePicker}{captureControls}</VStack>
-        </HStack> : <VStack spacing={layout.stackGap} frame={{width,height}}>{toolbar}{viewfinder}<VStack spacing={layout.gap}>{modePicker}{captureControls}{statusBar}</VStack></VStack>}
+        </HStack> : !layout.overlay ? <VStack spacing={layout.stackGap} frame={{width,height}}>{toolbar}{viewfinder}<VStack spacing={layout.gap}>{modePicker}{captureControls}{statusBar}</VStack></VStack> : <VStack spacing={layout.stackGap} frame={{width,height}}><ZStack frame={{width:layout.contentWidth,height:layout.viewHeight}}>{viewfinder}<VStack spacing={0} frame={{width:layout.contentWidth,height:layout.viewHeight}}>{toolbar}<Spacer /></VStack></ZStack><VStack spacing={layout.gap}>{modePicker}{captureControls}{statusBar}</VStack></VStack>}
       </VStack>
     }}</GeometryReader>
     </ZStack>
