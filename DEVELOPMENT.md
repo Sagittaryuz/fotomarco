@@ -1,0 +1,228 @@
+# Desenvolvimento e continuidade
+
+## Pedido e origem
+
+Marcos pediu uma interface para tirar fotos no Scripting PRO, com botões à esquerda e à direita para editar padrões; escolheu o nome Momentra. Em 16/11/2026 pediu concluir o desenvolvimento. A conversa anterior criou HAMOA/PIRESCO/PESSOAL e planejou carimbo, GPS, mapa e logotipo. O usuário pediu explicitamente deixar o repositório aberto; a orientação antiga de mantê-lo privado foi superada. Não criar outro repositório nem trocar a plataforma.
+
+Fonte de requisitos: conversa “Encontrar aplicativo timestamp fotos”, de 16/11/2026, e pedido de retomada na dot às 09h50 UTC. Git é a fonte de verdade. Referência de processo: `Sagittaryuz/development-standards/GIT-FIRST.md`, blob `601e918eef9a89578fd6f55148c6594304d86ac2`.
+
+## Versão 0.2.0
+
+Implementados câmera, controles laterais, padrões persistentes/editáveis, carimbo real via Canvas/ImageRenderer, GPS no instante do disparo, endereço/mapa Apple com fallback, logotipo local, original preservado, prévia, salvamento manual no Fotos, histórico e exportação. Eventos físicos, fechamento e entrega nativa usam guards; lotes são idempotentes por captura/asset. GPS é opt-in. Não há captura de vídeo customizada nesta versão.
+
+Distribuição: branch `camera-mvp`. A branch `feat/camera-mvp` do PR #1 recebe o mesmo commit para manter revisão e importação alinhadas. `main` permanece preservada e PR permanece rascunho até validação nativa. Nenhuma credencial ou mudança de acesso é necessária.
+
+## Erros corrigidos e orientação reutilizável
+
+- O protótipo importava FileManager/Photos como exports: são globais do Scripting.
+- `shouldMoveFile` não é opção documentada de `Photos.savePhoto`; usar `fileName`.
+- Parar câmera antes de dispensar o visor; manter visor montado durante prévia para Camera Control.
+- Snapshot das preferências, hora e GPS antes de await; GPS obtido depois não pertence à foto anterior.
+- Encoded dimensions + orientação EXIF 5–8 trocam os eixos na composição; não assumir paisagem por dimensões brutas.
+- Logotipo deve usar aspect-fit, não quadrado deformado.
+- JSON e original são persistidos antes da renderização. Exceção no mapa/carimbo não apaga foto.
+- Atualização deve usar o importador nativo e fonte Git; não inventar hash remoto no manifesto.
+
+## Verificado em 16/11/2026
+
+`npm run check`: manifesto, TypeScript estrito no núcleo, bundle sintático completo. `npm test`: 26 verificações puras/de layout/pixels sintéticos e 9 fluxos com host simulado. Revisão visual dos carimbos sintéticos em retrato/paisagem; revisão das APIs pela documentação oficial. Nenhum desses resultados é prova de execução nativa no iPhone.
+
+As declarações completas do host são sincronizadas pelo Scripting CLI a partir do aparelho, não vêm no pacote CLI. Portanto não afirmar typecheck completo sem os arquivos reais nem usar um stub como prova de compatibilidade.
+
+## Próximo passo nativo, sem apagar dados
+
+1. Importar a URL `camera-mvp`, conferir Momentra 0.2.0.
+2. Abrir sem GPS; permitir câmera, fotografar, conferir original/carimbo e salvar no Fotos uma vez.
+3. Alterar título/observação, cancelar edição, reabrir e conferir persistência por perfil.
+4. Testar paisagem/retrato, logo largo/alto, carimbo topo/rodapé e texto longo.
+5. Ativar GPS, negar e permitir; testar offline sem perder a captura; conferir data/fuso/coordenadas.
+6. Disparar pelo botão físico, voltar da prévia, fechar/reabrir e retomar; testar lote da Tela Bloqueada e repetir o mesmo lote sem duplicação.
+7. Conferir exportação final/original/JSON e recuperação após negar acesso ao Fotos.
+8. Se houver erro, registrar texto e versão do Scripting. Não reinstalar/apagar antes de preservar fotos.
+
+## Fontes oficiais consultadas
+
+- https://scriptingapp.github.io/guide/Device%20Capabilities/AVCaptureSession%20%26%20Camera%20Control/Quick%20Start/
+- https://scriptingapp.github.io/llms.txt
+- https://github.com/scriptingapp/scriptingapp.github.io (documentação App Store, consultada em 16/11/2026)
+- https://github.com/ScriptingApp/scripting-app-development
+
+Documentação efetivamente lida: AVCaptureSession, Camera Control/capture handoff/events, Photos, Location, MapSnapshotter, Canvas, ImageRenderer, ImageIO, UIImage, DocumentPicker, Storage, Dialog, GeometryReader e Liquid Glass.
+
+
+## Atualização 0.3.0 · interface amigável e Liquid Glass
+
+Fonte: pedido direto do Marcos, encaminhado pelo coordenador em 16/11/2026; correção específica: parte inferior só seletor deslizável Vídeo à esquerda / Câmera à direita, obturador simples logo acima. Mantidos perfis e controles laterais.
+
+Implementado material nativo regular em dois rails independentes, um vidro por rail, filhos plain, VoiceOver contain/labels/values/hints, seleção explícita de perfil e texto em português. Picker segmented usa seleção nativa e transição do sistema. Não forçamos animação que ignore Reduzir Movimento. A renderização real e redução de transparência precisam de aparelho.
+
+Vídeo usa sessão exclusiva reconstruída com preset high, movie output e entrada de microfone. O botão físico segue o modo ativo. Gravação impede mudança de modo/fechamento normal; segundo toque finaliza. Fechamento externo finaliza movie antes de aguardar promise pendente. Falhas liberam bloqueio e permitem voltar a foto. Não há carimbo no vídeo. Sem exclusão automática. Último vídeo persistido e salvamento manual deduplicado.
+
+Causas evitadas: startRecording só resolve após finalização, portanto stop antes de await pending ao sair; seletor bloqueado durante start/permissão evita duas sessões; controles exclusivos de foto não ficam ativos em vídeo.
+
+Validação: check e 26 testes núcleo/render + 15 fluxos mock. Testes novos verificam rails, ordem e posição dos controles, modo bloqueado na inicialização/gravação, ciclo vídeo/salvar/voltar foto, falha na gravação, fechamento externo e layout compacto estrutural. Não equivale a validação SwiftUI/AVFoundation física.
+
+Checklist nativo adicional: iOS26+, aparência e legibilidade sobre cena clara/escura; fonte ampliada/VoiceOver/Reduzir Transparência/Reduzir Movimento; seletor Vídeo/Câmera em retrato/paisagem; permissão de microfone negada e retorno à foto; gravar áudio/vídeo, parar pelo toque e botão físico; finalizar interrupção; salvar uma vez e reabrir; manter carimbos/fotos anteriores intactos.
+
+Fontes oficiais consultadas:
+- https://scriptingapp.github.io/guide/View%20Modifiers/Liquid%20Glass/Liquid%20Glass%20Effect/
+- https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass
+- Documentação Scripting App Store: Picker, Button, Accessibility, Preferred Color Scheme, AVCaptureSession Quick Start e Session Control, Photos.saveVideo.
+
+
+### Complementos finais da especificação 0.3.0
+
+Pedidos diretos adicionais encaminhados em 16/11: topo com flash, timer, proporção e configurações; popup marca opção atual. Nova página timestamp agrupa data/hora/localização; fontes, formatos e quatro cantos. Página também contém GPS, mapa opcional, escala visual/canto do mapa e canto de logo/arte. O nome do modo longo explicita data por extenso com hora h/min/s, não números de hora escritos por palavras.
+
+Implementado recorte central 4:3/16:9 após orientação EXIF, com original preservado; grava composição inclusive sem carimbo. Visor segue enquadramento nativo e não simula máscara exata de crop. Flash usa flashMode documentado no capturePhoto; amarelo representa opção armada, hardware não foi verificado. Temporizador cancelável de 3/10s, snapshot de hora/GPS após a contagem. Configurações migradas com defaults; data/hora/localização nunca têm chaves de visibilidade independentes.
+
+Mapa/logo separados do bloco timestamp e posicionados com resolução de colisão. 44 testes núcleo/render (inclui 576 combinações de overlays) + 19 testes de fluxo mock; não são homologação de APIs/vidro/fonte/permissões em iPhone. Último checklist nativo deve incluir flash auto/on/off em aparelho com/sem suporte, timer/cancelar, proporção/crop, configuração/persistência, quatro cantos, mapa/logo, texto longo e telas pequenas.
+
+
+## 0.3.1 · armazenamento sem galeria e avaliação Google Fotos
+
+Fonte: pedido Marcos encaminhado em 16/11 para opção somente nuvem, login Google inicial e acessar fotos capturadas pelo app. Pesquisa oficial documentada em CLOUD_STORAGE.md. A parte completa depende de cliente OAuth, callback compatível, consentimento e adequação da política Google, especialmente uso empresarial. Não configurados nem contornados.
+
+Implementado apenas o componente viável independente: allowGallery persistente (default true preserva manual anterior), controles e handlers bloqueiam gravação em Photos quando false, textos deixam claro que arquivos seguem locais e não houve envio. Opção somente nuvem permanece indisponível, sem falso botão de login. Sem remoção de arquivos, criação de credenciais, acesso externo ou custos. Check + 44 testes core + 20 runtime mock passaram.
+
+Próximo passo: resolver destino profissional/pessoal e configuração OAuth aprovada, validar iPhone antes de habilitar uploads ou descarte temporário. Não transformar consentimento de login em autorização para upload de arquivos antigos.
+
+
+## 0.3.2 · formato conforme referência visual
+
+Fonte: imagem fornecida por Marcos em 16/11 e instrução “A câmera tem que estar nesse formato aqui”. Imagem inspecionada de fato, não publicada. Visor dominante retangular, preto, toolbar de ícones, obturador branco e thumbnail orientaram alteração. Preservados pedidos específicos: apenas Vídeo/Câmera no seletor abaixo do obturador, quatro controles topo e laterais.
+
+camera_layout.ts calcula dimensões comuns à UI e ao diagrama sintético. Visor aspect-fill acompanha proporção selecionada, sem cornerRadius. Thumbnail/prévia e Salvar flanqueiam obturador; exportar/fechar continuam acessíveis na faixa de status. Ícones laterais compactos preservam labels VoiceOver. Não houve mudança em credenciais/armazenamento/captura.
+
+Check + 44 testes core/render e 21 fluxos mock. Diagramas geométricos retrato390×844, pequeno320×568 e paisagem844×390 inspecionados. São simulações de geometria, com símbolos/fontes aproximados, não render SwiftUI/iPhone. Layout real, tamanhos dinâmicos, contraste de vidro e crop/field of view nativo ainda pendentes de aparelho. Não simular zoom/lentes nem representar mapa/timestamp ao vivo: composição permanece na foto final/prévia.
+
+Ajustes da auditoria0.3.2: preview inset72% mantém câmera visível, Exportar/Fechar têm alvos44pt e faixa status44; vídeo usa frame16:9 separado da proporção de foto. Campo de visão real do vídeo segue pendente de hardware. Toolbar mudou a plain+glassEffect com label44 para evitar padding implícito do estilo glass.
+
+
+## 0.3.3 · sobreposição realmente ao vivo
+
+Fonte: pedido direto Marcos encaminhado em 16/11: mapa, data/hora/localização e logo visíveis na imagem ao vivo, não só na foto. Canvas transparente usa drawStamp compartilhado, relógio1s e mesmas posições/fontes/escalas. Camada decorativa abaixo dos botões e sem handlers. Não foi usado allowsHitTesting por ausência de comprovação no host Scripting.
+
+GPS opt-in atualiza30s somente câmera ativa/desocupada. Fix vence60s, invalida endereço/mapa imediatamente ao desligar/recusar e no tick quando envelhece. Enrich em cache por coordenadas+timestamp+opção mapa; resultado atrasado só entra se chave ainda atual. Captura reutiliza mapa correspondente, snapshot de hora/GPS após temporizador. Mapa/logo não fabricados. Vídeo permanece sem carimbo e sem overlay para não sugerir que o arquivo gravado contém algo que não contém.
+
+44 core/render +24 fluxos mock e check aprovados; testes verificam Canvas live, GPS desligado, mapa/logo reais do mock, reutilização no disparo, desligar GPS e ocultar durante revisão/vídeo. Diagrama sintético do mesmo desenho inspecionado, não iPhone. Nenhuma chamada Google ou faturamento: pesquisa e bloqueios registrados em CLOUD_STORAGE.md.
+
+
+## 0.3.4 · identidade Google opcional
+
+Fonte: pedidos diretos de Marcos para conectar Google e continuar a infraestrutura necessária gratuita, encaminhados pelo coordenador em 16/11. Infraestrutura dedicada no Cloudflare existente; nenhum projeto alheio alterado. Backend de produção `https://momentra-auth.mrpires72.workers.dev`, Google OAuth Web com callback HTTPS fixo `/callback`. Publicação do app continua pendente da revisão final do coordenador; não integrar main nem retirar rascunho por causa desta nota.
+
+`backend/worker.mjs`: identidade somente (openid/email/profile), PKCE S256, state autenticado/criptografado TTL10min, código opaco TTL2min, callback Scripting fixo, sem tokens na URL, sem armazenamento servidor e sem refresh. Secrets Google/BROKER_SECRET no servidor. Rate binding dedicado20/60s por IP, quota Free compartilhada100k/dia; não é garantia global de capacidade. Logs de invocação desativados pelo coordenador. `google_auth.ts`: Keychain por script e aparelho, secret cliente vazio, status local sem rede, erros sanitizados, login concorrente deduplicado e logout invalida resultados pendentes. `index.tsx` integra login opcional nas configurações e acesso não bloqueante na primeira abertura; token nunca vai para Storage.
+
+Segurança revisada: destinos fixos, allowlists/duplicatas, PKCE antes da troca, limites de corpo, token/scopes filtrados, nenhuma mídia/upload, segredo ausente do app. Código Google de uso único fornece proteção de replay; não há revogação central de envelopes. Cliente público não comprova autenticidade do aplicativo e não deve conceder privilégios backend. Logout é somente local. Google Fotos e Maps continuam indisponíveis; nenhuma cobrança ativada nesta etapa.
+
+Causas reais corrigidas: Google inclui `iss` no callback, aceito apenas exato `https://accounts.google.com` quando presente; duplicado/inválido rejeitado. Cloudflare não suporta redirect:error e falhava antes de enviar rede; usar manual e rejeitar3xx pela condição existente. Não afrouxar state/PKCE para resolver compatibilidade. Fontes e regressões em backend/README.md.
+
+Evidência: backend29 testes e módulo14 testes sintéticos passaram; coordenador relata app44 core+28 runtime e check aprovados antes do incremento do manifesto. Consentimento real e callback302 com state preservado observados pelo coordenador; troca completa via Worker em reteste, não afirmada concluída aqui. Falta validar login/retorno Scripting, cancelamento, expiração, Keychain bloqueado e toda a captura nativa em iPhone. Preservar originais e dados ao atualizar. Próximo passo: conferir teste real do backend, executar check da versão0.3.4 e publicar apenas nos destinos existentes pelo coordenador.
+
+Validação real reportada pelo coordenador: consentimento Google e troca direta no endpoint Google retornaram200 com PKCE; callback Worker retornou302 com state correto. Falha inicial da troca Worker por redirect:error foi corrigida e publicada na revisão Cloudflare b414e20d. Reteste completo via Worker permanece pendente: Google accountchooser passou a ficar em Carregando. Não afirmar fluxo ponta a ponta pronto. Todos os testes locais da versão: check,44 core/render,28 runtime,14 auth,29 backend passaram.
+Teste sintético em produção após correção: authorize302, callback302 com iss Google/state correto, código sintético no token400 invalid_grant (não502). Não equivale a troca OAuth real completa. Cloudflare bloqueou User-Agent padrão urllib com1010; User-Agent Momentra/0.3.4 passou no teste do coordenador. Scripting físico segue pendente.
+
+## 0.3.5 · controles circulares e visor ampliado
+Pedido direto Marcos16/11: todos ícones circulares de mesmo tamanho, ampliar câmera e4:3 padrão.14 controles icônicos têm44×44pt e raio22, incluindo thumbnail; obturador especial maior e seletor cápsula preservados. Toolbar/status são overlays para liberar altura; câmera mantém aspecto exato3:4 retrato/4:3 paisagem.320×568 passa de237×316 para320×426.67 (cerca82% mais área).390×844 já tinha largura máxima e continua390×520: não esticar imagem para alegar aumento.16:9 salvo explicitamente continua respeitado; nova instalação4:3.
+47 core/layout/render+29 runtime e check aprovados. Diagramas sintéticos320×568/390×844/844×390 inspecionados, não SwiftUI/iPhone. Controles sobrepostos podem cobrir parcialmente carimbo de canto durante operação; não são gravados na foto e coordenadas do carimbo continuam iguais. Teste físico permanece pendente. Sem alterações OAuth/Photos/Maps nesta revisão.
+
+## 0.3.6 · configurações conforme referências
+Fonte: duas imagens enviadas por Marcos16/11, pedido somente funções implantadas. Página clara inspirada Ajustes: cabeçalho fixo/back circular44, cinco cartões brancos arredondados, ícones coloridos44 e divisores. Câmera permanece escura/0.3.5 preservada. Toggles controlam opções reais carimbo/GPS/mapa/cópia manual na galeria, não fingem gerenciar permissões do iOS. Pickers preservam fontes/formato/cantos/escala. Conta Google preservada. Photos/nuvem agora só aviso, sem botão falso; nenhum item update/rating/idioma/microfone adicionado.
+Referências reais e diagrama sintético da árvore de componentes inspecionados; fonte/símbolos aproximados, não screenshot iPhone.47 testes core prévios+30 runtime e check0.3.6 aprovados. Testes de back, opções persistidas, GPS/mapa/galeria e estados Google passaram. Nenhum teste físico. OAuth reteste de navegação separado continua sem mudar scopes/backend nesta revisão.
+
+### Diagnóstico OAuth final · 16/11/2026
+Tentativas independentes no Edge e Chrome, incluindo clique nativo com a sessão de Marcos, não confirmaram conclusão: `prompt=consent` com `login_hint` pulou o seletor de conta, mas o documento permaneceu em “Carregando”. Isso não comprova ausência de callback: a ausência de aplicativo receptor para o retorno final `scripting://` no Windows é uma hipótese plausível, não confirmada pelo console, e a observação CDP é limitada à origem. Não foi comprovado um erro específico do Google ou do Windows. Captura preparada com Log/Runtime e logs de desenvolvimento não revelou URL de retorno; apareceram apenas avisos aria-hidden e Self-XSS. O diagnóstico nativo no Chrome foi interrompido pelo controle por não conseguir verificar uma URL segura, sem contornar essa proteção.
+Nenhuma mudança adicional foi feita no Worker, nas credenciais ou nas proteções OAuth. Fluxo completo no iPhone e troca real de token via Worker continuam não confirmados. A evidência anterior de consentimento, callback/state, troca direta Google e rejeição sintética no Worker permanece válida, mas não substitui E2E. Esta atualização altera apenas o registro; a versão0.3.6 e seu CI aprovado permanecem referência de validação do código.
+
+### Rota de retorno HTTPS proposta · ainda não publicada
+Autorização encaminhada pelo coordenador para manter callback HTTPS200 com link explícito Voltar ao Momentra, em lugar do302 automático. Implementado apenas backend/testes: HTML sem scripts, link escapado para callback fixo, no-store/no-referrer/CSP e mesmas proteções PKCE/state/TTL.31 testes sintéticos passam. Documentação OAuth2 do Scripting confirma callbackURL customizado, mas não comprova comportamento nativo desta landing. Nenhum contorno de controle de navegação, nenhuma alteração de credenciais/app. A URL de entrada HTTPS ainda contém código Google e não deve ser registrada/compartilhada. Publicação e teste real aguardam coordenador.
+
+
+## 0.3.7 · retorno Google explícito e backend validado com conta real
+Origem: após bloqueio de revisão na publicação da mudança de autenticação, Marcos aprovou especificamente a landing ao vivo; coordenador confirmou Worker6b15eee7 ativo com SHA25613523e843f3f5ee592834a2387d73962fce900a91afbde255f250ac7fa55d773. Esta evidência supera a pendência de publicação e diagnóstico inconclusivo anteriores, sem apagá-los.
+Novo fluxo real no Edge: authorize→consentimento Google→callback HTTPS200; href com state correspondente; POST/token pelo Worker200; userinfo200 com identidade do titular e email_verified true; nenhum refresh token; replay400 invalid_grant. Tokens somente em memória; remoção do arquivo temporário verificada pelo coordenador. Nenhuma alteração de escopos, custos ou configuração de segredos.
+Fonte landing/testes publicada junto à versão0.3.7, sem modificar UI câmera/configurações. Página exige gesto Voltar ao Momentra; no-store/no-referrer/CSP, PKCE/state/TTL mantidos.31 testes backend aprovados. O teste real do PC comprova o backend, NÃO o retorno custom-scheme, OAuth2 do Scripting ou Keychain no iPhone; esses permanecem pendentes de aparelho. Google Fotos/Maps continuam indisponíveis.
+
+## Consolidação em andamento · após 0.3.7
+
+Origem: Marcos pediu concluir câmera/login/Maps/Fotos de forma integrada, com custo zero, uso das sessões e criação de credenciais do próprio projeto autorizados. Pediu evitar atualizações fragmentadas e reservar uma única validação final no iPhone. Preparação pessoal de Photos autorizada sem enviar fotos nem ativar automaticamente; não deduzir uso pessoal/profissional pelo nome do perfil.
+
+Critérios verificáveis:
+- câmera/carimbo/configurações: preservar testes já aprovados, acrescentar regressões das mudanças; APIs simuladas não substituem execução nativa;
+- identidade: preservar OAuth real confirmado no PC e escopos mínimos; retorno ao Scripting/Keychain só aprovado com evidência do aparelho;
+- Photos pessoal: consentimento separado, somente itens criados pelo app, upload individual confirmado, estado ambíguo bloqueia reenvio e exclusão, URLs temporárias não persistidas, conta isolada; nenhum upload real nesta preparação;
+- Maps: abertura externa gratuita é alternativa distinta, NÃO cumpre mapa Google no carimbo. Integração incorporada permanece bloqueada por exigência de billing e termos de exportação permanente não resolvidos;
+- somente nuvem: não oferecer como concluído enquanto originais persistem localmente ou não houver ciclo verificado de recuperação remota e limpeza autorizada;
+- entrega: uma versão consolidada, testes e inspeção visual possíveis; uma validação nativa final, sem alegação de teste físico inexistente.
+
+Recurso META/goal: investigação das ferramentas em cloud e Sagittaryuz e UI ChatGPT/Codex não encontrou setter para a tarefa/agente existente. Nenhuma META foi configurada, nem criada tarefa/automação substituta. Este registro é apenas critério de trabalho, não uma funcionalidade META.
+
+Desenvolvimento remoto Scripting: CLI oficial oferece dispositivos, execução, logs e screenshots quando o app conecta ao servidor e sincroniza tipos. Não há atualmente dispositivo iPhone conectado, servidor ativo ou declarações nativas sincronizadas. Não iniciar rede/instalações nem afirmar validação nativa sem esse vínculo.
+
+Correções da consolidação: o fetch nativo do Scripting documenta `handleRedirect`, não a opção Web `redirect`; transporte Google passou a bloquear redirecionamento pela API do host, com timeout. Isso é distinto do Worker Cloudflare, onde `redirect: manual` é documentado. Logout agora aceita uma chave inexistente (sessão Photos-only), verifica remoção e tenta ambas as chaves mesmo se uma falhar. Regressores exercitam esses casos. Respostas Photos são descartadas quando a conta muda durante cabeçalhos/corpo; histórico/paginação/miniaturas são invalidados na troca ou expiração, sem persistir URL temporária.
+
+## 0.4.0 consolidada · rascunho preservado, publicação pendente
+
+Estado real: Google Photos Library API foi ativada no projeto Momentra Free e os cinco escopos mínimos foram salvos (identidade3 + appendonly + readonly.appcreateddata), sem billing e sem consentimento Photos/upload real. A revisão de autorização bloqueou o Deploy do Worker, exigindo autorização específica para publicar a atualização no serviço existente e habilitar `ENABLE_GOOGLE_PHOTOS=true`. Não houve contorno nem nova tentativa. Produção permanece na versão anterior de identidade; `/privacy` ainda não está publicado. Fonte preparada SHA256 `d6b2cf0f02f742420a6f709f13ca2b9130a62d4139cce9c76a286bbd6fa2a7d7`. Rascunho Cloudflare preservado; nada foi publicado na branch de distribuição nesta consolidação.
+
+Verificação local final: `npm run check` aprovado;47 verificações núcleo/layout/render +36 fluxos runtime simulados +99 testes Node de backend/auth/Photos/UI/diagnóstico =182. Prévia sintética320pt do painel Photos inspecionada sem cortes horizontais; não é screenshot iPhone. Nenhum teste/upload Photos real. Última versão efetivamente distribuída continua0.3.7 em `b3d2ffdff206974715b924f91157aef8a8fe816e`; ambos refs de distribuição conferidos iguais e main preservada.
+
+Próximo passo: após aprovação específica resolvida, publicar o rascunho Worker, configurar o gate, verificar health/privacidade e regressão identidade. Atualizar registros e publicar0.4.0 uma única vez nos dois refs existentes com lease, acompanhar CI. Não refazer testes válidos sem alteração, salvo integração/publicação. Validação no iPhone continua indispensável e será única/consolidada, não fragmentada.
+
+Retomada: Marcos respondeu “Sim” à pergunta específica sobre publicar no serviço existente momentra-auth a opção Google Fotos pessoal, permitindo adicionar fotos e ler somente as criadas pelo próprio Momentra, sem upload automático, com consentimento na conta e sem billing/cobrança. Aprovação encaminhada pelo coordenador para a mesma publicação bloqueada. A execução e sua verificação ainda devem ser registradas abaixo; esta aprovação, sozinha, não afirma Deploy concluído.
+
+
+## Publicação backend 0.4.0 confirmada
+
+Após o “Sim” específico, revisão aceitou e o Worker foi publicado: fonte593ba2f2, produção68d51eb4 com `ENABLE_GOOGLE_PHOTOS=true`, segredos e rate limiter preservados, logs de invocação desativados. `/health`200/version2/photos:true e `/privacy`200 com no-store/no-referrer/CSP; coordenador repetiu apenas os dois endpoints públicos para conferir entrega, com sucesso. Regressão sintética identidade authorize302→callback200/state correto→token400invalid_grant; Photos authorize302 contém somente os cinco escopos aprovados, sem seguirGoogle. Nenhuma concessão Photos/upload real, billing ou custo ativados.
+
+Código permanece o validado com182testes; nenhuma alteração de fonte após revisão além do logout já testado. Uma versão consolidada0.4.0 será publicada nos dois refs existentes, com CI conferido. Mapas Google incorporados continuam incompatíveis com o limite verificado de billing/termos e armazenamento somente nuvem não é afirmado; originais permanecem locais. Próximo teste físico é único e integrado, sem prometer execução em iPhone não conectado.
+
+## Distribuição GitHub 0.4.0 pendente
+
+Depois do backend publicado, a revisão de `create_tree` exigiu aprovação direta específica para publicar fontes/testes/documentação0.4.0 no repositório público `Sagittaryuz/momentra`. Foi recuperada a mensagem original do usuário “Deixe o repositório aberto.”, de16/11/2026 01:13UTC, e apresentada junto à autorização atual de publicar nos destinos estabelecidos. Uma única nova tentativa também foi recusada; nenhuma outra rota foi tentada. Nenhuma árvore/commit remoto ou ref foi alterado, CI não iniciou.23arquivos locais preparados; conteúdo preservado. É necessária a confirmação concreta de divulgação pública desta versão, sem fotos/tokens/senhas/chaves secretas. Backend68d51eb4 já está ativo e não depende dessa etapa.
+
+O usuário confirmou “Sim” à pergunta específica sobre publicar código, testes e documentação da versão 0.4.0 no repositório público Sagittaryuz/momentra, visível a qualquer pessoa, sem senhas, tokens, fotos ou chaves secretas. Publicação retomada no mesmo destino e nas duas branches de distribuição, preservando main. Os 182 testes previamente aprovados continuam válidos para a fonte inalterada; resultado remoto e CI serão conferidos após publicar.
+
+
+## 0.5.0 · Apple aceito e modo nuvem verificável
+
+Origem: Marcos confirmou “Mapa da Apple. Ok”; coordenador pediu resolver armazenamento somente nuvem sem perda, sem inferir autorização de upload real, com uma validação final. Apple mantém o carimbo/visor já implementados e substitui Google Maps nesse objetivo.
+
+`cloud_archive.ts` adiciona recibos persistidos e limpeza de original/final próprios somente depois dos dois downloads com SHA256+tamanho idênticos. `google_photos.ts` mantém journals por conta/papel, downloads sem Bearer a URLs permitidas, bloqueio de redirect e symlinks. Divergência EXIF/bytes preserva local; retomada parcial verifica IDs sem reenviar. Novas capturascloud têm intenção persistida, galeria/export bloqueados e vídeos exigem Local. Handoffs/capturas antigas/salvas não são promovidos a cloud-only. Histórico sem JPEG abre painel remoto; preview local é limpo após arquivamento. JSON/cache ficam explicitamente locais.
+
+Verificação:48core/layout/render+39runtime+123Node=210checks aprovados, checkmanifesto/TSnúcleo/bundle aprovado, revisão adversarial independente sem bloqueio concreto. Casos incluem hash/tamanho divergente, mudança de conta, parent symlink, persistência falhando, mutação após recibo, remoção parcial/reinício, galeria/handoff e histórico remoto. Nenhum upload real nem exclusão real. APIsScripting não oferecem unlinkat atômico: rehash+remove e locks cobrem operação normal, sem prometer defesa contra adulteração concorrente host malicioso.
+
+Aviso `/privacy` atualizado apenas no texto de retenção para refletir nova opção; OAuth, escopos, segredos, gate e custo permanecem iguais. Publicação desse texto e do script0.5.0 será verificada antes da entrega consolidada.
+
+Aviso público0.5.0 publicado e confirmado: Worker58ffc7d5, fonteSHA25641dfac8a1178e95dc4cbc5dc5a398cc57972d99ecfe85055490b6e97b12678c1. Apenas texto de retenção mudou. Coordenador conferiu `/privacy`200 com SHA256/doisitens/JSON e `/health`200/version2/photos:true. Não houve alteraçãoOAuth/escopos/secrets/gate/billing, nem upload/limpeza reais. Prévia sintética320pt dos estados parcial/nuvem inspecionada sem cortes; rótulos traduzidos para português. GetState sem recibo não presume arquivo local existente.
+
+
+## 0.5.1 · apresentação e abertura direta
+
+Pedido da chamada16/11 às21:11UTC, encaminhado pelo coordenador: janela pequena e atalho passando primeiro pelo Scripting; tratar juntos. Inspeção da distribuição5ae85cee mostrou que a câmera já solicita fullScreen; causa no aparelho não reproduzida. Três apresentações internas não tinham estilo explícito e portanto usavam pageSheet padrão documentado. Configurações e Photos agora também pedem fullScreen. Sem alterações na geometria4:3, dados, OAuth ou backend.
+
+Guia de abertura agora distingue run_single/Momentra (executar sem duplicar), open/Momentra (editor) e AbrirApp. O host Scripting é necessário; não foi prometido eliminar sua transição. Atalho instalado não acessível, não alterado. Regressão mock confere câmera, configurações repetidas e ambos caminhos Photos. Check+48core/layout/render+40runtime+123Node passaram. Tipos completos e testes físicos do iPhone não executados. Nenhuma captura ou envio real.
+
+
+### Pesquisa complementar de apresentação
+Leitura integral das páginas oficiais de apresentação, GeometryReader, SafeArea, StatusBar e Minimization/Resume. Descoberta importante: run_single encerra instâncias anteriores; guia corrigido para run no uso cotidiano, que retoma instância viva. A orientação anterior de run_single era incompleta para câmera com operações pendentes. Sem alterações de runtime nem repetição de testes já válidos. Nenhum controle documentado encontrado para maximizar janela externa do hospedeiro. fullScreen já está em todos os presents; ignoresSafeArea/Device.screen não substituem apresentação e podem prejudicar controles.4:3 permanece requisito e não equivale a preencher toda a tela alta do iPhone com imagem. Diagnóstico físico permanece não concluído.
+
+
+## 0.6.0 · Meta visual consolidada
+
+Origem: referência de câmera mais recente enviada por Marcos, com ordem explícita de seguir a imagem, revisar alinhamentos e preservar funções. Escolha: seletor acima do obturador prevalece sobre pedido antigo; quatro controles superiores existentes preservados, sem copiar zoom/filtros/modos não funcionais da imagem. Visor livre de trilhos; funções movidas para Configurações → Câmera. Não foi publicada a foto pessoal de referência.
+
+Padrões novos: mapa grande superior esquerdo, timestamp superior direito branco com sombra e alinhamento à direita, logo inferior direito. Preferências existentes não são sobrescritas. GPS/mapa não são ativados implicitamente. Cartões e linhas de ajustes têm largura consistente. Folha de configurações não segura lock de operação, para permitir ferramentas nela; guarda própria evita apresentações duplicadas e Camera Control não captura enquanto ajustes estão abertos.
+
+Critérios: preservar proporção e caber em telas pequenas/retrato/paisagem; controles fora do carimbo, funções antigas ainda acessíveis; fullScreen em todos os presents; regressões de armazenamento/auth intactas. Check,48+40+123 testes locais aprovados. Diagramas sintéticos renderizados e inspecionados, não screenshots nativos. Sem upload real, mudança de OAuth, custos ou uso de foto pessoal. Limites: sem acesso ao iPhone para confirmar janela do host, importação instalada ou atalho físico. Nenhuma API de Meta Codex exposta nesta execução; registro por critérios não implica ativação de Meta na interface.
+
+
+## 0.6.1 · ocupação da área disponível
+
+Pedido: todo o layout em tela cheia. A página da câmera continua apresentada com fullScreen. A raiz solicita statusBarHidden e persistentSystemOverlays hidden, como documentado pelo Scripting; só o fundo ignora áreas seguras. GeometryReader mantém os controles na área oferecida pelo host. A altura livre é distribuída entre barra superior, visor e controles inferiores agrupados; os tamanhos e proporções permanecem condicionados ao espaço real. Não há uso de Device.screen para falsificar o tamanho da janela. O iOS pode reapresentar o indicador de início.
+
+Referência inspecionada: barra superior, visor amplo sem controles laterais e marcações nos cantos, seletor acima do obturador. Diagramas sintéticos 390×844, 320×568 e 844×390 inspecionados; não são renderização SwiftUI nem evidência de tamanho da janela do host. Ajustes continuam usando fullScreen. O atalho físico não é acessível: README documenta run/Momentra, evitando run_single que encerra uma instância existente e poderia interromper gravação.
+
+Validação local: check do manifesto/núcleo/bundle, 49 testes de núcleo/layout/render, 41 fluxos com host simulado e 123 testes de integrações passaram. Esses testes não comprovam gestos do seletor, câmera, GPS, apresentação, login ou transferência real no iPhone. Teste nativo e declarações do host não disponíveis; sem alteração de backend, custos, credenciais ou dados pessoais.

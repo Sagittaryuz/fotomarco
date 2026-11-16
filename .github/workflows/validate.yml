@@ -1,0 +1,21 @@
+name: Validate Momentra
+on:
+  push:
+    branches: [camera-mvp, feat/camera-mvp]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: node --test tests/google_auth.cjs tests/google_photos.cjs tests/google_photos_ui.cjs tests/cloud_archive.cjs tests/diagnostics.cjs backend/worker.test.mjs

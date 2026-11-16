@@ -1,0 +1,14 @@
+{
+  "name": "momentra-validation",
+  "version": "0.6.1",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run.cjs && node tests/runtime.cjs",
+    "check": "node tools/check.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "@napi-rs/canvas": "0.1.80"
+  }
+}
