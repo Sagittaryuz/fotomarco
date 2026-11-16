@@ -1,4 +1,4 @@
-# Momentra · 0.6.0
+# Momentra · 0.6.1
 
 Câmera para **Scripting PRO no iPhone**, com visor livre, padrões editáveis e carimbo gravado na foto.
 
@@ -184,3 +184,12 @@ A referência mais recente orienta visor 4:3 livre, mapa superior esquerdo, bloc
 Câmera e configurações revisadas juntas: ferramentas sem sobrepor mapa/carimbo, seletor acima do obturador, ícones de ação 44 pt e cartões de ajustes com largura e margens uniformes. Perfil, edição de padrão, GPS, luz e recentes continuam disponíveis em Configurações → Câmera. A mesma rotina desenha o carimbo no visor e no JPEG.
 
 Validação local: 48 testes de núcleo/layout/render, 40 de interface simulada e 123 de integrações, além do check de manifesto/bundle. Diagramas sintéticos conferidos em retrato, paisagem e tela pequena não substituem captura de iPhone. Apresentações pedem fullScreen; não há evidência de controle documentado para maximizar uma janela externa do Scripting. Importação instalada, hardware, atalho e apresentação física continuam sem verificação no aparelho.
+
+
+## 0.6.1 · Ocupação da tela
+
+A câmera solicita ao Scripting apresentação em tela cheia, oculta a barra de estado e pede ao iOS para recolher os indicadores do sistema. O fundo preto se estende até as bordas; os controles continuam dentro da área segura. Em retrato, o espaço restante é distribuído entre a barra superior, o visor e os controles inferiores, que permanecem agrupados. O visor conserva a proporção escolhida e não é esticado para preencher a tela.
+
+A tela cheia depende também do contêiner e da versão do Scripting. Os ajustes não comprovam que uma janela externa pequena tenha sido corrigida no iPhone; não há dispositivo conectado para essa verificação. O indicador de início pode reaparecer por decisão do iOS. O atalho instalado não foi alterado: a rota documentada acima evita `run_single` durante gravações.
+
+Fontes: [controles de tela e apresentação](https://scriptingapp.github.io/guide/View%20Modifiers/Status%20Bar%20%26%20System%20Overlays) e [áreas seguras](https://scriptingapp.github.io/guide/View%20Modifiers/Safe%20Area).

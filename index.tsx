@@ -629,7 +629,9 @@ function CameraPage() {
       <HStack spacing={12}><Image systemName={props.symbol} font="title3" frame={{width:44,height:44}} /><Text>{props.title}</Text><Spacer /><Image systemName="chevron.right" font="caption" /></HStack>
     </Button>
   }
-  return <NavigationStack preferredColorScheme="dark" onCameraCaptureEvent={{isEnabled:!!camera && !closing && !settingsOpen.current,primaryAction:event=>{if(event.phase === "ended" && !settingsOpen.current) void shutter()}}}>
+  return <NavigationStack preferredColorScheme="dark" statusBarHidden persistentSystemOverlays="hidden" onCameraCaptureEvent={{isEnabled:!!camera && !closing && !settingsOpen.current,primaryAction:event=>{if(event.phase === "ended" && !settingsOpen.current) void shutter()}}}>
+    <ZStack frame={{maxWidth:"infinity",maxHeight:"infinity"}}>
+    <VStack frame={{maxWidth:"infinity",maxHeight:"infinity"}} background="black" ignoresSafeArea accessibilityHidden />
     <GeometryReader>{geometry => {
       const width = geometry.size.width, height = geometry.size.height
       const layout = cameraLayout(width,height,mode === "video" ? "16:9" : settings.aspectRatio), compact = layout.compact
@@ -682,11 +684,12 @@ function CameraPage() {
         </Picker>)
       return <VStack spacing={0} background="black" foregroundStyle="white" frame={{width,height}}>
         {layout.landscape ? <HStack spacing={layout.gap} frame={{width,height}}>
-          <VStack spacing={layout.gap} frame={{width:layout.contentWidth,height}}>{toolbar}{viewfinder}{statusBar}</VStack>
+          <VStack spacing={layout.stackGap} frame={{width:layout.contentWidth,height}}>{toolbar}{viewfinder}{statusBar}</VStack>
           <VStack spacing={12} frame={{width:layout.captureWidth,height}}>{modePicker}{captureControls}</VStack>
-        </HStack> : <VStack spacing={layout.gap} frame={{width,height}}>{toolbar}{viewfinder}{modePicker}{captureControls}{statusBar}</VStack>}
+        </HStack> : <VStack spacing={layout.stackGap} frame={{width,height}}>{toolbar}{viewfinder}<VStack spacing={layout.gap}>{modePicker}{captureControls}{statusBar}</VStack></VStack>}
       </VStack>
     }}</GeometryReader>
+    </ZStack>
   </NavigationStack>
 }
 async function main() {
