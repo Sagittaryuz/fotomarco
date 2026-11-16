@@ -274,7 +274,10 @@ function CameraPage() {
       if (settingsRef.current.gps) void locate()
     } catch (error) {
       const failed = ownedSession; ownedSession = null
-      if (failed) { try { await failed.stopRunning() } finally { failed.dispose() } }
+      if (failed) {
+        try { await failed.stopRunning() } catch (_) { /* Still try to release a failed session. */ }
+        try { failed.dispose() } catch (_) { /* Restore path must remain available. */ }
+      }
       say("Câmera: "+String(error)+". Confira a permissão do Scripting nos Ajustes e reabra.")
     } finally { initializingRef.current = false; if (alive.current) setInitializing(false) }
   }
