@@ -1,4 +1,4 @@
-// Manual personal-photo integration only. No background upload, deletion, video, or cloud-only mode.
+// Manual personal-photo integration only. No background upload, deletion, or video.
 import { getGooglePhotosIdentity, photosAuthorizedFetch } from './google_auth'
 import { PROFILE_IDS } from './core'
 export type PersonalCapture = { id:string; file:string; capturedAt:number; profile:string }
@@ -71,7 +71,8 @@ async function verify(capture:PersonalCapture,sub:string,key:string,id:string):P
   try {const item=await getFor(id,sub);save(key,{version:1,captureId:capture.id,capturedAt:capture.capturedAt,state:'verified',mediaItemId:id});return {status:'uploaded',captureId:capture.id,mediaItemId:id,item,message:'Foto pessoal confirmada no Google Fotos. O arquivo local foi preservado.'}}
   catch{return {status:'verification-pending',captureId:capture.id,mediaItemId:id,message:'O Google recebeu a foto, mas a verificação está pendente. A próxima tentativa só verifica o item, sem reenviar.'}}
 }
-async function perform(capture:PersonalCapture,sub:string,key:string):Promise<PhotoUploadResult> {
+async function perform(capture:PersonalCapture,sub:string,key:string,filename=capture.id+'.jpg'):Promise<PhotoUploadResult> {
+  if(await FileManager.isLink(FileManager.documentsDirectory.replace(/\/$/,'')+'/Momentra'))throw failure()
   const old=read(key,capture)
   if(old?.state==='creating')return uncertain(capture.id)
   if(old?.mediaItemId)return verify(capture,sub,key,old.mediaItemId)
@@ -87,7 +88,7 @@ async function perform(capture:PersonalCapture,sub:string,key:string):Promise<Ph
   // Persist before creation: a crash/timeout/ambiguous body must never silently re-upload.
   save(key,{version:1,captureId:capture.id,capturedAt:capture.capturedAt,state:'creating'})
   let raw:any
-  try {const r=await request(BASE+'/mediaItems:batchCreate',sub,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newMediaItems:[{simpleMediaItem:{uploadToken:token,fileName:capture.id+'.jpg'}}]})},32768)
+  try {const r=await request(BASE+'/mediaItems:batchCreate',sub,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newMediaItems:[{simpleMediaItem:{uploadToken:token,fileName:filename}}]})},32768)
     if(!r.ok)return uncertain(capture.id);raw=parse(r.text)
   }catch{return uncertain(capture.id)}
   const rows=raw?.newMediaItemResults
@@ -107,4 +108,87 @@ export function uploadPersonalPhoto(capture:PersonalCapture):Promise<PhotoUpload
     const sub=account(),key=journalKey(capture,sub),existing=pending.get(key);if(existing)return existing
     const promise=perform({...capture},sub,key).finally(()=>pending.delete(key));pending.set(key,promise);return promise
   }catch{return Promise.reject(new Error('Selecione uma foto pessoal JPEG do Momentra e conecte o Google Fotos.'))}
+}
+
+
+export type CloudRole = 'original'|'final'
+export type CloudManifest = { ownerSub:string;captureId:string;capturedAt:number;roles:Array<{role:CloudRole;path:string;size:number;sha256:string;mediaItemId:string}> }
+export function getCurrentPhotosOwner():string|null {try{return account()}catch{return null}}
+const cloudPending=new Map<string,Promise<{status:'ready'|'pending';manifest?:CloudManifest;message:string}>>()
+const retained=()=>({status:'pending' as const,message:'A cópia completa ainda não foi confirmada. Original e foto final permanecem neste aparelho.'})
+function capturePaths(id:string) {const root=FileManager.documentsDirectory.replace(/\/$/,'')+'/Momentra/';return {original:root+id+'-original.jpg',final:root+id+'.jpg'}}
+function validCapture(capture:PersonalCapture):boolean {return !!capture&&PROFILE_IDS.includes(capture.profile as typeof PROFILE_IDS[number])&&/^momentra-[A-Za-z0-9_-]{1,110}$/.test(capture.id)&&Number.isFinite(capture.capturedAt)&&capture.capturedAt>0&&capture.capturedAt<=Date.now()+300000}
+async function fingerprint(path:string):Promise<{size:number;sha256:string}> {
+  if(await FileManager.isLink(FileManager.documentsDirectory.replace(/\/$/,'')+'/Momentra'))throw failure()
+  const stat=await FileManager.stat(path)
+  if(stat.type!=='file'||!Number.isInteger(stat.size)||stat.size<4||stat.size>MAX_FILE||await FileManager.isLink(path))throw failure()
+  const data=await FileManager.readAsData(path),sig=data.slice(0,3).toUint8Array()
+  if(data.size!==stat.size||!sig||sig[0]!==255||sig[1]!==216||sig[2]!==255)throw failure()
+  const sha256=Crypto.sha256(data).toHexString().toLowerCase();if(!/^[a-f0-9]{64}$/.test(sha256))throw failure()
+  return {size:data.size,sha256}
+}
+// Caller must obtain explicit consent for BOTH personal images. This never deletes local data.
+export function prepareCloudUpload(capture:PersonalCapture&{original:string}):Promise<{status:'ready'|'pending';manifest?:CloudManifest;message:string}> {
+  try {
+    if(!validCapture(capture))throw failure()
+    const paths=capturePaths(capture.id)
+    if(capture.file!==paths.final||capture.original!==paths.original||capture.file===capture.original)throw failure()
+    const ownerSub=account(),lock=ownerSub+'.'+capture.id,existing=cloudPending.get(lock);if(existing)return existing
+    const snapshot={...capture}
+    const task=(async()=>{
+      try {
+        // Freeze both byte identities before ANY transfer; caller will rehash again before deletion.
+        const original=await fingerprint(snapshot.original),final=await fingerprint(snapshot.file)
+        if(account()!==ownerSub)throw failure()
+        const result=await uploadPersonalPhoto(snapshot)
+        if(result.status!=='uploaded'||!result.mediaItemId||account()!==ownerSub)return retained()
+        const key=journalKey(snapshot,ownerSub)+'.original',originalCapture={...snapshot,file:snapshot.original}
+        let op=pending.get(key)
+        if(!op){op=perform(originalCapture,ownerSub,key,snapshot.id+'-original.jpg').finally(()=>pending.delete(key));pending.set(key,op)}
+        const orig=await op
+        if(orig.status!=='uploaded'||!orig.mediaItemId||account()!==ownerSub||orig.mediaItemId===result.mediaItemId)return retained()
+        const manifest:CloudManifest={ownerSub,captureId:snapshot.id,capturedAt:snapshot.capturedAt,roles:[
+          {role:'original',path:snapshot.original,...original,mediaItemId:orig.mediaItemId},
+          {role:'final',path:snapshot.file,...final,mediaItemId:result.mediaItemId},
+        ]}
+        return {status:'ready' as const,manifest,message:'Dois itens encontrados no Google Fotos. A equivalência dos arquivos ainda precisa ser verificada.'}
+      }catch{return retained()}
+    })().finally(()=>cloudPending.delete(lock))
+    cloudPending.set(lock,task);return task
+  }catch{return Promise.resolve(retained())}
+}
+function validManifest(m:CloudManifest):boolean {
+  if(!m||typeof m.ownerSub!=='string'||!m.ownerSub||!/^momentra-[A-Za-z0-9_-]{1,110}$/.test(m.captureId)||!Number.isFinite(m.capturedAt)||m.capturedAt<=0||!Array.isArray(m.roles)||m.roles.length!==2)return false
+  const paths=capturePaths(m.captureId)
+  return new Set(m.roles.map(r=>r.role)).size===2&&m.roles.every(r=>(r.role==='original'||r.role==='final')&&r.path===paths[r.role]&&Number.isInteger(r.size)&&r.size>=4&&r.size<=MAX_FILE&&/^[a-f0-9]{64}$/.test(r.sha256)&&safeId(r.mediaItemId))&&m.roles[0].mediaItemId!==m.roles[1].mediaItemId
+}
+// A fresh Library API URL is a short-lived capability. Never expose/persist it or send bearer tokens to it.
+export async function downloadVerifiedRole(manifest:CloudManifest,role:CloudRole):Promise<{status:'bytes-verified'|'retention-pending';checkedAt?:number}> {
+  const retained={status:'retention-pending' as const}
+  let timer:ReturnType<typeof setTimeout>|undefined
+  let downloadController:AbortController|undefined
+  try {
+    if(!validManifest(manifest)||account()!==manifest.ownerSub)return retained
+    const entry=manifest.roles.find(r=>r.role===role);if(!entry)return retained
+    const sub=manifest.ownerSub,expected={...entry}
+    const meta=await request(BASE+'/mediaItems/'+encodeURIComponent(expected.mediaItemId),sub,{},32768)
+    if(!meta.ok)return retained
+    const raw=parse(meta.text),base=safeURL(raw?.baseUrl,'image')
+    if(raw?.id!==expected.mediaItemId||raw.mimeType!=='image/jpeg'||!base)return retained
+    const url=new URL(base);if(url.search||url.hash)return retained
+    const controller=new AbortController();downloadController=controller;timer=setTimeout(()=>controller.abort(),20000)
+    const response=await fetch(base+'=d',{method:'GET',handleRedirect:async()=>null,timeout:20,signal:controller.signal})
+    if(!response.ok||response.status!==200||account()!==sub)return retained
+    const type=(response.headers.get('Content-Type')??'').split(';')[0].trim().toLowerCase()
+    if(type!=='image/jpeg'&&type!=='image/jpg'&&type!=='application/octet-stream')return retained
+    const declared=response.headers.get('Content-Length');if(declared!==null&&Number(declared)!==expected.size)return retained
+    const reader=response.body?.getReader();if(!reader)return retained
+    let size=0;const chunks:Uint8Array[]=[]
+    try {while(true){const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>expected.size||size>MAX_FILE){await reader.cancel();return retained}chunks.push(next.value)}}finally{reader.releaseLock()}
+    if(size!==expected.size||account()!==sub)return retained
+    const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength}
+    const data=Data.fromUint8Array(bytes);if(!data||Crypto.sha256(data).toHexString().toLowerCase()!==expected.sha256)return retained
+    if(account()!==sub)return retained
+    return {status:'bytes-verified',checkedAt:Date.now()}
+  }catch{return retained}finally{if(timer!==undefined)clearTimeout(timer);downloadController?.abort()}
 }

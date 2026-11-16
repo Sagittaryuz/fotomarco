@@ -11,6 +11,7 @@ import { drawStamp } from "./stamp"
 import { beginDiagnostic, recordDiagnostic, recordApiAvailability, buildDiagnosticReport } from "./diagnostics"
 import { getGoogleIdentity, loginGoogle, logoutGoogle } from "./google_auth"
 import { GooglePhotosPanel } from "./google_photos_ui"
+import { getCloudArchiveState } from "./cloud_archive"
 
 type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput | null; movie: AVCaptureMovieFileOutput | null }
 let ownedSession: AVCaptureSession | null = null
@@ -79,11 +80,11 @@ function GoogleAccount() {
   </VStack>
 }
 
-function GooglePhotosPage({capture}:{capture:CaptureRecord|null}) {
+function GooglePhotosPage({capture,onArchived}:{capture:CaptureRecord|null;onArchived?:()=>void}) {
   const dismiss=Navigation.useDismiss()
   return <NavigationStack preferredColorScheme="light"><VStack spacing={0} background="#F2F2F7" foregroundStyle="#17171B">
     <ZStack frame={{height:64}} background="white"><Text font="headline">Google Fotos pessoal</Text><HStack padding={{leading:16,trailing:16}}><Button buttonStyle="plain" accessibilityLabel="Voltar às configurações" action={dismiss} frame={{width:44,height:44}} background="#F2F2F7" cornerRadius={22} masksToBounds><Image systemName="chevron.left" font="title3" frame={{width:44,height:44}} /></Button><Spacer /></HStack></ZStack>
-    <ScrollView><VStack padding={18}><GooglePhotosPanel capture={capture} /></VStack></ScrollView>
+    <ScrollView><VStack padding={18}><GooglePhotosPanel capture={capture} onArchived={onArchived} /></VStack></ScrollView>
   </VStack></NavigationStack>
 }
 
@@ -196,6 +197,7 @@ function CameraPage() {
           const options = JSON.parse(JSON.stringify(settingsRef.current)) as Settings
           const record: CaptureRecord = {handoffKey:key,id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:null,address:"",warnings:[]}
           if (options.gps) record.warnings.push("Captura recebida: GPS do disparo não fornecido; localização atual não foi usada")
+          if (options.storageMode === "cloud") record.warnings.push("Capturas recebidas do Scripting permanecem locais; o modo nuvem aplica-se a novas fotos próprias do Momentra")
           remember(record); await persistRecord(record)
           try { beginDiagnostic("composition"); record.file = await renderStamped(image,record,options,null); record.stamped = options.stamp; recordDiagnostic("composition","passed","completed") }
           catch (error) { recordDiagnostic("composition","failed","operation_failed"); record.warnings.push("Composição falhou; original preservado: "+String(error)) }
@@ -287,7 +289,7 @@ function CameraPage() {
         if (!result?.image || !await FileManager.exists(original)) throw new Error("Captura sem arquivo confirmado")
         recordDiagnostic("capture","passed","completed")
       } catch (error) { recordDiagnostic("capture","failed","operation_failed"); throw error }
-      const record: CaptureRecord = {id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:currentFix,address:"",warnings:[]}
+      const record: CaptureRecord = {storageIntent:options.storageMode,id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:currentFix,address:"",warnings:[]}
       // Record original first. Rendering/network failures must never discard a successful capture.
       remember(record); await persistRecord(record)
       if (options.gps && !currentFix) record.warnings.push("GPS indisponível no disparo")
@@ -306,12 +308,13 @@ function CameraPage() {
         } catch (error) { recordDiagnostic("composition","failed","operation_failed"); record.warnings.push("Carimbo falhou; original preservado: "+String(error)) }
       }
       remember(record); await persistRecord(record)
-      say((record.stamped ? "Foto com carimbo pronta" : options.stamp ? "Original preservado, sem carimbo" : "Foto original pronta")+(settingsRef.current.allowGallery ? ". Toque em Salvar." : ". Guardada localmente no Momentra, sem cópia na galeria e sem envio à nuvem.")+(record.warnings.length ? " "+record.warnings.join(". ") : ""))
+      say((record.stamped ? "Foto com carimbo pronta" : options.stamp ? "Original preservado, sem carimbo" : "Foto original pronta")+(settingsRef.current.allowGallery ? ". Toque em Salvar." : options.storageMode === "cloud" ? ". Nuvem pendente: cópias temporárias locais, sem galeria. Abra Google Fotos pessoal para enviar e verificar." : ". Guardada localmente no Momentra, sem cópia na galeria e sem envio à nuvem.")+(record.warnings.length ? " "+record.warnings.join(". ") : ""))
       if (options.gps) void locate()
     })
   }
   async function changeMode(next: "video" | "photo") {
     if (initializingRef.current || locked.current || recordingRef.current || closing || next === modeRef.current) return
+    if (next === "video" && settingsRef.current.storageMode === "cloud") {say("Vídeo exige armazenamento local. Altere Armazenamento nas configurações; o modo nuvem é para fotos.");return}
     await run(async () => {
       const old = cameraRef.current
       if (old) await old.session.stopRunning()
@@ -332,6 +335,7 @@ function CameraPage() {
       return
     }
     if (modeRef.current === "photo") { await capture(); return }
+    if (settingsRef.current.storageMode === "cloud") {say("Vídeos exigem armazenamento local. O modo nuvem é para fotos.");return}
     if (!cameraRef.current?.movie) return
     await run(async () => {
       beginDiagnostic("video")
@@ -369,7 +373,7 @@ function CameraPage() {
   }
   async function saveVideo() {
     await run(async () => {
-      if (!settingsRef.current.allowGallery) { say("Galeria desativada. Vídeo preservado no armazenamento local do Momentra; não está na nuvem."); return }
+      if (settingsRef.current.storageMode === "cloud" || !settingsRef.current.allowGallery) { say("Galeria desativada. Vídeo preservado no armazenamento local do Momentra; não está na nuvem."); return }
       const video = lastVideoRef.current; if (!video || video.saved) return
       if (!await Photos.saveVideo(video.file)) { say("Fotos não confirmou. O vídeo continua no Momentra."); return }
       const saved = {...video,saved:true}; rememberVideo(saved); say("Vídeo salvo no Fotos")
@@ -403,7 +407,7 @@ function CameraPage() {
   function TimestampPage() {
     const dismissSettings = Navigation.useDismiss()
     const [value,setValue] = useState(settingsRef.current)
-    function change(patch: Partial<Settings>) { const next = {...settingsRef.current,...patch}; update(next); setValue(next) }
+    function change(patch: Partial<Settings>) { const next = {...settingsRef.current,...patch}; if(next.storageMode === "cloud") next.allowGallery=false; update(next); setValue(next) }
     function Icon(props:{symbol:string;color:string}) {
       return <Image systemName={props.symbol} font="title3" foregroundStyle="white" frame={{width:44,height:44}} background={props.color} cornerRadius={22} masksToBounds accessibilityHidden />
     }
@@ -440,11 +444,12 @@ function CameraPage() {
         <Group title="Imagem ou logotipo" note="Escolha a imagem em Padrão, na lateral da câmera. A proporção da arte é preservada.">
           <Row symbol="photo.fill" color="#4EBF64"><Picker title="Canto da imagem" value={value.logoCorner} onChanged={next=>change({logoCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
         </Group>
-        <Group title="Armazenamento" note="Ativado permite salvar manualmente no Fotos; não salva automaticamente nem indica permissão do iOS. Desativado bloqueia Salvar e Salvar vídeo, sem apagar cópias anteriores. As capturas continuam locais no Momentra, não na nuvem.">
-          <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
+        <Group title="Armazenamento" note="Somente nuvem vale para novas fotos próprias, sem galeria. Original e final ficam locais até envio manual e verificação de bytes idênticos; falhas mantêm cópias pendentes. JSON e cache podem permanecer. Vídeos exigem Local. Cópias anteriores não são apagadas.">
+          <Row symbol="externaldrive.fill" color="#3478F6"><Picker title="Destino das novas fotos" value={value.storageMode} onChanged={next=>change({storageMode:next})} pickerStyle="menu"><Text tag="local">Local</Text><Text tag="cloud">Somente nuvem após verificar</Text></Picker></Row><Rule />
+          <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" disabled={value.storageMode === "cloud"} value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
         </Group>
-        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /><Button title="Google Fotos pessoal" buttonStyle="bordered" action={()=>{void Navigation.present({element:<GooglePhotosPage capture={lastRef.current} />})}} /><DiagnosticReport /></VStack></Group>
-        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos pessoal depende de ativação do serviço, consentimento separado e envio manual da foto selecionada. Armazenamento somente na nuvem não está disponível: originais e fotos finais permanecem no Momentra.</Text>
+        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /><Button title="Google Fotos pessoal" buttonStyle="bordered" action={()=>{void Navigation.present({element:<GooglePhotosPage capture={lastRef.current} onArchived={()=>{setPreviewImage(null);setPreview(false);say("Estado da nuvem atualizado. Consulte Google Fotos pessoal para visualizar.")}} />})}} /><DiagnosticReport /></VStack></Group>
+        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos pessoal depende de ativação do serviço, consentimento separado e envio manual da foto selecionada. No modo somente nuvem, JPEGs do Momentra só são removidos após confirmar original e final idênticos no Google. Qualquer divergência mantém cópia local pendente.</Text>
         <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>Momentra · As opções acima são funções reais do aplicativo. Permissões do sistema são solicitadas apenas ao usar o recurso correspondente.</Text>
       </VStack></ScrollView>
     </VStack></NavigationStack>
@@ -459,7 +464,7 @@ function CameraPage() {
   }
   async function save() {
     await run(async () => {
-      if (!settingsRef.current.allowGallery) { say("Galeria desativada. Foto preservada no armazenamento local do Momentra; não está na nuvem."); return }
+      if (settingsRef.current.storageMode === "cloud" || lastRef.current?.storageIntent === "cloud" || !settingsRef.current.allowGallery) { say("Salvamento na galeria bloqueado. Consulte o estado da captura em Google Fotos pessoal."); return }
       const record = lastRef.current
       if (!record || record.saved) return
       say("Salvando no Fotos…")
@@ -529,13 +534,22 @@ function CameraPage() {
       const choice = await Dialog.actionSheet({title:"Fotos recentes",actions:rows.slice(0,12).map(x=>({label:new Date(x.capturedAt).toLocaleString("pt-BR")+" · "+x.profile+(x.saved ? " ✓" : "")})),cancelButton:true})
       if (choice === null) return
       const record = rows[choice]
-      if (!(await FileManager.exists(record.file))) { say("Arquivo não encontrado no armazenamento local"); return }
-      remember(record); setPreview(true); say(record.saved ? "Esta foto já foi salva no Fotos" : "Foto recuperada. Toque em Salvar.")
+      if (!(await FileManager.exists(record.file))) {
+        const archived=getCloudArchiveState(record.id)
+        if (record.storageIntent === "cloud" && archived) {
+          lastRef.current=record;setLast(record);setPreviewImage(null);setPreview(false)
+          await Navigation.present({element:<GooglePhotosPage capture={record} onArchived={()=>{setPreviewImage(null);setPreview(false)}} />})
+          return
+        }
+        say("Arquivo não encontrado no armazenamento local"); return
+      }
+      remember(record); setPreview(true); say(record.storageIntent === "cloud" ? "Nuvem pendente. Abra Google Fotos pessoal para enviar e verificar esta captura." : record.saved ? "Esta foto já foi salva no Fotos" : "Foto recuperada. Toque em Salvar.")
     })
   }
   async function exportFiles() {
     await run(async () => {
       const record = lastRef.current; if (!record) return
+      if (record.storageIntent === "cloud") {say("Esta captura usa modo nuvem. Consulte Google Fotos pessoal; exportação local não é feita automaticamente.");return}
       const choice = await Dialog.actionSheet({title:"Exportar para Arquivos",actions:[{label:"Foto final"},{label:"Original sem carimbo"},{label:"Registro JSON de captura"}],cancelButton:true})
       if (choice === null) return
       const path = choice === 0 ? record.file : choice === 1 ? record.original : Path.join(folder,record.id+".json")
@@ -645,7 +659,7 @@ function CameraPage() {
             <Spacer />
         <HStack spacing={8} frame={{height:layout.status}} padding={{leading:12,trailing:12}}>
           <ScrollView><VStack alignment="leading" spacing={2}><Text font="caption2" foregroundStyle="#D0D0D0">{status}</Text>{showGoogleIntro ? <Button title="Google opcional · configurar" font="caption2" buttonStyle="plain" disabled={busy} action={()=>{void openSettings()}} /> : null}</VStack></ScrollView>
-          {mode === "photo" ? <Button {...circularControl()} accessibilityLabel="Exportar" buttonStyle="plain" disabled={!last || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" font="title3" frame={{width:44,height:44}} /></Button> : null}
+          {mode === "photo" ? <Button {...circularControl()} accessibilityLabel="Exportar" buttonStyle="plain" disabled={!last || last.storageIntent === "cloud" || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" font="title3" frame={{width:44,height:44}} /></Button> : null}
           <Button {...circularControl()} buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" font="title3" frame={{width:44,height:44}} /></Button>
         </HStack>
           </VStack>
@@ -667,7 +681,7 @@ function CameraPage() {
         </Button>
           <Spacer />
           <Button {...circularControl()} buttonStyle="plain" accessibilityLabel={mode === "photo" ? last?.saved ? "Salva ✓" : "Salvar" : lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"}
-            disabled={!settings.allowGallery || busy || (mode === "photo" ? !last || last.saved : !lastVideo || lastVideo.saved)} action={()=>{if (mode === "photo") void save(); else void saveVideo()}}>
+            disabled={!settings.allowGallery || busy || (mode === "photo" ? !last || last.saved || last.storageIntent === "cloud" : !lastVideo || lastVideo.saved)} action={()=>{if (mode === "photo") void save(); else void saveVideo()}}>
             <Image systemName={(mode === "photo" ? last?.saved : lastVideo?.saved) ? "checkmark.circle" : "square.and.arrow.down"} font="title3" frame={{width:44,height:44}} />
           </Button>
         </HStack>

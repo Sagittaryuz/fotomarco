@@ -1,6 +1,6 @@
 # Armazenamento e Google Fotos · avaliação 16/11/2026
 
-## Estado atual · 0.4.0
+## Base publicada · 0.4.0
 
 Backend publicado após aprovação específica: Worker `68d51eb4`, fonte `593ba2f2`, com Photos opcional habilitado. Library API e cinco escopos mínimos configurados no projeto dedicado; nenhum billing/custo ativado. `/health`200 confirma version2/photos:true; `/privacy`200 com no-store/no-referrer/CSP. Conferência independente do coordenador confirmou os dois endpoints públicos.
 
@@ -74,3 +74,12 @@ Para Google authentication, identificar projeto autorizado e callback admitido n
 ## Bloqueio anterior da preparação0.4.0 (resolvido para publicação do backend)
 
 Library API ativada e cinco escopos mínimos salvos no projeto dedicado sem billing. Publicação do Worker/gate bloqueada pela revisão de autorização; rascunho mantido. Logo Photos segue indisponível no serviço atual, e `/privacy` só ficará acessível após publicação. Nenhum consentimento Photos nem upload real foi executado. O script0.4.0 permanece local aguardando essa publicação para evitar entrega fragmentada; versão distribuída continua0.3.7.
+
+
+## Evolução0.5.0 · retenção condicionada à equivalência
+
+Usuário confirmou “Mapa da Apple. Ok”, substituindo Google Maps no objetivo do carimbo. Google Maps incorporado deixa de ser pendência desse objetivo; abertura externa continua opcional e distinta.
+
+Implementado modo Local/default e Somente nuvem após verificar para novas capturas próprias. Sem galeria, sem vídeos ou migração automática. Confirmação pessoal por captura envia dois itens (original/final), mantém journals separados e reusa IDs em falhas. Download `=d` fresco, domínio permitido sem Bearer/redirect, timeout e limite de tamanho; SHA256+tamanho devem coincidir integralmente para ambos. Manifesto/IDs persistidos e relidos antes de remover JPEGs próprios, nova validação dos arquivos/conta antes de cada remoção; falha parcial pode ser retomada por IDs, sem reupload. JSON/cache podem ficar no aparelho; histórico abre a foto remota.
+
+O Google remove EXIF de localização no download. Por isso equivalência NÃO é presumida, e o modo pode permanecer pendente conservando dados. Não remover por comparação de dimensões. Nenhum upload real ou limpeza de arquivo do usuário ocorreu nesta implementação. [Download oficial](https://developers.google.com/photos/library/guides/access-media-items).

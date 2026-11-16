@@ -1,4 +1,4 @@
-# Momentra · 0.4.0
+# Momentra · 0.5.0
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -23,7 +23,7 @@ Após a importação, abra Momentra. Permita acesso à câmera quando o iOS soli
 - **Fotografar:** o círculo branco dispara na tela. O evento físico usa a mesma proteção contra disparos duplicados.
 - **Prévia:** mostra a última foto em um painel, sem desmontar o visor ativo.
 - **Salvar:** grava a foto final no Fotos. Não salva automaticamente e evita repetição de um salvamento confirmado.
-- **Exportar:** foto final, original sem carimbo ou registro JSON para Arquivos.
+- **Exportar:** no modo local, foto final, original sem carimbo ou registro JSON para Arquivos.
 
 O título e a observação se referem às próximas fotos, não alteram registros antigos. Textos longos são limitados com reticências para não invadir o mapa; o registro mantém os dados de captura. Logotipos não são incluídos de terceiros: selecione o arquivo que deseja usar. A proporção da marca é preservada.
 
@@ -41,11 +41,11 @@ GPS continua opt-in, com atualização a cada 30 segundos enquanto a câmera est
 
 O mapa disponível e correspondente é reaproveitado no disparo. A foto congela hora, GPS e preferências no instante real da captura (depois do temporizador). A sobreposição some ao revisar uma foto e no modo Vídeo, que não recebe carimbo. A prévia de tela e a foto compartilham o desenho, mas paridade exata de pixels/campo de visão requer teste físico.
 
-**Provedor de mapas atual: Apple.** Login Google opcional foi integrado na 0.3.4, somente para identidade. Google Maps continua indisponível: envolve billing e restrições de incorporação da imagem. Não foi ativada cobrança. Veja [condições Google](CLOUD_STORAGE.md).
+**Provedor de mapas escolhido: Apple**, conforme confirmação do usuário. O mapa no visor/carimbo usa Apple, sem ativar billing Google. Google Maps externo é apenas uma opção separada no menu GPS. Login e Google Fotos não mudam esse provedor.
 
 ## Configurações · 0.3.6
 
-Página clara com cartões brancos, ícones circulares coloridos de 44 pt e botão Voltar à câmera. Interruptores controlam carimbo, GPS, mapa e permissão de salvamento manual na galeria, sem representar o estado das permissões do iOS. Fontes, formatos, cantos e escala continuam selecionáveis. Conta Google foi preservada; Google Fotos e somente nuvem aparecem apenas como aviso de indisponibilidade, sem botão inoperante. A câmera permanece escura.
+Página clara com cartões brancos, ícones circulares coloridos de 44 pt e botão Voltar à câmera. Interruptores controlam carimbo, GPS, mapa e permissão de salvamento manual na galeria, sem representar o estado das permissões do iOS. Fontes, formatos, cantos e escala continuam selecionáveis. Conta inclui login Google, página Google Fotos pessoal e diagnóstico local. Armazenamento oferece Local ou Somente nuvem após verificar. A câmera permanece escura.
 
 ## Controles superiores e configurações
 
@@ -69,7 +69,7 @@ GPS começa **desligado**. Ative no botão GPS quando quiser localizacão no car
 
 Endereço e mapa de satélite são opcionais e dependem dos serviços Apple/rede. A foto não é enviada ao serviço de mapas. Consultas têm tempo limite e geocodificação é limitada a uma por minuto. Sem mapa/endereço, a foto continua disponível com coordenadas quando existentes. GPS ausente fica identificado no carimbo.
 
-O JPEG com carimbo tem até **3072 px no maior lado**, qualidade 94%, sem ampliar imagens menores. É uma composição visual, **não uma promessa de EXIF GPS preservado**. O original permanece intacto, com os metadados que a câmera efetivamente produziu. A data do carimbo inclui o fuso local do aparelho.
+O JPEG com carimbo tem até **3072 px no maior lado**, qualidade 94%, sem ampliar imagens menores. É uma composição visual, **não uma promessa de EXIF GPS preservado**. O original permanece intacto, com os metadados que a câmera efetivamente produziu; no modo nuvem, a cópia local só é limpa depois de uma contraparte remota byte a byte idêntica ser verificada. A data do carimbo inclui o fuso local do aparelho.
 
 ## Botão físico e Tela Bloqueada
 
@@ -77,7 +77,7 @@ O script inicia uma câmera customizada quando aberto normalmente. A Tela Bloque
 
 ## Galeria e nuvem
 
-Em Configurações, **Cópia na galeria Fotos → Não salvar na galeria** bloqueia o salvamento de fotos e vídeos no Fotos. Arquivos continuam guardados **localmente no Momentra**; cópias anteriores não são apagadas. Isso não equivale a somente nuvem.
+Em Configurações, **Cópia na galeria Fotos → Não salvar na galeria** bloqueia o salvamento de fotos e vídeos no Fotos. Esse interruptor isolado mantém arquivos **localmente no Momentra**; cópias anteriores não são apagadas. O modo separado **Somente nuvem após verificar** permite limpeza condicionada de novas capturas, descrita abaixo.
 
 O login Google opcional identifica a conta. Google Fotos pessoal é uma integração separada, com consulta de disponibilidade, consentimento e envio manual. A API permite listar apenas conteúdo criado pelo próprio aplicativo e não é destinada a dados internos empresariais. Sem ativação do serviço ou sessão válida, os controles informam a indisponibilidade. Consulte [avaliação e próximos passos](CLOUD_STORAGE.md).
 
@@ -129,7 +129,7 @@ Ver [DEVELOPMENT.md](DEVELOPMENT.md) para decisões e checklist de homologação
 
 Configurações → Conta → Google Fotos pessoal permite consultar disponibilidade, autorizar separadamente o acesso mínimo e enviar manualmente a foto selecionada. A declaração de finalidade pessoal é por foto, não pelo nome do perfil. Dados internos empresariais não devem ser enviados. O carimbo, incluindo localização visível, acompanha a imagem final; a confirmação informa a conta destinatária.
 
-A lista mostra apenas JPEGs criados pelo Momentra, com miniaturas, paginação e renovação das URLs pelo ID. Não é acesso à biblioteca inteira. Envio limitado a JPEG20MB; vídeos não são enviados. Upload ambíguo impede reenvio automático; sucesso exige criação individual e consulta do item. Originais permanecem locais. **Não é modo somente nuvem**, e miniaturas podem usar cache do host. A API consome o espaço existente da conta Google, sem comprar armazenamento.
+A lista mostra apenas JPEGs criados pelo Momentra, com miniaturas, paginação e renovação das URLs pelo ID. Não é acesso à biblioteca inteira. Envio limitado a JPEG20MB; vídeos não são enviados. Upload ambíguo impede reenvio automático; sucesso exige criação individual e consulta do item. No modo Local, originais permanecem locais. Na versão0.4.0 não era modo somente nuvem; a opção condicionada da0.5.0 está descrita abaixo. Miniaturas podem usar cache do host. A API consome o espaço existente da conta Google, sem comprar armazenamento.
 
 O login de identidade continua independente e a câmera funciona sem ele. Photos usa outro consentimento/token, com escopos mínimos e sessão expirada exigindo reconexão. A aplicação Google em Testing só admite usuários autorizados para teste. O botão de privacidade abre o aviso do serviço. Nada é enviado automaticamente ao abrir o app, fotografar ou entrar na conta.
 
@@ -140,3 +140,20 @@ Configurações → Conta → Exibir diagnóstico local reúne versão, disponib
 ### Uma validação consolidada no iPhone
 
 Após a versão integrada estar publicada, importar uma única vez. Exercitar foto4:3/carimbo/mapa/logotipo, temporizador/flash, vídeo com áudio e parada, configuração e retorno Google. Photos deve ser autorizado explicitamente; qualquer envio real será escolhido pelo usuário. Ao final conferir o diagnóstico local. Testes de mocks, CI e backend real no PC não substituem essa verificação nativa. Sem iPhone conectado ao servidor oficial Scripting não existe execução remota comprovada nesta entrega.
+
+
+## 0.5.0 · Somente nuvem após verificação
+
+Marcos escolheu manter o mapa **Apple** no carimbo. Não é necessário Google Maps nem billing para esse objetivo. O mapa ao vivo e na foto continua usando o mesmo fluxo existente; a abertura externa Google Maps permanece apenas uma opção separada.
+
+Em Configurações → Armazenamento → Destino das novas fotos, escolha **Somente nuvem após verificar**. Padrão continua Local. O modo aplica-se a novas capturas próprias: bloqueia galeria/exportação local para essas fotos e exige Local para vídeos. Handoffs e cópias anteriores não são apagados nem migrados automaticamente.
+
+As imagens ficam temporariamente no Momentra até você abrir Google Fotos pessoal e confirmar **Arquivar na nuvem**. A confirmação envia **original e final como dois itens**, incluindo metadados e carimbo, usando mais espaço da sua conta. Nada é enviado automaticamente ao fotografar.
+
+Depois do envio, ambos os itens são baixados novamente por URLs novas e comparados por tamanho e **SHA256**. Só cópias byte a byte idênticas permitem limpar os dois JPEGs exatos daquela captura. Recibo/IDs são persistidos antes da limpeza, arquivos e conta são reconferidos, e uma interrupção pode ser retomada sem duplicar uploads. Histórico de uma captura arquivada abre a prévia remota no app.
+
+**Falhas mantêm pendências, não forçam remoção.** O Google documenta que download `=d` exclui EXIF de localização. Se isso ou outra alteração mudar os bytes, as cópias locais permanecem e o modo mostra pendente. Igualdade de dimensões ou um simples ID remoto não conta como verificação. Este comportamento é intencional para evitar perda de dados.
+
+“Somente nuvem” aqui significa **sem os dois JPEGs persistidos no Momentra após a verificação**, não ausência de qualquer dado no iPhone: JSON/IDs, processamento temporário e possível cache do Scripting continuam locais. Galeria, exportações anteriores e arquivos externos não são tocados. A disponibilidade futura dos itens depende da conta Google e de não serem excluídos ali pelo usuário.
+
+A implementação foi testada com dados sintéticos/mocks, inclusive falha parcial e mudança de conta. Nenhuma foto real foi enviada e nenhum arquivo real do usuário foi removido durante o desenvolvimento. O ciclo nativo completo ainda requer a validação única no iPhone.
