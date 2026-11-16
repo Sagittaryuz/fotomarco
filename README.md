@@ -1,4 +1,4 @@
-# Momentra · 0.3.4
+# Momentra · 0.3.5
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -53,7 +53,7 @@ O mapa disponível e correspondente é reaproveitado no disparo. A foto congela 
 
 ## Interface Liquid Glass e vídeo
 
-Dois painéis laterais usam o material **Liquid Glass nativo regular**, gerenciado por `GlassEffectContainer`. Cada painel tem uma única superfície de vidro, com botões independentes dentro: não é blur simulado nem vidro sobre vidro. A miniatura/prévia fica à esquerda do obturador e Salvar à direita; Exportar e Fechar ficam na faixa de status. Os dois modos são os últimos elementos da tela. Painéis laterais compactos de ícones rolam em telas baixas. Estados também têm texto e descrições para VoiceOver, não apenas cor.
+Os controles usam **Liquid Glass nativo regular**, com ícones em superfícies circulares de 44 pt e grupos laterais gerenciados por `GlassEffectContainer`. A versão 0.3.5 sobrepõe toolbar e status ao visor para maximizar sua área, preservando a proporção escolhida e os controles inferiores. O obturador permanece maior. A miniatura/prévia fica à esquerda do obturador e Salvar à direita; Exportar e Fechar ficam na faixa de status. Os dois modos são os últimos elementos da tela. Painéis laterais compactos de ícones rolam em telas baixas. Estados também têm texto e descrições para VoiceOver, não apenas cor.
 
 No modo Vídeo, toque no círculo vermelho para iniciar e no quadrado para parar. Câmera e microfone são solicitados pelo iOS. A sessão de fotos é encerrada antes da sessão de vídeo, evitando duas câmeras concorrentes. O arquivo `.mov` fica no Momentra; **Salvar vídeo** envia ao Fotos apenas quando solicitado. O último vídeo fica acessível após reabrir e voltar ao modo Vídeo; os últimos 50 vídeos ficam selecionáveis em Recentes no modo Vídeo, e todos os arquivos permanecem na pasta local. **Vídeo não recebe carimbo, GPS ou mapa.** Os controles exclusivos de foto ficam desativados nesse modo.
 
@@ -110,8 +110,8 @@ node --test backend/worker.test.mjs
 ```
 
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
-- 44 verificações de núcleo/layout/renderização sintética.
-- 28 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 47 verificações de núcleo/layout/renderização sintética.
+- 29 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
 - 14 testes isolados do módulo Google e 29 do backend OAuth, com dados sintéticos.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.

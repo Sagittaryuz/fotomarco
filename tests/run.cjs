@@ -1,9 +1,13 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),esbuild=require('esbuild');
 const {createCanvas,loadImage}=require('@napi-rs/canvas');
 const out=path.resolve(__dirname,'../.validation');fs.mkdirSync(out,{recursive:true});
-esbuild.buildSync({entryPoints:[path.resolve(__dirname,'../core.ts'),path.resolve(__dirname,'../stamp.ts')],bundle:true,platform:'node',format:'cjs',outdir:out});
+esbuild.buildSync({entryPoints:[path.resolve(__dirname,'../core.ts'),path.resolve(__dirname,'../stamp.ts'),path.resolve(__dirname,'../camera_layout.ts')],bundle:true,platform:'node',format:'cjs',outdir:out});
 const c=require(out+'/core.js'),{drawStamp,fitText}=require(out+'/stamp.js');
+const {cameraLayout}=require(out+'/camera_layout.js');
 let checks=0;function test(name,fn){fn();checks++;console.log('PASS '+name)}
+test('camera defaults 4:3 and preserves explicit saved ratio',()=>{assert.equal(c.defaults().aspectRatio,'4:3');assert.equal(c.normalizeSettings({}).aspectRatio,'4:3');assert.equal(c.normalizeSettings({aspectRatio:'16:9'}).aspectRatio,'16:9')});
+test('camera preview maximizes correct aspect without reserved overlay rows',()=>{for(const [w,h] of [[320,568],[390,844],[844,390],[320,480]])for(const ratio of ['4:3','16:9']){const l=cameraLayout(w,h,ratio),a=w>h?(ratio==='4:3'?4/3:16/9):(ratio==='4:3'?3/4:9/16);assert.ok(Math.abs(l.viewWidth/l.viewHeight-a)<1e-9);assert.ok(l.viewWidth<=w);assert.ok(l.viewHeight+l.shutter+l.mode+2*l.gap<=h+1e-9);assert.ok(Math.abs(l.viewWidth-w)<1e-9||Math.abs(l.viewHeight-(h-l.shutter-l.mode-2*l.gap))<1e-9);assert.equal(l.toolbar,44);assert.equal(l.status,44)}});
+test('small portrait preview expands to full width',()=>{const l=cameraLayout(320,568);assert.equal(l.viewWidth,320);assert.ok(l.viewHeight>426);assert.ok(l.viewHeight>316)});
 const now=1794822600000,fix={latitude:-17.9,longitude:-51.7,timestamp:now};
 const record={id:'synthetic',original:'',file:'',capturedAt:now,profile:'HAMOA',stamped:true,saved:false,fix,address:'Rua de teste · Exemplo',warnings:[]};
 test('invalid storage is recovered',()=>{assert.deepEqual(c.normalizeSettings(null),c.defaults());assert.equal(c.normalizeSettings({profile:'BAD',gps:'yes',profiles:{HAMOA:{title:'',note:'a\nb'}}}).profiles.HAMOA.note,'a b')});
