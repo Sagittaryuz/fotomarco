@@ -26,6 +26,15 @@ export function parseMetForecast(body: unknown, at: number): ModelWeather | null
   return [result.temperatureC,result.humidityPercent,result.windMs,result.seaLevelHpa].some(x=>x!==null) ? result : null
 }
 
+// Keep a bounded sequence of model times; a cached future entry becomes usable only when its time arrives.
+export function parseMetForecastWindow(body:unknown,at:number):ModelWeather[] {
+  const properties=(body as any)?.properties, series=properties?.timeseries
+  const updatedAt=Date.parse(properties?.meta?.updated_at)
+  if(!Array.isArray(series) || !Number.isFinite(updatedAt) || updatedAt>at || at-updatedAt>86400000) return []
+  const times=[...new Set<number>(series.map((x:any)=>Date.parse(x?.time)).filter((t:number)=>Number.isFinite(t) && t>=at-7200000 && t<=at+10800000))].sort((a,b)=>a-b)
+  return times.slice(0,8).map(time=>parseMetForecast(body,Math.max(at,time))).filter((x):x is ModelWeather=>x!==null)
+}
+
 export function validModelWeather(value:unknown,now:number):ModelWeather|null {
   if (!value || typeof value !== "object" || !Number.isFinite(now)) return null
   const v=value as Partial<ModelWeather>
@@ -53,7 +62,10 @@ export async function requestMetForecast(options:{enabled:boolean;foreground:boo
   if (existing && Number.isFinite(existing.at)) {
     if (now<existing.at) return null // clock moved backwards: keep the cooldown
     const retryAt=Number.isFinite(existing.retryAt) ? Math.max(existing.at+10800000,existing.retryAt) : existing.at+10800000
-    if (now<retryAt) return validModelWeather(existing.sample,now)
+    if (now<retryAt) {
+      const candidates=Array.isArray(existing.samples) ? existing.samples.slice(0,8) : [existing.sample]
+      return candidates.map((x:unknown)=>validModelWeather(x,now)).filter((x:ModelWeather|null):x is ModelWeather=>x!==null).sort((a:ModelWeather,b:ModelWeather)=>b.validAt-a.validAt)[0] ?? null
+    }
   }
   // Conservative fallback survives a failed second write, timeout or crash.
   try { if (!store.set(key,{at:now,retryAt:now+86400000,sample:null})) return null } catch { return null }
@@ -72,8 +84,9 @@ export async function requestMetForecast(options:{enabled:boolean;foreground:boo
       return null
     }
     if(response.status!==200) return null
-    const sample=parseMetForecast(await response.json(),now)
-    try { store.set(key,{at:now,retryAt,sample}) } catch { /* The conservative fallback remains. */ }
+    const body=await response.json()
+    const sample=parseMetForecast(body,now), samples=parseMetForecastWindow(body,now)
+    try { store.set(key,{at:now,retryAt,sample,samples}) } catch { /* The conservative fallback remains. */ }
     return sample
   } catch { return null }
 }

@@ -1,12 +1,12 @@
 const assert=require('node:assert/strict'),esbuild=require('esbuild'),vm=require('node:vm');
 const output=esbuild.buildSync({entryPoints:['meteorology.ts'],bundle:true,format:'cjs',platform:'node',write:false}).outputFiles[0].text;
-const scope={module:{exports:{}},exports:{}};vm.runInNewContext(output,scope);const {parseMetForecast}=scope.module.exports;
+const scope={module:{exports:{}},exports:{}};vm.runInNewContext(output,scope);const {parseMetForecast,parseMetForecastWindow}=scope.module.exports;
 const at=Date.parse('2026-11-16T20:30:00Z');
 const units={air_temperature:'celsius',relative_humidity:'%',wind_speed:'m/s',air_pressure_at_sea_level:'hPa'};
 const step=(time,details)=>({time,data:{instant:{details}}});
-const body={properties:{meta:{updated_at:'2026-11-16T19:00:00Z',units},timeseries:[step('2026-11-16T21:00:00Z',{air_temperature:99}),step('2026-11-16T20:00:00Z',{air_temperature:22,relative_humidity:91,wind_speed:2,air_pressure_at_sea_level:1013})]}};
+const body={properties:{meta:{updated_at:'2026-11-16T19:00:00Z',units},timeseries:[step('2026-11-16T21:00:00Z',{air_temperature:23,relative_humidity:90,wind_speed:3,air_pressure_at_sea_level:1012}),step('2026-11-16T20:00:00Z',{air_temperature:22,relative_humidity:91,wind_speed:2,air_pressure_at_sea_level:1013})]}};
 const r=parseMetForecast(body,at);assert.equal(r.temperatureC,22);assert.equal(r.humidityPercent,91);assert.equal(r.seaLevelHpa,1013);assert.equal(r.validAt,Date.parse('2026-11-16T20:00:00Z'));
-assert.equal(parseMetForecast(body,at+4*3600000),null);assert.equal(parseMetForecast({...body,properties:{...body.properties,meta:{...body.properties.meta,updated_at:'2026-11-14T19:00:00Z'}}},at),null);assert.equal(parseMetForecast({...body,properties:{...body.properties,meta:{...body.properties.meta,updated_at:'2026-11-16T22:00:00Z'}}},at),null);
+assert.equal(parseMetForecast(body,at+4*3600000),null);assert.equal(parseMetForecast({...body,properties:{...body.properties,meta:{...body.properties.meta,updated_at:'2026-11-14T19:00:00Z'}}},at),null);assert.equal(parseMetForecast({...body,properties:{...body.properties,meta:{...body.properties.meta,updated_at:'2026-11-16T22:00:00Z'}}},at),null);assert.equal(parseMetForecastWindow({...body,properties:{...body.properties,meta:{...body.properties.meta,updated_at:'2026-11-16T21:00:00Z'}}},at).length,0);
 assert.equal(parseMetForecast({properties:{...body.properties,meta:{...body.properties.meta,units:{}}}},at),null);
 const invalid={properties:{...body.properties,timeseries:[step('2026-11-16T20:00:00Z',{air_temperature:22,relative_humidity:999,wind_speed:-1,air_pressure_at_sea_level:0})]}};
 const v=parseMetForecast(invalid,at);assert.equal(v.temperatureC,22);assert.equal(v.humidityPercent,null);assert.equal(v.windMs,null);assert.equal(v.seaLevelHpa,null);
@@ -19,6 +19,7 @@ console.log('PASS MET Norway parser: past forecast, units, invalid values, fresh
  assert.equal(await requestMetForecast({...base,enabled:false}),null);assert.equal(await requestMetForecast({...base,foreground:false}),null);assert.equal(requests,0);
  assert.equal((await requestMetForecast(base)).temperatureC,22);assert.ok(lastURL.endsWith('lat=-17.1234&lon=-51.9876'));assert.equal(requests,1);
  await requestMetForecast({...base,now:at+60000});assert.equal(requests,1);
+ const later=await requestMetForecast({...base,now:at+31*60000});assert.equal(later.temperatureC,23);assert.equal(requests,1);
  const damagedStore={get:()=>({at:at,sample:{validAt:at,updatedAt:at,temperatureC:'22'}}),set:()=>{throw Error('must not write')}};assert.equal(await requestMetForecast({...base,store:damagedStore}),null);assert.equal(await requestMetForecast({...base,store,now:at-1}),null);assert.equal(requests,1);
  const failedStore={get:()=>null,set:()=>false};assert.equal(await requestMetForecast({...base,store:failedStore}),null);assert.equal(requests,1);
  const expiries=new Map(),storeExpiry={get:k=>expiries.get(k),set:(k,v)=>{expiries.set(k,v);return true}};let count=0;
