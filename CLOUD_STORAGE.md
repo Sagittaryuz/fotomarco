@@ -1,8 +1,8 @@
 # Armazenamento e Google Fotos · avaliação 16/11/2026
 
-## Estado atual · 0.3.4
+## Estado atual · 0.3.7
 
-Login Google de identidade implementado, com backend dedicado publicado no Cloudflare Workers (`https://momentra-auth.mrpires72.workers.dev`). Escopos somente `openid email profile`; sem Photos, Maps, refresh token, upload ou exclusão. Credenciais servidor protegidas como secrets e tokens do app no Keychain. Câmera funciona sem login. Consentimento Google, callback Worker302/state e troca direta Google200/PKCE foram verificados; reteste completo via Worker permanece pendente após correção publicada, pois accountchooser ficou em Carregando; retorno/consentimento no Scripting físico permanece pendente. As avaliações históricas abaixo descrevem o estado das versões anteriores, não ausência atual de infraestrutura.
+Login Google de identidade implementado, com backend dedicado publicado no Cloudflare Workers (`https://momentra-auth.mrpires72.workers.dev`). Escopos somente `openid email profile`; sem Photos, Maps, refresh token, upload ou exclusão. Credenciais servidor protegidas como secrets e tokens do app no Keychain. Câmera funciona sem login. Fluxo real do backend confirmado no PC: consentimento Google, callback HTTPS200 com state correspondente, troca de token pelo Worker200, identidade verificada200, ausência de refresh token e replay rejeitado400. A página exige tocar Voltar ao Momentra para retornar ao aplicativo. Retorno ao Scripting e Keychain no iPhone permanecem sem teste físico. As avaliações históricas abaixo descrevem o estado das versões anteriores, não ausência atual de infraestrutura.
 
 ## Entregue na 0.3.1 (histórico)
 

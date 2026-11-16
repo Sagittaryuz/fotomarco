@@ -61,6 +61,13 @@ async function authorize(url,env) {
   google.search=new URLSearchParams({client_id:env.GOOGLE_CLIENT_ID,redirect_uri:CALLBACK,response_type:'code',scope:SCOPE,state:envelope,code_challenge:challenge,code_challenge_method:'S256',access_type:'online',prompt:'select_account'}).toString();
   return redirect(google.toString());
 }
+function escapeHTML(value) { return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function callbackLanding(target) {
+  // Explicit user gesture, no scripts/resources, and never embed a raw Google code/token.
+  const href=escapeHTML(target.toString());
+  const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Voltar ao Momentra</title></head><body><main><h1>Voltar ao Momentra</h1><p>Continue no iPhone com o Momentra aberto no Scripting. O retorno exige o aplicativo e a sessão que iniciaram o login.</p><p><a href="'+href+'" rel="noreferrer">Voltar ao Momentra</a></p><p>Este retorno expira em até 2 minutos. Se não funcionar ou tiver expirado, volte ao Momentra e inicie o login novamente. Nenhuma foto foi enviada.</p></main></body></html>';
+  return new Response(html,{status:200,headers:{...SAFE,'Content-Type':'text/html; charset=utf-8','X-Frame-Options':'DENY','X-Robots-Tag':'noindex, nofollow, noarchive','Content-Security-Policy':"default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"}});
+}
 async function callback(url,env) {
   const p=url.searchParams;
   unique(p,['code','state','error','error_description','error_uri','scope','authuser','prompt','hd','iss']);
@@ -75,7 +82,7 @@ async function callback(url,env) {
     // Authenticated wrapper ensures /token cannot exchange arbitrary non-PKCE Google codes.
     target.searchParams.set('code',await seal(env,'code',{client:env.GOOGLE_CLIENT_ID,code,challenge:state.challenge,exp:Math.min(state.exp,now()+120)}));
   }
-  return redirect(target.toString());
+  return callbackLanding(target);
 }
 async function token(request,env,fetcher) {
   if(!(request.headers.get('Content-Type')??'').toLowerCase().startsWith('application/x-www-form-urlencoded'))throw new Failure('invalid_request',415);

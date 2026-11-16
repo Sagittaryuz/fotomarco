@@ -1,4 +1,4 @@
-# Momentra · 0.3.6
+# Momentra · 0.3.7
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -87,7 +87,9 @@ Configurações oferece Entrar com Google, reconexão e desconexão local. Na pr
 
 Backend dedicado publicado em `https://momentra-auth.mrpires72.workers.dev`, com retorno HTTPS fixo e ponte para o Scripting. O segredo Google fica no servidor; PKCE S256, state e envelopes autenticados com validade limitada vinculam a troca. Tokens ficam no Keychain local por script, não no Storage ou no repositório. Não há renovação automática: sessão expirada requer novo login. Desconectar remove a sessão local, mas não revoga a autorização na conta Google.
 
-O fluxo completo no Scripting/iPhone ainda precisa de validação física. O serviço utiliza quota gratuita compartilhada da conta Cloudflare, sem garantia de disponibilidade, e limita requisições por IP. Login não significa backup, acesso ao Google Fotos ou Google Maps.
+Após autorizar no Google, a página HTTPS apresenta **Voltar ao Momentra**. Toque nesse link para retornar ao Scripting no iPhone; ele expira em até dois minutos. Se expirar, reinicie o login.
+
+Na 0.3.7, o backend foi testado com uma conta real no PC: consentimento Google, callback HTTPS200, state correspondente, troca de token pelo Worker200 e identidade verificada200; sem refresh token, e repetição do código rejeitada400. Isso não testa o retorno ao Scripting nem o Keychain no iPhone, que continuam pendentes de validação física. O serviço utiliza quota gratuita compartilhada da conta Cloudflare, sem garantia de disponibilidade, e limita requisições por IP. Login não significa backup, acesso ao Google Fotos ou Google Maps.
 
 ## Armazenamento e recuperação
 
@@ -116,7 +118,7 @@ node --test backend/worker.test.mjs
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
 - 47 verificações de núcleo/layout/renderização sintética.
 - 30 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
-- 14 testes isolados do módulo Google e 29 do backend OAuth, com dados sintéticos.
+- 14 testes isolados do módulo Google e 31 do backend OAuth, com dados sintéticos.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.
 
