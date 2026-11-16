@@ -18,3 +18,4 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm test
+      - run: node --test tests/google_auth.cjs backend/worker.test.mjs

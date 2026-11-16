@@ -1,6 +1,6 @@
 {
   "name": "momentra-validation",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "scripts": {
     "test": "node tests/run.cjs && node tests/runtime.cjs",

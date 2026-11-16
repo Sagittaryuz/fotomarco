@@ -1,4 +1,4 @@
-# Momentra · 0.3.3
+# Momentra · 0.3.4
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -41,7 +41,7 @@ GPS continua opt-in, com atualização a cada 30 segundos enquanto a câmera est
 
 O mapa disponível e correspondente é reaproveitado no disparo. A foto congela hora, GPS e preferências no instante real da captura (depois do temporizador). A sobreposição some ao revisar uma foto e no modo Vídeo, que não recebe carimbo. A prévia de tela e a foto compartilham o desenho, mas paridade exata de pixels/campo de visão requer teste físico.
 
-**Provedor atual: Apple.** Google Maps e autenticação Google ainda não conectados: faltam projeto/credenciais/retorno compatível; Maps envolve billing e restrições de uso da imagem. Não foi ativada cobrança nem criado login fictício. Veja [condições Google](CLOUD_STORAGE.md).
+**Provedor de mapas atual: Apple.** Login Google opcional foi integrado na 0.3.4, somente para identidade. Google Maps continua indisponível: envolve billing e restrições de incorporação da imagem. Não foi ativada cobrança. Veja [condições Google](CLOUD_STORAGE.md).
 
 ## Controles superiores e configurações
 
@@ -75,7 +75,15 @@ O script inicia uma câmera customizada quando aberto normalmente. A Tela Bloque
 
 Em Configurações, **Cópia na galeria Fotos → Não salvar na galeria** bloqueia o salvamento de fotos e vídeos no Fotos. Arquivos continuam guardados **localmente no Momentra**; cópias anteriores não são apagadas. Isso não equivale a somente nuvem.
 
-Google Fotos, login e upload ainda não estão configurados. A tela sinaliza a indisponibilidade. A integração exige OAuth/retorno compatível e consentimento; a API permite listar conteúdo criado pelo próprio aplicativo e não é destinada a dados internos empresariais. Consulte [avaliação e próximos passos](CLOUD_STORAGE.md).
+O login Google opcional identifica a conta; Google Fotos e upload continuam indisponíveis. A tela distingue essas funções. A integração exige OAuth/retorno compatível e consentimento; a API permite listar conteúdo criado pelo próprio aplicativo e não é destinada a dados internos empresariais. Consulte [avaliação e próximos passos](CLOUD_STORAGE.md).
+
+## Conta Google · 0.3.4
+
+Configurações oferece Entrar com Google, reconexão e desconexão local. Na primeira abertura há um acesso opcional às configurações: não inicia consentimento automaticamente nem bloqueia a câmera. A integração solicita somente `openid email profile`; nenhuma foto ou localização é enviada ao Google por este login.
+
+Backend dedicado publicado em `https://momentra-auth.mrpires72.workers.dev`, com retorno HTTPS fixo e ponte para o Scripting. O segredo Google fica no servidor; PKCE S256, state e envelopes autenticados com validade limitada vinculam a troca. Tokens ficam no Keychain local por script, não no Storage ou no repositório. Não há renovação automática: sessão expirada requer novo login. Desconectar remove a sessão local, mas não revoga a autorização na conta Google.
+
+O fluxo completo no Scripting/iPhone ainda precisa de validação física. O serviço utiliza quota gratuita compartilhada da conta Cloudflare, sem garantia de disponibilidade, e limita requisições por IP. Login não significa backup, acesso ao Google Fotos ou Google Maps.
 
 ## Armazenamento e recuperação
 
@@ -97,11 +105,14 @@ Para voltar ao protótipo anterior, o commit `ecc1c2b` permanece no histórico. 
 npm ci --ignore-scripts
 npm run check
 npm test
+node --test tests/google_auth.cjs
+node --test backend/worker.test.mjs
 ```
 
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
 - 44 verificações de núcleo/layout/renderização sintética.
-- 24 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 28 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 14 testes isolados do módulo Google e 29 do backend OAuth, com dados sintéticos.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.
 

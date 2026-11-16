@@ -8,6 +8,7 @@ import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, normalizeSettings, 
 import { enrich, folder, persistRecord, renderStamped } from "./services"
 import { cameraLayout } from "./camera_layout"
 import { drawStamp } from "./stamp"
+import { getGoogleIdentity, loginGoogle, logoutGoogle } from "./google_auth"
 
 type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput | null; movie: AVCaptureMovieFileOutput | null }
 let ownedSession: AVCaptureSession | null = null
@@ -20,6 +21,44 @@ let closing = false
 const unsubscribe = Script.onResume(event => { if (!closing) receive(event.cameraControlParameter) })
 const SETTINGS = "momentra.settings.v2", HISTORY = "momentra.history.v2"
 
+// Identity only: camera access and local capture never depend on Google consent.
+function GoogleAccount() {
+  const [account,setAccount] = useState(getGoogleIdentity)
+  const [working,setWorking] = useState(false)
+  const [message,setMessage] = useState("")
+  const active = useRef(true), connecting = useRef(false)
+  useEffect(()=>{
+    active.current=true
+    let timer: ReturnType<typeof setTimeout>
+    const refresh=()=>{ if (!active.current) return; setAccount(getGoogleIdentity()); timer=setTimeout(refresh,15000) }
+    timer=setTimeout(refresh,15000)
+    return ()=>{active.current=false;clearTimeout(timer)}
+  },[])
+  async function connect() {
+    if (connecting.current) return
+    connecting.current=true;setWorking(true);setMessage("")
+    try { const next=await loginGoogle(); if (active.current) {setAccount(next);setMessage("Identidade conectada. Nenhuma foto foi enviada.")} }
+    catch { if (active.current) setMessage("Login cancelado ou não concluído. A câmera continua disponível; tente novamente.") }
+    finally { connecting.current=false;if (active.current) setWorking(false) }
+  }
+  function disconnect() {
+    try { setAccount(logoutGoogle());setMessage("Conta removida deste iPhone. Isso não revoga a permissão na conta Google.") }
+    catch { setMessage("Não foi possível desconectar a conta neste iPhone. Tente novamente.") }
+  }
+  const hasAccount=account.status === "connected" || account.status === "expired"
+  const expired=hasAccount && (account.status === "expired" || account.expiresAt <= Date.now())
+  return <VStack alignment="leading" spacing={12}>
+    <Text font="headline">Conta Google</Text>
+    <Text font="caption">Login opcional para identificar sua conta. Não libera Google Fotos nem armazenamento na nuvem.</Text>
+    <Text>{hasAccount ? (expired ? "Sessão expirada · " : "Conectado · ")+(account.identity.name || account.identity.email || "Conta Google") : account.status === "unavailable" ? "Estado da conta indisponível neste aparelho" : "Nenhuma conta conectada"}</Text>
+    {hasAccount && account.identity.email ? <Text font="caption">{account.identity.email}</Text> : null}
+    <Text font="caption">A sessão expira sem renovação automática. Para continuar depois, toque em Reconectar. As credenciais ficam no Chaves deste iPhone.</Text>
+    <Button title={working ? "Conectando…" : hasAccount ? "Reconectar ao Google" : "Entrar com Google"} disabled={working} buttonStyle="bordered" action={()=>{void connect()}} />
+    {hasAccount ? <Button title="Desconectar deste iPhone" disabled={working} buttonStyle="bordered" action={disconnect} /> : null}
+    {message ? <Text font="caption">{message}</Text> : null}
+  </VStack>
+}
+
 function CameraPage() {
   const dismiss = Navigation.useDismiss()
   const [camera, setCamera] = useState<Camera | null>(null)
@@ -31,6 +70,7 @@ function CameraPage() {
   const [busy, setBusy] = useState(false)
   const [initializing, setInitializing] = useState(true)
   const initializingRef = useRef(true)
+  const [showGoogleIntro,setShowGoogleIntro] = useState(()=>!Storage.get("momentra.google.intro.v1"))
   const [status, setStatus] = useState("Iniciando câmera…")
   const [settings, setSettings] = useState<Settings>(() => normalizeSettings(Storage.get(SETTINGS)))
   const settingsRef = useRef(settings)
@@ -355,14 +395,15 @@ function CameraPage() {
         <Text tag="manual">Permitir salvamento manual</Text><Text tag="never">Não salvar na galeria</Text>
       </Picker>
       <Text font="caption">Capturas continuam guardadas localmente no Momentra. Desativar a galeria bloqueia Salvar e Salvar vídeo, mas não apaga cópias anteriores. Isso ainda não é armazenamento somente na nuvem.</Text>
-      <Text font="headline">Google Fotos · não configurado</Text>
-      <Text font="caption">Login e envio ainda indisponíveis: é necessário configurar o aplicativo OAuth e um retorno de login compatível. Nenhuma foto é enviada ao Google por esta versão.</Text>
+      <GoogleAccount />
+      <Text font="headline">Google Fotos · indisponível</Text>
+      <Text font="caption">O login acima identifica sua conta, mas não autoriza acesso às fotos. Envio e galeria Google Fotos ainda não estão disponíveis. Nenhuma foto é enviada ao Google por esta versão.</Text>
       <Button title="Somente nuvem · indisponível" disabled buttonStyle="bordered" />
       <Text font="caption">A integração poderá acessar as fotos enviadas pelo próprio Momentra, não toda a biblioteca automaticamente. A API do Google Fotos não é destinada a guardar dados internos empresariais. Captura, carimbo e envio também precisam de armazenamento temporário no aparelho.</Text>
       <Text font="caption">As mudanças valem para as próximas fotos. Vídeos não recebem timestamp nesta versão.</Text>
     </VStack></ScrollView></NavigationStack>
   }
-  async function openSettings() { await run(async()=>{await Navigation.present({element:<TimestampPage />})}) }
+  async function openSettings() { await run(async()=>{setShowGoogleIntro(false);Storage.set("momentra.google.intro.v1",true);await Navigation.present({element:<TimestampPage />})}) }
   async function chooseProfile() {
     await run(async () => {
       const selected = await Dialog.actionSheet({title:"Escolha um padrão",actions:PROFILE_IDS.map(id=>({label:id+(id === settingsRef.current.profile ? " ✓" : "")})),cancelButton:true})
@@ -543,7 +584,7 @@ function CameraPage() {
           </HStack>
         </ZStack>
         <HStack spacing={8} frame={{height:layout.status}} padding={{leading:12,trailing:12}}>
-          <ScrollView><Text font="caption2" foregroundStyle="#D0D0D0">{status}</Text></ScrollView>
+          <ScrollView><VStack alignment="leading" spacing={2}><Text font="caption2" foregroundStyle="#D0D0D0">{status}</Text>{showGoogleIntro ? <Button title="Google opcional · configurar" font="caption2" buttonStyle="plain" disabled={busy} action={()=>{void openSettings()}} /> : null}</VStack></ScrollView>
           {mode === "photo" ? <Button accessibilityLabel="Exportar" buttonStyle="plain" disabled={!last || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" frame={{width:44,height:44}} /></Button> : null}
           <Button buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" frame={{width:44,height:44}} /></Button>
         </HStack>

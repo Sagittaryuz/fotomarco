@@ -1,6 +1,10 @@
 # Armazenamento e Google Fotos · avaliação 16/11/2026
 
-## Entregue na 0.3.1
+## Estado atual · 0.3.4
+
+Login Google de identidade implementado, com backend dedicado publicado no Cloudflare Workers (`https://momentra-auth.mrpires72.workers.dev`). Escopos somente `openid email profile`; sem Photos, Maps, refresh token, upload ou exclusão. Credenciais servidor protegidas como secrets e tokens do app no Keychain. Câmera funciona sem login. Consentimento Google, callback Worker302/state e troca direta Google200/PKCE foram verificados; reteste completo via Worker permanece pendente após correção publicada, pois accountchooser ficou em Carregando; retorno/consentimento no Scripting físico permanece pendente. As avaliações históricas abaixo descrevem o estado das versões anteriores, não ausência atual de infraestrutura.
+
+## Entregue na 0.3.1 (histórico)
 
 Configurações → Cópia na galeria Fotos permite bloquear salvamento na galeria para fotos e vídeos. A preferência persiste; os handlers também bloqueiam a chamada Photos, não apenas os botões. O padrão mantém o comportamento anterior: salvar manualmente. Cópias existentes não são apagadas.
 
@@ -30,12 +34,12 @@ Scripting tem OAuth2 com PKCE/state/renovação e Keychain por script. Porém se
 
 A API faz upload em duas fases e consome armazenamento da conta Google (não significa espaço ilimitado); recomenda upload retomável em dispositivos móveis. [Upload oficial](https://developers.google.com/photos/library/guides/upload-media).
 
-## Verificação desta entrega
+## Verificação da entrega 0.3.1 (histórico)
 
 44 testes núcleo/render + 20 fluxos simulados e check de manifesto/TypeScript/bundle. Teste novo confirma bloqueio de Photos para foto/vídeo mesmo invocando handlers, persistência da preferência e preservação local. Sem autenticação/envio/teste Google real ou teste físico no iPhone. A função completa somente nuvem está pendente, não concluída.
 
 
-## Pedido posterior: Google Maps e Google authentication (16/11/2026)
+## Avaliação anterior à implementação OAuth (histórico de 16/11/2026)
 
 Autorização direta para conectar foi recebida; pesquisa no projeto não encontrou chave, cliente OAuth, backend ou projeto Cloud configurado. Catálogo de conectores não oferece gerenciamento Google Cloud/Maps/IAM neste trabalho. Não usar credenciais de outro aplicativo nem assumir que uma sessão Google concede acesso ao projeto correto.
 
