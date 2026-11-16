@@ -33,3 +33,14 @@ A API faz upload em duas fases e consome armazenamento da conta Google (não sig
 ## Verificação desta entrega
 
 44 testes núcleo/render + 20 fluxos simulados e check de manifesto/TypeScript/bundle. Teste novo confirma bloqueio de Photos para foto/vídeo mesmo invocando handlers, persistência da preferência e preservação local. Sem autenticação/envio/teste Google real ou teste físico no iPhone. A função completa somente nuvem está pendente, não concluída.
+
+
+## Pedido posterior: Google Maps e Google authentication (16/11/2026)
+
+Autorização direta para conectar foi recebida; pesquisa no projeto não encontrou chave, cliente OAuth, backend ou projeto Cloud configurado. Catálogo de conectores não oferece gerenciamento Google Cloud/Maps/IAM neste trabalho. Não usar credenciais de outro aplicativo nem assumir que uma sessão Google concede acesso ao projeto correto.
+
+Maps Static exige API habilitada, credencial e billing no projeto. Não foi habilitado faturamento nem criada credencial: não há orçamento/destino estabelecido. Chaves devem ser restritas e não colocadas no repositório público. [Configuração oficial](https://developers.google.com/maps/documentation/maps-static/get-api-key), [uso/cobrança](https://developers.google.com/maps/documentation/maps-static/usage-and-billing).
+
+Incorporar permanentemente mapa Google ao JPEG é distinto de exibir mapa: termos limitam armazenamento/exportação e exigem atribuição. Confirmar licença aplicável antes de implementar esse uso; não basta uma chave válida. [Termos Google Maps, seção 3.2](https://cloud.google.com/maps-platform/terms).
+
+Para Google authentication, identificar projeto autorizado e callback admitido no host Scripting. O caminho alternativo é backend HTTPS do projeto e OAuth web seguro, com segredo no servidor, sessão vinculada e retorno autenticado; o destino/backend ainda não existe no projeto. [OAuth web oficial](https://developers.google.com/identity/protocols/oauth2/web-server). Não substitui consentimento nem habilita automaticamente Google Photos/Maps. O mapa ativo continua Apple e Google permanece explicitamente pendente.

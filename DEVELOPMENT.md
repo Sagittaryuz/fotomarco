@@ -97,3 +97,12 @@ camera_layout.ts calcula dimensões comuns à UI e ao diagrama sintético. Visor
 Check + 44 testes core/render e 21 fluxos mock. Diagramas geométricos retrato390×844, pequeno320×568 e paisagem844×390 inspecionados. São simulações de geometria, com símbolos/fontes aproximados, não render SwiftUI/iPhone. Layout real, tamanhos dinâmicos, contraste de vidro e crop/field of view nativo ainda pendentes de aparelho. Não simular zoom/lentes nem representar mapa/timestamp ao vivo: composição permanece na foto final/prévia.
 
 Ajustes da auditoria0.3.2: preview inset72% mantém câmera visível, Exportar/Fechar têm alvos44pt e faixa status44; vídeo usa frame16:9 separado da proporção de foto. Campo de visão real do vídeo segue pendente de hardware. Toolbar mudou a plain+glassEffect com label44 para evitar padding implícito do estilo glass.
+
+
+## 0.3.3 · sobreposição realmente ao vivo
+
+Fonte: pedido direto Marcos encaminhado em 16/11: mapa, data/hora/localização e logo visíveis na imagem ao vivo, não só na foto. Canvas transparente usa drawStamp compartilhado, relógio1s e mesmas posições/fontes/escalas. Camada decorativa abaixo dos botões e sem handlers. Não foi usado allowsHitTesting por ausência de comprovação no host Scripting.
+
+GPS opt-in atualiza30s somente câmera ativa/desocupada. Fix vence60s, invalida endereço/mapa imediatamente ao desligar/recusar e no tick quando envelhece. Enrich em cache por coordenadas+timestamp+opção mapa; resultado atrasado só entra se chave ainda atual. Captura reutiliza mapa correspondente, snapshot de hora/GPS após temporizador. Mapa/logo não fabricados. Vídeo permanece sem carimbo e sem overlay para não sugerir que o arquivo gravado contém algo que não contém.
+
+44 core/render +24 fluxos mock e check aprovados; testes verificam Canvas live, GPS desligado, mapa/logo reais do mock, reutilização no disparo, desligar GPS e ocultar durante revisão/vídeo. Diagrama sintético do mesmo desenho inspecionado, não iPhone. Nenhuma chamada Google ou faturamento: pesquisa e bloqueios registrados em CLOUD_STORAGE.md.

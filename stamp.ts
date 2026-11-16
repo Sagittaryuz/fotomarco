@@ -13,8 +13,8 @@ export function fitText(ctx: StampContext, text: string, width: number): string 
   while (lo < hi) { const mid = Math.ceil((lo+hi)/2); if (ctx.measureText(text.slice(0,mid)+"…").width <= width) lo=mid; else hi=mid-1 }
   return text.slice(0,lo)+"…"
 }
-export function drawStamp(ctx: StampContext, width: number, height: number, settings: Settings, record: CaptureRecord, map: any = null, logo: any = null) {
-  const lines = stampLines(settings, record)
+export function drawStamp(ctx: StampContext, width: number, height: number, settings: Settings, record: CaptureRecord, map: any = null, logo: any = null, live = false) {
+  const lines = stampLines(settings, record, live)
   const initial = layoutStamp(width, height, lines.length, settings, false, false)
   const measured = lines.map((text,i) => { ctx.font = timestampFont(settings.timestampFont,i === 0 ? initial.font*1.12 : initial.font); return ctx.measureText(text).width })
   const b = layoutStamp(width, height, lines.length, settings, false, false,Math.max(...measured))

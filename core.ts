@@ -1,5 +1,5 @@
 // Pure data/layout logic. No device services or network calls.
-export const VERSION = "0.3.2"
+export const VERSION = "0.3.3"
 export const PROFILE_IDS = ["HAMOA", "PIRESCO", "PESSOAL"] as const
 export type ProfileID = typeof PROFILE_IDS[number]
 export type Profile = { title: string; note: string; logoPath: string | null; accent: string }
@@ -66,11 +66,11 @@ export function outputSize(width: number, height: number, max = 3072) {
   const scale = Math.min(1, max / Math.max(width, height))
   return { width: Math.round(width * scale), height: Math.round(height * scale) }
 }
-export function stampLines(settings: Settings, record: CaptureRecord): string[] {
+export function stampLines(settings: Settings, record: CaptureRecord, live = false): string[] {
   const p = settings.profiles[record.profile]
   const timestamp = dateLabel(record.capturedAt,settings.timestampFormat)
   const timeLines = settings.timestampFormat === "long" ? timestamp.split(" às ") : [timestamp]
-  return [p.title, p.note, ...timeLines, settings.gps ? coordinates(record.fix) : "Localização desativada", settings.gps ? cleanText(record.address, 120) : ""].filter(Boolean)
+  return [p.title, p.note, ...timeLines, settings.gps ? live && !record.fix ? "GPS indisponível" : coordinates(record.fix) : "Localização desativada", settings.gps ? cleanText(record.address, 120) : ""].filter(Boolean)
 }
 export function layoutStamp(width: number, height: number, lineCount: number, settings: Settings, hasMap: boolean, hasLogo: boolean, textWidth?: number) {
   const unit = Math.min(width, height) / 1000

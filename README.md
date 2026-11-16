@@ -1,4 +1,4 @@
-# Momentra · 0.3.2
+# Momentra · 0.3.3
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -31,7 +31,17 @@ O título e a observação se referem às próximas fotos, não alteram registro
 
 Layout ajustado à referência visual fornecida: fundo preto, visor retangular grande sem cantos arredondados, ícones superiores, miniatura e botão salvar ao lado do obturador circular branco. A geometria acompanha 4:3/16:9 e orientação em foto; vídeo usa visor 16:9, sem promessa de campo de visão idêntico ao arquivo gravado. A prévia da foto usa um painel central, mantendo parte da câmera ao vivo visível para Camera Control. Os quatro controles superiores e os controles laterais anteriores foram preservados; o seletor continua abaixo do obturador conforme o pedido específico anterior.
 
-Não foram inventados zoom/lentes 0.5×/4×/8×, filtros ou modos Square da imagem. Mapa/timestamp/logotipo continuam na composição final e na prévia da foto capturada, não como sobreposição ao vivo. A referência pessoal não integra os arquivos públicos. `node tools/preview-layout.cjs` gera diagramas geométricos sintéticos, não screenshots nativos nem prova da aparência Liquid Glass.
+Não foram inventados zoom/lentes 0.5×/4×/8×, filtros ou modos Square da imagem. Mapa/timestamp/logotipo agora aparecem também ao vivo no modo Câmera, conforme as posições configuradas. A referência pessoal não integra os arquivos públicos. `node tools/preview-layout.cjs` gera diagramas geométricos sintéticos, não screenshots nativos nem prova da aparência Liquid Glass.
+
+## Sobreposição ao vivo 0.3.3
+
+No modo Câmera, com Carimbo ligado, o visor desenha o mesmo conjunto de data/hora/localização, mapa e logotipo usado na foto final, respeitando fonte, escala e cantos. O relógio atualiza a cada segundo; logo usa o arquivo escolhido no perfil. Sem logo/mapa configurados, nenhum substituto é inventado.
+
+GPS continua opt-in, com atualização a cada 30 segundos enquanto a câmera está ativa e não ocupada. Dados com mais de 60 segundos saem do visor; GPS desligado/indisponível aparece como texto. Mapa e endereço só aparecem associados ao mesmo fix válido, e respostas atrasadas de configurações/localizações anteriores são descartadas. Sem rede/mapa, timestamp e captura continuam funcionando.
+
+O mapa disponível e correspondente é reaproveitado no disparo. A foto congela hora, GPS e preferências no instante real da captura (depois do temporizador). A sobreposição some ao revisar uma foto e no modo Vídeo, que não recebe carimbo. A prévia de tela e a foto compartilham o desenho, mas paridade exata de pixels/campo de visão requer teste físico.
+
+**Provedor atual: Apple.** Google Maps e autenticação Google ainda não conectados: faltam projeto/credenciais/retorno compatível; Maps envolve billing e restrições de uso da imagem. Não foi ativada cobrança nem criado login fictício. Veja [condições Google](CLOUD_STORAGE.md).
 
 ## Controles superiores e configurações
 
@@ -91,7 +101,7 @@ npm test
 
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
 - 44 verificações de núcleo/layout/renderização sintética.
-- 21 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 24 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.
 

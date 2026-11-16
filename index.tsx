@@ -1,5 +1,5 @@
 import {
-  Button, CaptureVideoPreviewView, GeometryReader, GlassEffectContainer, Picker, HStack, VStack, ZStack, Text, Image,
+  Button, Canvas, CaptureVideoPreviewView, GeometryReader, GlassEffectContainer, Picker, HStack, VStack, ZStack, Text, Image,
   Navigation, NavigationStack, Script, Path, Spacer, ScrollView,
   useEffect, useRef, useState,
 } from "scripting"
@@ -7,6 +7,7 @@ import type { CameraControlParameter } from "scripting"
 import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, normalizeSettings, validFix, coordinates, cleanText, within } from "./core"
 import { enrich, folder, persistRecord, renderStamped } from "./services"
 import { cameraLayout } from "./camera_layout"
+import { drawStamp } from "./stamp"
 
 type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput | null; movie: AVCaptureMovieFileOutput | null }
 let ownedSession: AVCaptureSession | null = null
@@ -39,6 +40,10 @@ function CameraPage() {
   const lastRef = useRef<CaptureRecord | null>(null)
   const [preview, setPreview] = useState(false)
   const [previewImage, setPreviewImage] = useState<UIImage | null>(null)
+  const [liveNow,setLiveNow] = useState(Date.now())
+  const [liveAssets,setLiveAssets] = useState<{key:string;address:string;map:UIImage|null;warnings:string[]}|null>(null)
+  const liveAssetsRef = useRef<{key:string;address:string;map:UIImage|null;warnings:string[]}|null>(null)
+  const logoCache = useRef<{path:string|null;image:UIImage|null}>({path:null,image:null})
   const [torch, setTorch] = useState(false)
   const [flash, setFlash] = useState<"on"|"auto"|"off">("off")
   const flashRef = useRef<"on"|"auto"|"off">("off")
@@ -140,7 +145,7 @@ function CameraPage() {
         fixRef.current = current; setFix(current)
         say(current ? "GPS atualizado" : "GPS indisponível. Você ainda pode fotografar.")
       }
-    } catch (_) { say("Sem acesso ao GPS. A câmera continua disponível.") }
+    } catch (_) { fixRef.current=null; if (alive.current) setFix(null); say("Sem acesso ao GPS. A câmera continua disponível.") }
     finally { locating.current = false }
   }
   async function start(target: "video" | "photo" = modeRef.current) {
@@ -208,7 +213,10 @@ function CameraPage() {
       {
         say(options.stamp ? "Aplicando carimbo…" : "Preparando proporção…")
         try {
-          const extra = options.stamp ? await enrich(currentFix,options) : {address:"",warnings:[],map:null}
+          const cached = liveAssetsRef.current
+          const extra = options.stamp ? cached && cached.key===liveKey(options,currentFix)
+            ? {address:cached.address,map:cached.map,warnings:[...cached.warnings]}
+            : await enrich(currentFix,options) : {address:"",warnings:[],map:null}
           record.address = extra.address; record.warnings.push(...extra.warnings)
           record.file = await renderStamped(result.image,record,options,extra.map)
           record.stamped = options.stamp
@@ -441,6 +449,31 @@ function CameraPage() {
       say(result.length ? "Arquivo exportado" : "Exportação cancelada; foto preservada")
     })
   }
+  function liveKey(options: Settings, current: Fix | null) {
+    return options.gps && current ? [current.latitude,current.longitude,current.timestamp,options.map].join(":") : ""
+  }
+  useEffect(()=>{
+    let cancelled=false, timer:ReturnType<typeof setTimeout>|undefined, loading=false, lastRequest="", gpsAt=Date.now()
+    async function tick() {
+      if (cancelled || closing) return
+      const now=Date.now(); setLiveNow(now)
+      const options=settingsRef.current, current=validFix(fixRef.current,now), key=liveKey(options,current)
+      // GPS remains opt-in. Refresh only while the custom photo camera is active.
+      if (cameraRef.current && modeRef.current === "photo" && options.gps && now-gpsAt>=30000 && !locked.current) {gpsAt=now;void locate()}
+      if (!key) {lastRequest="";liveAssetsRef.current=null;setLiveAssets(null)}
+      else if (!loading && options.stamp && modeRef.current === "photo" && key!==lastRequest) {
+        loading=true;lastRequest=key
+        void enrich(current,JSON.parse(JSON.stringify(options))).then(extra=>{
+          if (!cancelled && key===liveKey(settingsRef.current,validFix(fixRef.current,Date.now()))) {
+            const value={key,address:extra.address,map:extra.map,warnings:extra.warnings};liveAssetsRef.current=value;setLiveAssets(value)
+          }
+        }).catch(()=>{}).finally(()=>{loading=false})
+      }
+      timer=setTimeout(()=>{void tick()},1000)
+    }
+    void tick()
+    return ()=>{cancelled=true;if(timer!==undefined)clearTimeout(timer)}
+  },[])
   useEffect(() => {
     alive.current = true
     receive = batch => {
@@ -474,6 +507,12 @@ function CameraPage() {
       const width = geometry.size.width, height = geometry.size.height
       const layout = cameraLayout(width,height,mode === "video" ? "16:9" : settings.aspectRatio), compact = layout.compact
       const glass = {glass:UIGlass.regular(),shape:{type:"rect" as const,cornerRadius:24}}
+      const currentFix=settings.gps ? validFix(fix,liveNow) : null
+      const assets=liveAssets?.key===liveKey(settings,currentFix) && currentFix ? liveAssets : null
+      const logoPath=settings.profiles[settings.profile].logoPath
+      if (logoCache.current.path!==logoPath) logoCache.current={path:logoPath,image:logoPath ? UIImage.fromFile(logoPath) : null}
+      const liveRecord:CaptureRecord={id:"live-preview",original:"",file:"",capturedAt:liveNow,profile:settings.profile,stamped:false,saved:false,fix:currentFix,address:assets?.address??"",warnings:[]}
+
       return <VStack spacing={layout.gap} background="black" foregroundStyle="white" frame={{width,height}}>
         <GlassEffectContainer><HStack spacing={Math.max(12,(width-224)/4)} frame={{height:layout.toolbar}}>
           <Button buttonStyle="plain" glassEffect={UIGlass.regular().interactive()} disabled={busy || mode === "video"} accessibilityLabel="Flash" accessibilityValue={flash} action={()=>{void flashMenu()}}><Image systemName={flash === "off" ? "bolt.slash.fill" : flash === "auto" ? "bolt.badge.a" : "bolt.fill"} foregroundStyle={flash === "off" ? "white" : "#FFD60A"} frame={{minWidth:44,minHeight:44}} /></Button>
@@ -483,6 +522,7 @@ function CameraPage() {
         </HStack></GlassEffectContainer>
         <ZStack frame={{width:layout.viewWidth,height:layout.viewHeight}}>
           {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspectFill" frame={{width:layout.viewWidth,height:layout.viewHeight}} masksToBounds /> : <Text font="callout">{status}</Text>}
+          {camera && mode === "photo" && settings.stamp && !preview ? <Canvas opaque={false} frame={{width:layout.viewWidth,height:layout.viewHeight}} accessibilityIdentifier="momentra.live-overlay" accessibilityHidden draw={ctx=>drawStamp(ctx,layout.viewWidth,layout.viewHeight,settings,liveRecord,settings.map && assets?.map ? {image:assets.map} : null,logoCache.current.image ? {image:logoCache.current.image} : null,true)} /> : null}
           {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="black" frame={{width:layout.viewWidth*0.72,height:layout.viewHeight*0.72}} /> : null}
           <HStack alignment="center">
             <GlassEffectContainer><ScrollView frame={{width:layout.railWidth,maxHeight:layout.railHeight}}>
