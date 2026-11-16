@@ -20,6 +20,13 @@ console.log('PASS MET Norway parser: past forecast, units, invalid values, fresh
  assert.equal((await requestMetForecast(base)).temperatureC,22);assert.ok(lastURL.endsWith('lat=-17.1234&lon=-51.9876'));assert.equal(requests,1);
  await requestMetForecast({...base,now:at+60000});assert.equal(requests,1);
  const later=await requestMetForecast({...base,now:at+31*60000});assert.equal(later.temperatureC,23);assert.equal(requests,1);
+ const dense={properties:{...body.properties,timeseries:Array.from({length:21},(_,i)=>step(new Date(at+(i-8)*15*60000).toISOString(),{air_temperature:i}))}};
+ const denseStore=new Map(),denseAdapter={get:k=>denseStore.get(k),set:(k,v)=>{denseStore.set(k,v);return true}};let denseRequests=0;
+ const denseTransport=async()=>{denseRequests++;return {status:200,json:async()=>dense}};
+ const denseBase={...base,store:denseAdapter,transport:denseTransport};
+ assert.equal((await requestMetForecast(denseBase)).temperatureC,8);
+ assert.equal((await requestMetForecast({...denseBase,now:at+60*60000})).temperatureC,12);assert.equal(denseRequests,1);
+ const mixedStore={get:()=>({at,sample:r,samples:[]}),set:()=>false};assert.equal((await requestMetForecast({...base,store:mixedStore})).temperatureC,22);
  const damagedStore={get:()=>({at:at,sample:{validAt:at,updatedAt:at,temperatureC:'22'}}),set:()=>{throw Error('must not write')}};assert.equal(await requestMetForecast({...base,store:damagedStore}),null);assert.equal(await requestMetForecast({...base,store,now:at-1}),null);assert.equal(requests,1);
  const failedStore={get:()=>null,set:()=>false};assert.equal(await requestMetForecast({...base,store:failedStore}),null);assert.equal(requests,1);
  const expiries=new Map(),storeExpiry={get:k=>expiries.get(k),set:(k,v)=>{expiries.set(k,v);return true}};let count=0;

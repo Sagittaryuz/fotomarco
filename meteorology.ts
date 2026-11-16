@@ -32,7 +32,8 @@ export function parseMetForecastWindow(body:unknown,at:number):ModelWeather[] {
   const updatedAt=Date.parse(properties?.meta?.updated_at)
   if(!Array.isArray(series) || !Number.isFinite(updatedAt) || updatedAt>at || at-updatedAt>86400000) return []
   const times=[...new Set<number>(series.map((x:any)=>Date.parse(x?.time)).filter((t:number)=>Number.isFinite(t) && t>=at-7200000 && t<=at+10800000))].sort((a,b)=>a-b)
-  return times.slice(0,8).map(time=>parseMetForecast(body,Math.max(at,time))).filter((x):x is ModelWeather=>x!==null)
+  const past=times.filter(time=>time<=at).slice(-1), future=times.filter(time=>time>at)
+  return [...past,...future].slice(0,8).map(time=>parseMetForecast(body,Math.max(at,time))).filter((x):x is ModelWeather=>x!==null)
 }
 
 export function validModelWeather(value:unknown,now:number):ModelWeather|null {
@@ -63,7 +64,7 @@ export async function requestMetForecast(options:{enabled:boolean;foreground:boo
     if (now<existing.at) return null // clock moved backwards: keep the cooldown
     const retryAt=Number.isFinite(existing.retryAt) ? Math.max(existing.at+10800000,existing.retryAt) : existing.at+10800000
     if (now<retryAt) {
-      const candidates=Array.isArray(existing.samples) ? existing.samples.slice(0,8) : [existing.sample]
+      const candidates=[existing.sample,...(Array.isArray(existing.samples) ? existing.samples.slice(0,8) : [])]
       return candidates.map((x:unknown)=>validModelWeather(x,now)).filter((x:ModelWeather|null):x is ModelWeather=>x!==null).sort((a:ModelWeather,b:ModelWeather)=>b.validAt-a.validAt)[0] ?? null
     }
   }
