@@ -86,3 +86,14 @@ Fonte: pedido Marcos encaminhado em 16/11 para opção somente nuvem, login Goog
 Implementado apenas o componente viável independente: allowGallery persistente (default true preserva manual anterior), controles e handlers bloqueiam gravação em Photos quando false, textos deixam claro que arquivos seguem locais e não houve envio. Opção somente nuvem permanece indisponível, sem falso botão de login. Sem remoção de arquivos, criação de credenciais, acesso externo ou custos. Check + 44 testes core + 20 runtime mock passaram.
 
 Próximo passo: resolver destino profissional/pessoal e configuração OAuth aprovada, validar iPhone antes de habilitar uploads ou descarte temporário. Não transformar consentimento de login em autorização para upload de arquivos antigos.
+
+
+## 0.3.2 · formato conforme referência visual
+
+Fonte: imagem fornecida por Marcos em 16/11 e instrução “A câmera tem que estar nesse formato aqui”. Imagem inspecionada de fato, não publicada. Visor dominante retangular, preto, toolbar de ícones, obturador branco e thumbnail orientaram alteração. Preservados pedidos específicos: apenas Vídeo/Câmera no seletor abaixo do obturador, quatro controles topo e laterais.
+
+camera_layout.ts calcula dimensões comuns à UI e ao diagrama sintético. Visor aspect-fill acompanha proporção selecionada, sem cornerRadius. Thumbnail/prévia e Salvar flanqueiam obturador; exportar/fechar continuam acessíveis na faixa de status. Ícones laterais compactos preservam labels VoiceOver. Não houve mudança em credenciais/armazenamento/captura.
+
+Check + 44 testes core/render e 21 fluxos mock. Diagramas geométricos retrato390×844, pequeno320×568 e paisagem844×390 inspecionados. São simulações de geometria, com símbolos/fontes aproximados, não render SwiftUI/iPhone. Layout real, tamanhos dinâmicos, contraste de vidro e crop/field of view nativo ainda pendentes de aparelho. Não simular zoom/lentes nem representar mapa/timestamp ao vivo: composição permanece na foto final/prévia.
+
+Ajustes da auditoria0.3.2: preview inset72% mantém câmera visível, Exportar/Fechar têm alvos44pt e faixa status44; vídeo usa frame16:9 separado da proporção de foto. Campo de visão real do vídeo segue pendente de hardware. Toolbar mudou a plain+glassEffect com label44 para evitar padding implícito do estilo glass.

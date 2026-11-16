@@ -6,6 +6,7 @@ import {
 import type { CameraControlParameter } from "scripting"
 import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, normalizeSettings, validFix, coordinates, cleanText, within } from "./core"
 import { enrich, folder, persistRecord, renderStamped } from "./services"
+import { cameraLayout } from "./camera_layout"
 
 type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput | null; movie: AVCaptureMovieFileOutput | null }
 let ownedSession: AVCaptureSession | null = null
@@ -465,37 +466,35 @@ function CameraPage() {
   function SideButton(props: {title: string; symbol: string; action: () => void; disabled?: boolean; value?:string; hint?:string}) {
     return <Button action={props.action} disabled={busy || props.disabled} buttonStyle="plain"
       accessibilityLabel={props.title} accessibilityValue={props.value} accessibilityHint={props.hint}>
-      <VStack spacing={4} frame={{minWidth:60,minHeight:44}} padding={4}>
-        <Image systemName={props.symbol} font="title3" />
-        <Text font="caption2">{props.title}</Text>
-      </VStack>
+      <Image systemName={props.symbol} font="title3" frame={{width:44,height:44}} />
     </Button>
   }
   return <NavigationStack preferredColorScheme="dark" onCameraCaptureEvent={{isEnabled:!!camera && !closing,primaryAction:event=>{if(event.phase === "ended") void shutter()}}}>
     <GeometryReader>{geometry => {
-      const width = geometry.size.width, height = geometry.size.height, compact = height < 500
+      const width = geometry.size.width, height = geometry.size.height
+      const layout = cameraLayout(width,height,mode === "video" ? "16:9" : settings.aspectRatio), compact = layout.compact
       const glass = {glass:UIGlass.regular(),shape:{type:"rect" as const,cornerRadius:24}}
-      return <VStack spacing={compact ? 6 : 12} background="#071017" foregroundStyle="white" padding={12} frame={{width,height}}>
-        <GlassEffectContainer><HStack spacing={18}>
-          <Button buttonStyle="glass" disabled={busy || mode === "video"} accessibilityLabel="Flash" accessibilityValue={flash} action={()=>{void flashMenu()}}><Image systemName={flash === "off" ? "bolt.slash.fill" : flash === "auto" ? "bolt.badge.a" : "bolt.fill"} foregroundStyle={flash === "off" ? "white" : "#FFD60A"} frame={{minWidth:44,minHeight:44}} /></Button>
-          <Button buttonStyle="glass" disabled={busy || mode === "video"} accessibilityLabel="Temporizador" accessibilityValue={timer ? timer+" segundos" : "Desligado"} action={()=>{void timerMenu()}}><HStack spacing={3} frame={{minWidth:44,minHeight:44}}><Image systemName="timer" /><Text font="caption">{timer ? timer+"s" : ""}</Text></HStack></Button>
-          <Button title={settings.aspectRatio} buttonStyle="glass" disabled={busy || mode === "video"} accessibilityLabel="Proporção" action={()=>{void ratioMenu()}} frame={{minWidth:44,minHeight:44}} />
-          <Button buttonStyle="glass" disabled={busy} accessibilityLabel="Configurações" action={()=>{void openSettings()}}><Image systemName="gearshape" frame={{minWidth:44,minHeight:44}} /></Button>
+      return <VStack spacing={layout.gap} background="black" foregroundStyle="white" frame={{width,height}}>
+        <GlassEffectContainer><HStack spacing={Math.max(12,(width-224)/4)} frame={{height:layout.toolbar}}>
+          <Button buttonStyle="plain" glassEffect={UIGlass.regular().interactive()} disabled={busy || mode === "video"} accessibilityLabel="Flash" accessibilityValue={flash} action={()=>{void flashMenu()}}><Image systemName={flash === "off" ? "bolt.slash.fill" : flash === "auto" ? "bolt.badge.a" : "bolt.fill"} foregroundStyle={flash === "off" ? "white" : "#FFD60A"} frame={{minWidth:44,minHeight:44}} /></Button>
+          <Button buttonStyle="plain" glassEffect={UIGlass.regular().interactive()} disabled={busy || mode === "video"} accessibilityLabel="Temporizador" accessibilityValue={timer ? timer+" segundos" : "Desligado"} action={()=>{void timerMenu()}}><HStack spacing={3} frame={{minWidth:44,minHeight:44}}><Image systemName="timer" /><Text font="caption">{timer ? timer+"s" : ""}</Text></HStack></Button>
+          <Button title={settings.aspectRatio} buttonStyle="plain" glassEffect={UIGlass.regular().interactive()} disabled={busy || mode === "video"} accessibilityLabel="Proporção" action={()=>{void ratioMenu()}} frame={{minWidth:44,minHeight:44}} />
+          <Button buttonStyle="plain" glassEffect={UIGlass.regular().interactive()} disabled={busy} accessibilityLabel="Configurações" action={()=>{void openSettings()}}><Image systemName="gearshape" frame={{minWidth:44,minHeight:44}} /></Button>
         </HStack></GlassEffectContainer>
-        <ZStack frame={{maxWidth:"infinity",maxHeight:"infinity",minHeight:compact ? 40 : 160}}>
-          {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspect" frame={{maxWidth:"infinity",maxHeight:"infinity"}} cornerRadius={24} masksToBounds /> : <Text font="callout">{status}</Text>}
-          {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="#071017" frame={{width:Math.min(width*0.50,260),height:Math.min(height*0.30,260)}} cornerRadius={16} /> : null}
+        <ZStack frame={{width:layout.viewWidth,height:layout.viewHeight}}>
+          {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspectFill" frame={{width:layout.viewWidth,height:layout.viewHeight}} masksToBounds /> : <Text font="callout">{status}</Text>}
+          {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="black" frame={{width:layout.viewWidth*0.72,height:layout.viewHeight*0.72}} /> : null}
           <HStack alignment="center">
-            <GlassEffectContainer><ScrollView frame={{width:82,maxHeight:compact ? Math.max(44,height-330) : 270}}>
-              <VStack spacing={compact ? 2 : 8} padding={6} glassEffect={glass} accessibilityElement="contain">
+            <GlassEffectContainer><ScrollView frame={{width:layout.railWidth,maxHeight:layout.railHeight}}>
+              <VStack spacing={2} padding={2} glassEffect={glass} accessibilityElement="contain">
                 <SideButton title={settings.profile} symbol="square.stack" disabled={mode === "video"} hint="Escolher padrão do carimbo" action={()=>{void chooseProfile()}} />
                 <SideButton title="Padrão" symbol="slider.horizontal.3" disabled={mode === "video"} hint="Editar título, observação e logotipo" action={()=>{void editProfile()}} />
                 <SideButton title={settings.stamp ? "Carimbo ✓" : "Sem carimbo"} symbol="text.viewfinder" disabled={mode === "video"} value={settings.stamp ? "Ligado" : "Desligado"} action={()=>update({...settingsRef.current,stamp:!settingsRef.current.stamp})} />
               </VStack>
             </ScrollView></GlassEffectContainer>
             <Spacer />
-            <GlassEffectContainer><ScrollView frame={{width:82,maxHeight:compact ? Math.max(44,height-330) : 270}}>
-              <VStack spacing={compact ? 2 : 8} padding={6} glassEffect={glass} accessibilityElement="contain">
+            <GlassEffectContainer><ScrollView frame={{width:layout.railWidth,maxHeight:layout.railHeight}}>
+              <VStack spacing={2} padding={2} glassEffect={glass} accessibilityElement="contain">
                 <SideButton title={settings.gps ? "GPS ✓" : "GPS"} symbol="location" disabled={mode === "video"} value={settings.gps ? "Ligado" : "Desligado"} action={()=>{void gpsMenu()}} />
                 <SideButton title={torch ? "Luz ✓" : "Luz"} symbol="flashlight.on.fill" disabled={!camera?.device.hasTorch} value={torch ? "Ligada" : "Desligada"} action={()=>{void run(async()=>{await cameraRef.current!.device.setTorchMode(torch ? "off" : "on");setTorch(!torch)})}} />
                 <SideButton title="Recentes" symbol={mode === "video" ? "video" : "photo.on.rectangle"} action={()=>{if (mode === "video") void videoHistory(); else void history()}} />
@@ -503,26 +502,33 @@ function CameraPage() {
             </ScrollView></GlassEffectContainer>
           </HStack>
         </ZStack>
-        <HStack spacing={10}>
-          {mode === "photo" ? <Button title={preview ? "Câmera" : "Prévia"} systemImage="photo" font="caption" buttonStyle="glass" disabled={busy || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}} /> : null}
-          <Spacer />
-          {mode === "photo" ? <Button title={last?.saved ? "Salva ✓" : "Salvar"} systemImage="square.and.arrow.down" font="caption" buttonStyle="glass" disabled={!settings.allowGallery || !last || busy || last.saved} action={()=>{void save()}} /> : <Button title={lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"} font="caption" buttonStyle="glass" disabled={!settings.allowGallery || !lastVideo || busy || lastVideo.saved} action={()=>{void saveVideo()}} />}
-          {mode === "photo" ? <Button accessibilityLabel="Exportar" buttonStyle="glass" disabled={!last || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" frame={{minWidth:44,minHeight:44}} /></Button> : null}
-          <Button buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" frame={{minWidth:44,minHeight:44}} /></Button>
+        <HStack spacing={8} frame={{height:layout.status}} padding={{leading:12,trailing:12}}>
+          <ScrollView><Text font="caption2" foregroundStyle="#D0D0D0">{status}</Text></ScrollView>
+          {mode === "photo" ? <Button accessibilityLabel="Exportar" buttonStyle="plain" disabled={!last || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" frame={{width:44,height:44}} /></Button> : null}
+          <Button buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" frame={{width:44,height:44}} /></Button>
         </HStack>
-        <ScrollView frame={{height:compact ? 28 : 46}}><Text font="caption" foregroundStyle="#B6C7D1">{status}</Text></ScrollView>
-        {!compact && mode === "photo" ? <Text font="caption2" foregroundStyle="#B6C7D1">{settings.profile} · {settings.gps ? coordinates(validFix(fix,Date.now())) : "GPS desligado"}</Text> : null}
+        <HStack frame={{width:Math.min(width-32,380),height:layout.shutter}}>
+          <Button buttonStyle="plain" accessibilityLabel={preview ? "Câmera" : "Prévia"} disabled={busy || mode === "video" || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}}>
+            {previewImage ? <Image image={previewImage} resizable scaleToFill frame={{width:44,height:44}} cornerRadius={8} masksToBounds /> : <Image systemName="photo" font="title2" frame={{width:44,height:44}} />}
+          </Button>
+          <Spacer />
         <Button buttonStyle="plain" disabled={(!recording && !countdown && busy) || !camera}
           accessibilityLabel={countdown ? "Cancelar temporizador" : recording ? "Parar gravação" : mode === "photo" ? "Fotografar" : "Gravar vídeo"}
           accessibilityHint={mode === "photo" ? "Captura uma foto com o padrão selecionado" : "Toque novamente para parar"}
           action={()=>{void shutter()}}>
-          <ZStack frame={{width:compact ? 60 : 76,height:compact ? 60 : 76}}>
-            <Image systemName="circle" font={compact ? 58 : 74} foregroundStyle="white" />
-            <Image systemName={recording ? "stop.fill" : "circle.fill"} font={recording ? 28 : compact ? 46 : 60} foregroundStyle={mode === "photo" ? "white" : "#FF514D"} />
+          <ZStack frame={{width:layout.shutter,height:layout.shutter}}>
+            <Image systemName="circle" font={layout.shutter-2} foregroundStyle="white" />
+            <Image systemName={recording ? "stop.fill" : "circle.fill"} font={recording ? 28 : layout.shutter-16} foregroundStyle={mode === "photo" ? "white" : "#FF514D"} />
           {countdown ? <Text font="title" foregroundStyle="black">{String(countdown)}</Text> : null}
           </ZStack>
         </Button>
-        <Picker title="Modo de captura" value={mode} onChanged={(next: "video" | "photo")=>{void changeMode(next)}} pickerStyle="segmented" disabled={initializing || busy || recording} frame={{width:Math.min(width-48,280),minHeight:44}} cornerRadius={24} accessibilityLabel="Modo de captura">
+          <Spacer />
+          <Button buttonStyle="plain" accessibilityLabel={mode === "photo" ? last?.saved ? "Salva ✓" : "Salvar" : lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"}
+            disabled={!settings.allowGallery || busy || (mode === "photo" ? !last || last.saved : !lastVideo || lastVideo.saved)} action={()=>{if (mode === "photo") void save(); else void saveVideo()}}>
+            <Image systemName={(mode === "photo" ? last?.saved : lastVideo?.saved) ? "checkmark.circle" : "square.and.arrow.down"} font="title2" frame={{width:44,height:44}} />
+          </Button>
+        </HStack>
+        <Picker title="Modo de captura" value={mode} onChanged={(next: "video" | "photo")=>{void changeMode(next)}} pickerStyle="segmented" disabled={initializing || busy || recording} frame={{width:Math.min(width-48,280),height:layout.mode}} cornerRadius={24} accessibilityLabel="Modo de captura">
           <Text tag="video">Vídeo</Text><Text tag="photo">Câmera</Text>
         </Picker>
       </VStack>

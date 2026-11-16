@@ -1,4 +1,4 @@
-# Momentra · 0.3.1
+# Momentra · 0.3.2
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -27,17 +27,23 @@ Após a importação, abra Momentra. Permita acesso à câmera quando o iOS soli
 
 O título e a observação se referem às próximas fotos, não alteram registros antigos. Textos longos são limitados com reticências para não invadir o mapa; o registro mantém os dados de captura. Logotipos não são incluídos de terceiros: selecione o arquivo que deseja usar. A proporção da marca é preservada.
 
+## Formato da câmera 0.3.2
+
+Layout ajustado à referência visual fornecida: fundo preto, visor retangular grande sem cantos arredondados, ícones superiores, miniatura e botão salvar ao lado do obturador circular branco. A geometria acompanha 4:3/16:9 e orientação em foto; vídeo usa visor 16:9, sem promessa de campo de visão idêntico ao arquivo gravado. A prévia da foto usa um painel central, mantendo parte da câmera ao vivo visível para Camera Control. Os quatro controles superiores e os controles laterais anteriores foram preservados; o seletor continua abaixo do obturador conforme o pedido específico anterior.
+
+Não foram inventados zoom/lentes 0.5×/4×/8×, filtros ou modos Square da imagem. Mapa/timestamp/logotipo continuam na composição final e na prévia da foto capturada, não como sobreposição ao vivo. A referência pessoal não integra os arquivos públicos. `node tools/preview-layout.cjs` gera diagramas geométricos sintéticos, não screenshots nativos nem prova da aparência Liquid Glass.
+
 ## Controles superiores e configurações
 
 - **Flash:** Ligado, Automático ou Desligado, com a opção atual marcada no popup. Amarelo indica modo armado (ligado/automático), não confirmação de que o LED disparou. O resultado depende do hardware e da decisão do iPhone no automático.
 - **Temporizador:** desligado, 3 ou 10 segundos. Toque novamente no obturador durante a contagem para cancelar. Hora/GPS são registrados no disparo real, após a contagem.
-- **Proporção:** 4:3 ou 16:9 (invertidas em retrato). Recorte central da foto final, inclusive sem carimbo; original inteiro preservado. O visor ao vivo ainda exibe o enquadramento da câmera, portanto a foto final 16:9 pode conter menos área.
+- **Proporção:** 4:3 ou 16:9 (invertidas em retrato). Recorte central da foto final, inclusive sem carimbo; original inteiro preservado. O visor acompanha a proporção selecionada com preenchimento central; correspondência exata do campo de visão com a captura ainda requer teste físico.
 - **Configurações:** página própria com fonte Sistema/Serifada/Monoespaçada; data/hora numéricas ou data com mês por extenso e hora h/min/s; timestamp nos quatro cantos. Data, hora e localização permanecem no mesmo conjunto. GPS desligado/indisponível aparece como texto, sem coordenadas falsas.
 - Na mesma página: GPS e mapa opcionais; tamanho do mapa pequeno/médio/grande (14/22/30% do menor eixo da foto), canto do mapa e canto da imagem/logotipo independentes. Elementos que colidem são empilhados para dentro, preservando legibilidade. Tamanho do mapa é tamanho visual, não zoom geográfico.
 
 ## Interface Liquid Glass e vídeo
 
-Dois painéis laterais usam o material **Liquid Glass nativo regular**, gerenciado por `GlassEffectContainer`. Cada painel tem uma única superfície de vidro, com botões independentes dentro: não é blur simulado nem vidro sobre vidro. Ações de foto (Prévia, Salvar, Exportar) ficam acima do obturador; os dois modos são os últimos elementos da tela. Painéis laterais rolam em telas baixas. Estados também têm texto e descrições para VoiceOver, não apenas cor.
+Dois painéis laterais usam o material **Liquid Glass nativo regular**, gerenciado por `GlassEffectContainer`. Cada painel tem uma única superfície de vidro, com botões independentes dentro: não é blur simulado nem vidro sobre vidro. A miniatura/prévia fica à esquerda do obturador e Salvar à direita; Exportar e Fechar ficam na faixa de status. Os dois modos são os últimos elementos da tela. Painéis laterais compactos de ícones rolam em telas baixas. Estados também têm texto e descrições para VoiceOver, não apenas cor.
 
 No modo Vídeo, toque no círculo vermelho para iniciar e no quadrado para parar. Câmera e microfone são solicitados pelo iOS. A sessão de fotos é encerrada antes da sessão de vídeo, evitando duas câmeras concorrentes. O arquivo `.mov` fica no Momentra; **Salvar vídeo** envia ao Fotos apenas quando solicitado. O último vídeo fica acessível após reabrir e voltar ao modo Vídeo; os últimos 50 vídeos ficam selecionáveis em Recentes no modo Vídeo, e todos os arquivos permanecem na pasta local. **Vídeo não recebe carimbo, GPS ou mapa.** Os controles exclusivos de foto ficam desativados nesse modo.
 
@@ -85,7 +91,7 @@ npm test
 
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
 - 44 verificações de núcleo/layout/renderização sintética.
-- 20 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 21 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.
 
