@@ -204,3 +204,16 @@ Aviso público0.5.0 publicado e confirmado: Worker58ffc7d5, fonteSHA25641dfac8a1
 Pedido da chamada16/11 às21:11UTC, encaminhado pelo coordenador: janela pequena e atalho passando primeiro pelo Scripting; tratar juntos. Inspeção da distribuição5ae85cee mostrou que a câmera já solicita fullScreen; causa no aparelho não reproduzida. Três apresentações internas não tinham estilo explícito e portanto usavam pageSheet padrão documentado. Configurações e Photos agora também pedem fullScreen. Sem alterações na geometria4:3, dados, OAuth ou backend.
 
 Guia de abertura agora distingue run_single/Momentra (executar sem duplicar), open/Momentra (editor) e AbrirApp. O host Scripting é necessário; não foi prometido eliminar sua transição. Atalho instalado não acessível, não alterado. Regressão mock confere câmera, configurações repetidas e ambos caminhos Photos. Check+48core/layout/render+40runtime+123Node passaram. Tipos completos e testes físicos do iPhone não executados. Nenhuma captura ou envio real.
+
+
+### Pesquisa complementar de apresentação
+Leitura integral das páginas oficiais de apresentação, GeometryReader, SafeArea, StatusBar e Minimization/Resume. Descoberta importante: run_single encerra instâncias anteriores; guia corrigido para run no uso cotidiano, que retoma instância viva. A orientação anterior de run_single era incompleta para câmera com operações pendentes. Sem alterações de runtime nem repetição de testes já válidos. Nenhum controle documentado encontrado para maximizar janela externa do hospedeiro. fullScreen já está em todos os presents; ignoresSafeArea/Device.screen não substituem apresentação e podem prejudicar controles.4:3 permanece requisito e não equivale a preencher toda a tela alta do iPhone com imagem. Diagnóstico físico permanece não concluído.
+
+
+## 0.6.0 · Meta visual consolidada
+
+Origem: referência de câmera mais recente enviada por Marcos, com ordem explícita de seguir a imagem, revisar alinhamentos e preservar funções. Escolha: seletor acima do obturador prevalece sobre pedido antigo; quatro controles superiores existentes preservados, sem copiar zoom/filtros/modos não funcionais da imagem. Visor livre de trilhos; funções movidas para Configurações → Câmera. Não foi publicada a foto pessoal de referência.
+
+Padrões novos: mapa grande superior esquerdo, timestamp superior direito branco com sombra e alinhamento à direita, logo inferior direito. Preferências existentes não são sobrescritas. GPS/mapa não são ativados implicitamente. Cartões e linhas de ajustes têm largura consistente. Folha de configurações não segura lock de operação, para permitir ferramentas nela; guarda própria evita apresentações duplicadas e Camera Control não captura enquanto ajustes estão abertos.
+
+Critérios: preservar proporção e caber em telas pequenas/retrato/paisagem; controles fora do carimbo, funções antigas ainda acessíveis; fullScreen em todos os presents; regressões de armazenamento/auth intactas. Check,48+40+123 testes locais aprovados. Diagramas sintéticos renderizados e inspecionados, não screenshots nativos. Sem upload real, mudança de OAuth, custos ou uso de foto pessoal. Limites: sem acesso ao iPhone para confirmar janela do host, importação instalada ou atalho físico. Nenhuma API de Meta Codex exposta nesta execução; registro por critérios não implica ativação de Meta na interface.

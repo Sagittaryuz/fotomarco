@@ -1,6 +1,6 @@
-# Momentra · 0.5.1
+# Momentra · 0.6.0
 
-Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
+Câmera para **Scripting PRO no iPhone**, com visor livre, padrões editáveis e carimbo gravado na foto.
 
 ## Instalar ou atualizar
 
@@ -29,7 +29,7 @@ O título e a observação se referem às próximas fotos, não alteram registro
 
 ## Formato da câmera 0.3.2
 
-Layout ajustado à referência visual fornecida: fundo preto, visor retangular grande sem cantos arredondados, ícones superiores, miniatura e botão salvar ao lado do obturador circular branco. A geometria acompanha 4:3/16:9 e orientação em foto; vídeo usa visor 16:9, sem promessa de campo de visão idêntico ao arquivo gravado. A prévia da foto usa um painel central, mantendo parte da câmera ao vivo visível para Camera Control. Os quatro controles superiores e os controles laterais anteriores foram preservados; o seletor continua abaixo do obturador conforme o pedido específico anterior.
+Layout ajustado à referência visual fornecida: fundo preto, visor retangular grande sem cantos arredondados, ícones superiores, miniatura e botão salvar ao lado do obturador circular branco. A geometria acompanha 4:3/16:9 e orientação em foto; vídeo usa visor 16:9, sem promessa de campo de visão idêntico ao arquivo gravado. A prévia da foto usa um painel central, mantendo parte da câmera ao vivo visível para Camera Control. Os quatro controles superiores ficam fora do visor. As funções laterais foram reunidas em Configurações → Câmera. O seletor fica acima do obturador, conforme a referência mais recente, que substitui a posição anterior.
 
 Não foram inventados zoom/lentes 0.5×/4×/8×, filtros ou modos Square da imagem. Mapa/timestamp/logotipo agora aparecem também ao vivo no modo Câmera, conforme as posições configuradas. A referência pessoal não integra os arquivos públicos. `node tools/preview-layout.cjs` gera diagramas geométricos sintéticos, não screenshots nativos nem prova da aparência Liquid Glass.
 
@@ -57,7 +57,7 @@ Página clara com cartões brancos, ícones circulares coloridos de 44 pt e bot�
 
 ## Interface Liquid Glass e vídeo
 
-Os controles usam **Liquid Glass nativo regular**, com ícones em superfícies circulares de 44 pt e grupos laterais gerenciados por `GlassEffectContainer`. A versão 0.3.5 sobrepõe toolbar e status ao visor para maximizar sua área, preservando a proporção escolhida e os controles inferiores. O obturador permanece maior. A miniatura/prévia fica à esquerda do obturador e Salvar à direita; Exportar e Fechar ficam na faixa de status. Os dois modos são os últimos elementos da tela. Painéis laterais compactos de ícones rolam em telas baixas. Estados também têm texto e descrições para VoiceOver, não apenas cor.
+Os controles usam **Liquid Glass nativo regular**, com superfícies circulares de 44 pt. O obturador permanece maior. A miniatura fica à esquerda e Salvar à direita; Exportar e Fechar ficam na faixa de status. Não há trilhos laterais nem toolbar sobre o carimbo. Em paisagem, os controles de captura ocupam uma coluna à direita. Estados têm texto e descrições para VoiceOver, não apenas cor.
 
 No modo Vídeo, toque no círculo vermelho para iniciar e no quadrado para parar. Câmera e microfone são solicitados pelo iOS. A sessão de fotos é encerrada antes da sessão de vídeo, evitando duas câmeras concorrentes. O arquivo `.mov` fica no Momentra; **Salvar vídeo** envia ao Fotos apenas quando solicitado. O último vídeo fica acessível após reabrir e voltar ao modo Vídeo; os últimos 50 vídeos ficam selecionáveis em Recentes no modo Vídeo, e todos os arquivos permanecem na pasta local. **Vídeo não recebe carimbo, GPS ou mapa.** Os controles exclusivos de foto ficam desativados nesse modo.
 
@@ -163,6 +163,24 @@ A implementação foi testada com dados sintéticos/mocks, inclusive falha parci
 
 Câmera mantém apresentação `fullScreen`; Configurações e Google Fotos agora também solicitam tela cheia, em vez da folha modal padrão. Isso corrige a configuração dessas páginas, não comprova a causa de uma câmera pequena no aparelho.
 
-Para abrir direto a execução instalada, o atalho deve usar **Abrir URLs** com `scripting://run_single/Momentra`, não somente **Abrir App Scripting**, nem `scripting://open/Momentra` (editor). A execução única evita instâncias concorrentes. O Scripting continua sendo o aplicativo hospedeiro e pode aparecer durante a transição; um script não se torna aplicativo iOS independente. O atalho já instalado no iPhone não foi alterado remotamente.
+Para abrir direto a execução instalada, o atalho deve usar **Abrir URLs** com `scripting://run/Momentra`, não somente **Abrir App Scripting**, nem `scripting://open/Momentra` (editor). A rota `run` retoma a instância existente quando ela continua ativa. Evite `run_single` no atalho cotidiano: essa variante encerra a instância anterior e pode interromper uma gravação ou escrita em andamento. O Scripting continua sendo o aplicativo hospedeiro e pode aparecer durante a transição; um script não se torna aplicativo iOS independente. O atalho já instalado no iPhone não foi alterado remotamente.
 
 Fontes: [execução e URL schemes](https://scriptingapp.github.io/guide/Script/Script), [apresentação de páginas](https://scriptingapp.github.io/guide/Views/Present%20views/Present%20a%20simple%20view/). A aparência e a transição reais dependem da versão instalada e ainda requerem validação no aparelho.
+
+
+### Tela cheia não é esticar a foto
+
+A câmera usa o tamanho do contêiner fornecido por GeometryReader e preserva 4:3, como solicitado. Uma tela de iPhone mais alta que4:3 terá espaço para controles e faixas pretas; preencher toda a altura com imagem exigiria recorte ou distorção. Isso é diferente de uma janela modal pequena com o aplicativo visível atrás.
+
+A documentação distingue apresentação fullScreen, áreas seguras (notch/indicador de início) e janelas do hospedeiro. Não foi identificado um controle documentado no script para forçar o tamanho de uma janela externa do Scripting. Não ignoramos todas as áreas seguras nem forçamos Device.screen: isso pode cobrir botões pelo notch e não altera o tamanho do contêiner hospedeiro. Sem screenshot/diagnóstico do aparelho, janela do host, versão antiga ou faixa normal4:3 continuam hipóteses, não causas comprovadas.
+
+Fontes adicionais: [retomada e diferença run/run_single](https://scriptingapp.github.io/guide/Script/Script%20Minimization%20and%20Resume), [GeometryReader](https://scriptingapp.github.io/guide/Views/GeometryReader), [áreas seguras](https://scriptingapp.github.io/guide/View%20Modifiers/Safe%20Area).
+
+
+## 0.6.0 · Referência visual e alinhamentos
+
+A referência mais recente orienta visor 4:3 livre, mapa superior esquerdo, bloco branco de informações alinhado à direita e logo inferior direito. São os padrões para novas configurações; posições e escolhas já salvas são preservadas. GPS e mapa continuam dependendo de ativação e permissão. Não foram acrescentados zoom, filtros ou modos sem implementação.
+
+Câmera e configurações revisadas juntas: ferramentas sem sobrepor mapa/carimbo, seletor acima do obturador, ícones de ação 44 pt e cartões de ajustes com largura e margens uniformes. Perfil, edição de padrão, GPS, luz e recentes continuam disponíveis em Configurações → Câmera. A mesma rotina desenha o carimbo no visor e no JPEG.
+
+Validação local: 48 testes de núcleo/layout/render, 40 de interface simulada e 123 de integrações, além do check de manifesto/bundle. Diagramas sintéticos conferidos em retrato, paisagem e tela pequena não substituem captura de iPhone. Apresentações pedem fullScreen; não há evidência de controle documentado para maximizar uma janela externa do Scripting. Importação instalada, hardware, atalho e apresentação física continuam sem verificação no aparelho.

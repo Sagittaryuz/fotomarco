@@ -101,7 +101,7 @@ function CameraPage() {
   const resumeRequested = useRef(false)
   const startAborted = useRef(false)
   const cameraRef = useRef<Camera | null>(null)
-  const alive = useRef(true), locked = useRef(false), locating = useRef(false)
+  const alive = useRef(true), locked = useRef(false), locating = useRef(false), settingsOpen = useRef(false)
   const [busy, setBusy] = useState(false)
   const [initializing, setInitializing] = useState(true)
   const initializingRef = useRef(true)
@@ -407,46 +407,54 @@ function CameraPage() {
   function TimestampPage() {
     const dismissSettings = Navigation.useDismiss()
     const [value,setValue] = useState(settingsRef.current)
+    const [torchValue,setTorchValue] = useState(torch)
     function change(patch: Partial<Settings>) { const next = {...settingsRef.current,...patch}; if(next.storageMode === "cloud") next.allowGallery=false; update(next); setValue(next) }
     function Icon(props:{symbol:string;color:string}) {
       return <Image systemName={props.symbol} font="title3" foregroundStyle="white" frame={{width:44,height:44}} background={props.color} cornerRadius={22} masksToBounds accessibilityHidden />
     }
     function Row(props:{symbol:string;color:string;children:any}) {
-      return <HStack spacing={12} padding={{leading:14,trailing:14,top:10,bottom:10}} frame={{minHeight:64}}><Icon symbol={props.symbol} color={props.color} />{props.children}</HStack>
+      return <HStack spacing={12} padding={{leading:14,trailing:14,top:10,bottom:10}} frame={{minHeight:64,maxWidth:"infinity",alignment:"leading"}}><Icon symbol={props.symbol} color={props.color} /><VStack alignment="leading" spacing={0} frame={{maxWidth:"infinity",alignment:"leading"}}>{props.children}</VStack></HStack>
     }
     function Rule() { return <HStack frame={{height:1}} background="#E5E5EA" padding={{leading:70,trailing:14}} /> }
     function Group(props:{title:string;children:any;note?:string}) {
-      return <VStack alignment="leading" spacing={8}>
+      return <VStack alignment="leading" spacing={8} frame={{maxWidth:"infinity",alignment:"leading"}}>
         <Text font="headline" foregroundStyle="#63636C" padding={{leading:18}}>{props.title}</Text>
-        <VStack spacing={0} background="white" cornerRadius={24}>{props.children}</VStack>
+        <VStack spacing={0} frame={{maxWidth:"infinity",alignment:"leading"}} background="white" cornerRadius={24}>{props.children}</VStack>
         {props.note ? <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>{props.note}</Text> : null}
       </VStack>
     }
-    return <NavigationStack preferredColorScheme="light"><VStack spacing={0} background="#F2F2F7" foregroundStyle="#17171B" accessibilityIdentifier="momentra.settings">
+    return <NavigationStack preferredColorScheme="light"><VStack spacing={0} background="#F2F2F7" foregroundStyle="#17171B" accessibilityIdentifier="momentra.settings" frame={{maxWidth:"infinity",maxHeight:"infinity"}}>
       <ZStack frame={{height:64}} background="white">
         <Text font="headline">Configurações</Text>
         <HStack padding={{leading:16,trailing:16}}><Button buttonStyle="plain" accessibilityLabel="Voltar à câmera" action={dismissSettings} frame={{width:44,height:44}} background="#F2F2F7" cornerRadius={22} masksToBounds><Image systemName="chevron.left" font="title3" frame={{width:44,height:44}} /></Button><Spacer /></HStack>
       </ZStack>
-      <ScrollView><VStack alignment="leading" spacing={28} padding={{leading:16,trailing:16,top:28,bottom:32}}>
+      <ScrollView frame={{maxWidth:"infinity",maxHeight:"infinity"}}><VStack alignment="leading" spacing={28} frame={{maxWidth:"infinity",alignment:"leading"}} padding={{leading:16,trailing:16,top:28,bottom:32}}>
         <HStack><Spacer /><VStack spacing={8}><Icon symbol="camera.fill" color="#3478F6" /><Text font="title2">Momentra</Text><Text font="subheadline" foregroundStyle="#63636C">{ "v"+VERSION }</Text></VStack><Spacer /></HStack>
+        <Group title="Câmera"><VStack spacing={0} padding={{leading:14,trailing:14}}><SettingsAction title={value.profile} symbol="square.stack" disabled={mode === "video"} hint="Escolher padrão do carimbo" action={()=>{void chooseProfile().then(()=>setValue(settingsRef.current))}} />
+                <SettingsAction title="Padrão" symbol="slider.horizontal.3" disabled={mode === "video"} hint="Editar título, observação e logotipo" action={()=>{void editProfile().then(()=>setValue(settingsRef.current))}} />
+
+              <SettingsAction title={value.gps ? "GPS ✓" : "GPS"} symbol="location" disabled={mode === "video"} value={value.gps ? "Ligado" : "Desligado"} action={()=>{void gpsMenu().then(()=>setValue(settingsRef.current))}} />
+                <SettingsAction title={torchValue ? "Luz ✓" : "Luz"} symbol="flashlight.on.fill" disabled={!camera?.device.hasTorch} value={torchValue ? "Ligada" : "Desligada"} action={()=>{void run(async()=>{await cameraRef.current!.device.setTorchMode(torchValue ? "off" : "on");setTorch(!torchValue);setTorchValue(!torchValue)})}} />
+                <SettingsAction title="Recentes" symbol={mode === "video" ? "video" : "photo.on.rectangle"} action={()=>{if (mode === "video") void videoHistory(); else void history()}} />
+              </VStack></Group>
         <Group title="Data, hora e localização" note="As três informações ficam sempre juntas. Sem permissão ou sinal, a localização aparece como indisponível. As mudanças valem para as próximas fotos; vídeos não recebem carimbo.">
-          <Row symbol="text.viewfinder" color="#3478F6"><Toggle title="Carimbo na foto" value={value.stamp} onChanged={next=>change({stamp:next})} toggleStyle="switch" /></Row><Rule />
-          <Row symbol="textformat" color="#6854DE"><Picker title="Fonte" value={value.timestampFont} onChanged={next=>change({timestampFont:next})} pickerStyle="menu"><Text tag="system">Sistema</Text><Text tag="serif">Serifada</Text><Text tag="mono">Monoespaçada</Text></Picker></Row><Rule />
-          <Row symbol="calendar" color="#F28B32"><Picker title="Data e hora" value={value.timestampFormat} onChanged={next=>change({timestampFormat:next})} pickerStyle="menu"><Text tag="numeric">Numérico</Text><Text tag="long">Data por extenso · hora h/min/s</Text></Picker></Row><Rule />
-          <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do timestamp" value={value.timestampCorner} onChanged={next=>change({timestampCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
+          <Row symbol="text.viewfinder" color="#3478F6"><Toggle title="Carimbo na foto" value={value.stamp} onChanged={next=>change({stamp:next})} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row><Rule />
+          <Row symbol="textformat" color="#6854DE"><Picker title="Fonte" value={value.timestampFont} onChanged={next=>change({timestampFont:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="system">Sistema</Text><Text tag="serif">Serifada</Text><Text tag="mono">Monoespaçada</Text></Picker></Row><Rule />
+          <Row symbol="calendar" color="#F28B32"><Picker title="Data e hora" value={value.timestampFormat} onChanged={next=>change({timestampFormat:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="numeric">Numérico</Text><Text tag="long">Data por extenso · hora h/min/s</Text></Picker></Row><Rule />
+          <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do timestamp" value={value.timestampCorner} onChanged={next=>change({timestampCorner:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
         </Group>
         <Group title="Localização e mapa" note="GPS é uma opção do Momentra, não o estado da permissão do iOS. Ao ativar, o aparelho pode pedir autorização. Endereço e mapa usam serviços Apple; a foto não é enviada. Sem GPS válido, nenhum mapa é inventado.">
-          <Row symbol="location.fill" color="#F28B32"><Toggle title="GPS" value={value.gps} onChanged={next=>{change({gps:next}); if (next) void locate(); else {fixRef.current=null;setFix(null)}}} toggleStyle="switch" /></Row><Rule />
-          <Row symbol="map.fill" color="#4EBF64"><Toggle title="Mapa de satélite" value={value.map} onChanged={next=>change({map:next})} toggleStyle="switch" /></Row><Rule />
-          <Row symbol="arrow.up.left.and.arrow.down.right" color="#3478F6"><Picker title="Tamanho do mapa" value={value.mapScale} onChanged={next=>change({mapScale:next})} pickerStyle="menu"><Text tag="small">Pequeno</Text><Text tag="medium">Médio</Text><Text tag="large">Grande</Text></Picker></Row><Rule />
-          <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do mapa" value={value.mapCorner} onChanged={next=>change({mapCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
+          <Row symbol="location.fill" color="#F28B32"><Toggle title="GPS" value={value.gps} onChanged={next=>{change({gps:next}); if (next) void locate(); else {fixRef.current=null;setFix(null)}}} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row><Rule />
+          <Row symbol="map.fill" color="#4EBF64"><Toggle title="Mapa de satélite" value={value.map} onChanged={next=>change({map:next})} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row><Rule />
+          <Row symbol="arrow.up.left.and.arrow.down.right" color="#3478F6"><Picker title="Tamanho do mapa" value={value.mapScale} onChanged={next=>change({mapScale:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="small">Pequeno</Text><Text tag="medium">Médio</Text><Text tag="large">Grande</Text></Picker></Row><Rule />
+          <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do mapa" value={value.mapCorner} onChanged={next=>change({mapCorner:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
         </Group>
-        <Group title="Imagem ou logotipo" note="Escolha a imagem em Padrão, na lateral da câmera. A proporção da arte é preservada.">
-          <Row symbol="photo.fill" color="#4EBF64"><Picker title="Canto da imagem" value={value.logoCorner} onChanged={next=>change({logoCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
+        <Group title="Imagem ou logotipo" note="Escolha a imagem em Câmera → Padrão, nesta página. A proporção da arte é preservada.">
+          <Row symbol="photo.fill" color="#4EBF64"><Picker title="Canto da imagem" value={value.logoCorner} onChanged={next=>change({logoCorner:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
         </Group>
         <Group title="Armazenamento" note="Somente nuvem vale para novas fotos próprias, sem galeria. Original e final ficam locais até envio manual e verificação de bytes idênticos; falhas mantêm cópias pendentes. JSON e cache podem permanecer. Vídeos exigem Local. Cópias anteriores não são apagadas.">
-          <Row symbol="externaldrive.fill" color="#3478F6"><Picker title="Destino das novas fotos" value={value.storageMode} onChanged={next=>change({storageMode:next})} pickerStyle="menu"><Text tag="local">Local</Text><Text tag="cloud">Somente nuvem após verificar</Text></Picker></Row><Rule />
-          <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" disabled={value.storageMode === "cloud"} value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
+          <Row symbol="externaldrive.fill" color="#3478F6"><Picker title="Destino das novas fotos" value={value.storageMode} onChanged={next=>change({storageMode:next})} pickerStyle="menu" frame={{maxWidth:"infinity",alignment:"leading"}}><Text tag="local">Local</Text><Text tag="cloud">Somente nuvem após verificar</Text></Picker></Row><Rule />
+          <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" disabled={value.storageMode === "cloud"} value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row>
         </Group>
         <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /><Button title="Google Fotos pessoal" buttonStyle="bordered" action={()=>{void Navigation.present({modalPresentationStyle:"fullScreen",element:<GooglePhotosPage capture={lastRef.current} onArchived={()=>{setPreviewImage(null);setPreview(false);say("Estado da nuvem atualizado. Consulte Google Fotos pessoal para visualizar.")}} />})}} /><DiagnosticReport /></VStack></Group>
         <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos pessoal depende de ativação do serviço, consentimento separado e envio manual da foto selecionada. No modo somente nuvem, JPEGs do Momentra só são removidos após confirmar original e final idênticos no Google. Qualquer divergência mantém cópia local pendente.</Text>
@@ -454,7 +462,12 @@ function CameraPage() {
       </VStack></ScrollView>
     </VStack></NavigationStack>
   }
-  async function openSettings() { await run(async()=>{setShowGoogleIntro(false);Storage.set("momentra.google.intro.v1",true);await Navigation.present({element:<TimestampPage />,modalPresentationStyle:"fullScreen"})}) }
+  async function openSettings() {
+    if (locked.current || closing || settingsOpen.current) return
+    settingsOpen.current=true
+    try { setShowGoogleIntro(false);Storage.set("momentra.google.intro.v1",true);await Navigation.present({element:<TimestampPage />,modalPresentationStyle:"fullScreen"}) }
+    finally { settingsOpen.current=false }
+  }
   async function chooseProfile() {
     await run(async () => {
       const selected = await Dialog.actionSheet({title:"Escolha um padrão",actions:PROFILE_IDS.map(id=>({label:id+(id === settingsRef.current.profile ? " ✓" : "")})),cancelButton:true})
@@ -611,13 +624,12 @@ function CameraPage() {
     return () => { alive.current = false; receive = () => {} }
   },[])
 
-  function SideButton(props: {title: string; symbol: string; action: () => void; disabled?: boolean; value?:string; hint?:string}) {
-    return <Button {...circularControl()} action={props.action} disabled={busy || props.disabled} buttonStyle="plain"
-      accessibilityLabel={props.title} accessibilityValue={props.value} accessibilityHint={props.hint}>
-      <Image systemName={props.symbol} font="title3" frame={{width:44,height:44}} />
+  function SettingsAction(props: {title: string; symbol: string; action: () => void; disabled?: boolean; value?:string; hint?:string}) {
+    return <Button action={props.action} disabled={busy || props.disabled} buttonStyle="plain" accessibilityLabel={props.title} accessibilityValue={props.value} accessibilityHint={props.hint} frame={{maxWidth:"infinity",minHeight:54,alignment:"leading"}}>
+      <HStack spacing={12}><Image systemName={props.symbol} font="title3" frame={{width:44,height:44}} /><Text>{props.title}</Text><Spacer /><Image systemName="chevron.right" font="caption" /></HStack>
     </Button>
   }
-  return <NavigationStack preferredColorScheme="dark" onCameraCaptureEvent={{isEnabled:!!camera && !closing,primaryAction:event=>{if(event.phase === "ended") void shutter()}}}>
+  return <NavigationStack preferredColorScheme="dark" onCameraCaptureEvent={{isEnabled:!!camera && !closing && !settingsOpen.current,primaryAction:event=>{if(event.phase === "ended" && !settingsOpen.current) void shutter()}}}>
     <GeometryReader>{geometry => {
       const width = geometry.size.width, height = geometry.size.height
       const layout = cameraLayout(width,height,mode === "video" ? "16:9" : settings.aspectRatio), compact = layout.compact
@@ -627,44 +639,24 @@ function CameraPage() {
       if (logoCache.current.path!==logoPath) logoCache.current={path:logoPath,image:logoPath ? UIImage.fromFile(logoPath) : null}
       const liveRecord:CaptureRecord={id:"live-preview",original:"",file:"",capturedAt:liveNow,profile:settings.profile,stamped:false,saved:false,fix:currentFix,address:assets?.address??"",warnings:[]}
 
-      return <VStack spacing={layout.gap} background="black" foregroundStyle="white" frame={{width,height}}>
-        <ZStack frame={{width:layout.viewWidth,height:layout.viewHeight}}>
-          {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspectFill" frame={{width:layout.viewWidth,height:layout.viewHeight}} masksToBounds /> : <Text font="callout">{status}</Text>}
-          {camera && mode === "photo" && settings.stamp && !preview ? <Canvas opaque={false} frame={{width:layout.viewWidth,height:layout.viewHeight}} accessibilityIdentifier="momentra.live-overlay" accessibilityHidden draw={ctx=>drawStamp(ctx,layout.viewWidth,layout.viewHeight,settings,liveRecord,settings.map && assets?.map ? {image:assets.map} : null,logoCache.current.image ? {image:logoCache.current.image} : null,true)} /> : null}
-          {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="black" frame={{width:layout.viewWidth*0.72,height:layout.viewHeight*0.72}} /> : null}
-          <HStack alignment="center">
-            <GlassEffectContainer><ScrollView frame={{width:layout.railWidth,maxHeight:layout.railHeight}}>
-              <VStack spacing={6} padding={2} accessibilityElement="contain">
-                <SideButton title={settings.profile} symbol="square.stack" disabled={mode === "video"} hint="Escolher padrão do carimbo" action={()=>{void chooseProfile()}} />
-                <SideButton title="Padrão" symbol="slider.horizontal.3" disabled={mode === "video"} hint="Editar título, observação e logotipo" action={()=>{void editProfile()}} />
-                <SideButton title={settings.stamp ? "Carimbo ✓" : "Sem carimbo"} symbol="text.viewfinder" disabled={mode === "video"} value={settings.stamp ? "Ligado" : "Desligado"} action={()=>update({...settingsRef.current,stamp:!settingsRef.current.stamp})} />
-              </VStack>
-            </ScrollView></GlassEffectContainer>
-            <Spacer />
-            <GlassEffectContainer><ScrollView frame={{width:layout.railWidth,maxHeight:layout.railHeight}}>
-              <VStack spacing={6} padding={2} accessibilityElement="contain">
-                <SideButton title={settings.gps ? "GPS ✓" : "GPS"} symbol="location" disabled={mode === "video"} value={settings.gps ? "Ligado" : "Desligado"} action={()=>{void gpsMenu()}} />
-                <SideButton title={torch ? "Luz ✓" : "Luz"} symbol="flashlight.on.fill" disabled={!camera?.device.hasTorch} value={torch ? "Ligada" : "Desligada"} action={()=>{void run(async()=>{await cameraRef.current!.device.setTorchMode(torch ? "off" : "on");setTorch(!torch)})}} />
-                <SideButton title="Recentes" symbol={mode === "video" ? "video" : "photo.on.rectangle"} action={()=>{if (mode === "video") void videoHistory(); else void history()}} />
-              </VStack>
-            </ScrollView></GlassEffectContainer>
-          </HStack>
-          <VStack spacing={0} frame={{width:layout.viewWidth,height:layout.viewHeight}}>
-        <GlassEffectContainer><HStack spacing={Math.max(4,(layout.viewWidth-176)/5)} frame={{height:layout.toolbar}}>
+      const toolbar = (<GlassEffectContainer><HStack spacing={layout.toolbarGap} frame={{width:layout.contentWidth,height:layout.toolbar}} padding={{leading:12,trailing:12}}>
           <Button buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Flash" accessibilityValue={flash} action={()=>{void flashMenu()}}><Image systemName={flash === "off" ? "bolt.slash.fill" : flash === "auto" ? "bolt.badge.a" : "bolt.fill"} foregroundStyle={flash === "off" ? "white" : "#FFD60A"} font="title3" frame={{width:44,height:44}} /></Button>
-          <Button buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Temporizador" accessibilityValue={timer ? timer+" segundos" : "Desligado"} action={()=>{void timerMenu()}}><VStack spacing={0} frame={{width:44,height:44}}><Image systemName="timer" font="title3" /><Text font="caption2">{timer ? timer+"s" : ""}</Text></VStack></Button>
+          <Button buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Temporizador" accessibilityValue={timer ? timer+" segundos" : "Desligado"} action={()=>{void timerMenu()}}><VStack spacing={0} frame={{width:44,height:44}}><Image systemName="timer" font="title3" />{timer ? <Text font="caption2">{timer+"s"}</Text> : null}</VStack></Button>
           <Button title={settings.aspectRatio} buttonStyle="plain" {...circularControl()} disabled={busy || mode === "video"} accessibilityLabel="Proporção" action={()=>{void ratioMenu()}} font="caption" />
           <Button buttonStyle="plain" {...circularControl()} disabled={busy} accessibilityLabel="Configurações" action={()=>{void openSettings()}}><Image systemName="gearshape" font="title3" frame={{width:44,height:44}} /></Button>
-        </HStack></GlassEffectContainer>
-            <Spacer />
-        <HStack spacing={8} frame={{height:layout.status}} padding={{leading:12,trailing:12}}>
+        </HStack></GlassEffectContainer>)
+      const statusBar = (<HStack spacing={8} frame={{width:layout.contentWidth,height:layout.status}} padding={{leading:12,trailing:12}}>
           <ScrollView><VStack alignment="leading" spacing={2}><Text font="caption2" foregroundStyle="#D0D0D0">{status}</Text>{showGoogleIntro ? <Button title="Google opcional · configurar" font="caption2" buttonStyle="plain" disabled={busy} action={()=>{void openSettings()}} /> : null}</VStack></ScrollView>
           {mode === "photo" ? <Button {...circularControl()} accessibilityLabel="Exportar" buttonStyle="plain" disabled={!last || last.storageIntent === "cloud" || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" font="title3" frame={{width:44,height:44}} /></Button> : null}
           <Button {...circularControl()} buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" font="title3" frame={{width:44,height:44}} /></Button>
-        </HStack>
-          </VStack>
-        </ZStack>
-        <HStack frame={{width:Math.min(width-32,380),height:layout.shutter}}>
+        </HStack>)
+      const viewfinder = (<ZStack frame={{width:layout.viewWidth,height:layout.viewHeight}}>
+          {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspectFill" frame={{width:layout.viewWidth,height:layout.viewHeight}} masksToBounds /> : <Text font="callout">{status}</Text>}
+          {camera && mode === "photo" && settings.stamp && !preview ? <Canvas opaque={false} frame={{width:layout.viewWidth,height:layout.viewHeight}} accessibilityIdentifier="momentra.live-overlay" accessibilityHidden draw={ctx=>drawStamp(ctx,layout.viewWidth,layout.viewHeight,settings,liveRecord,settings.map && assets?.map ? {image:assets.map} : null,logoCache.current.image ? {image:logoCache.current.image} : null,true)} /> : null}
+          {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="black" frame={{width:layout.viewWidth*0.72,height:layout.viewHeight*0.72}} /> : null}
+
+        </ZStack>)
+      const captureControls = (<HStack frame={{width:layout.captureWidth,height:layout.shutter}}>
           <Button {...circularControl()} buttonStyle="plain" accessibilityLabel={preview ? "Câmera" : "Prévia"} disabled={busy || mode === "video" || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}}>
             {previewImage ? <Image image={previewImage} resizable scaleToFill frame={{width:44,height:44}} cornerRadius={22} masksToBounds /> : <Image systemName="photo" font="title3" frame={{width:44,height:44}} />}
           </Button>
@@ -684,10 +676,15 @@ function CameraPage() {
             disabled={!settings.allowGallery || busy || (mode === "photo" ? !last || last.saved || last.storageIntent === "cloud" : !lastVideo || lastVideo.saved)} action={()=>{if (mode === "photo") void save(); else void saveVideo()}}>
             <Image systemName={(mode === "photo" ? last?.saved : lastVideo?.saved) ? "checkmark.circle" : "square.and.arrow.down"} font="title3" frame={{width:44,height:44}} />
           </Button>
-        </HStack>
-        <Picker title="Modo de captura" value={mode} onChanged={(next: "video" | "photo")=>{void changeMode(next)}} pickerStyle="segmented" disabled={initializing || busy || recording} frame={{width:Math.min(width-48,280),height:layout.mode}} cornerRadius={24} accessibilityLabel="Modo de captura">
+        </HStack>)
+      const modePicker = (<Picker title="Modo de captura" value={mode} onChanged={(next: "video" | "photo")=>{void changeMode(next)}} pickerStyle="segmented" disabled={initializing || busy || recording} frame={{width:layout.modeWidth,height:layout.mode}} cornerRadius={24} accessibilityLabel="Modo de captura">
           <Text tag="video">Vídeo</Text><Text tag="photo">Câmera</Text>
-        </Picker>
+        </Picker>)
+      return <VStack spacing={0} background="black" foregroundStyle="white" frame={{width,height}}>
+        {layout.landscape ? <HStack spacing={layout.gap} frame={{width,height}}>
+          <VStack spacing={layout.gap} frame={{width:layout.contentWidth,height}}>{toolbar}{viewfinder}{statusBar}</VStack>
+          <VStack spacing={12} frame={{width:layout.captureWidth,height}}>{modePicker}{captureControls}</VStack>
+        </HStack> : <VStack spacing={layout.gap} frame={{width,height}}>{toolbar}{viewfinder}{modePicker}{captureControls}{statusBar}</VStack>}
       </VStack>
     }}</GeometryReader>
   </NavigationStack>

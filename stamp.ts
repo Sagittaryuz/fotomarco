@@ -18,13 +18,14 @@ export function drawStamp(ctx: StampContext, width: number, height: number, sett
   const initial = layoutStamp(width, height, lines.length, settings, false, false)
   const measured = lines.map((text,i) => { ctx.font = timestampFont(settings.timestampFont,i === 0 ? initial.font*1.12 : initial.font); return ctx.measureText(text).width })
   const b = layoutStamp(width, height, lines.length, settings, false, false,Math.max(...measured))
-  ctx.fillStyle = "rgba(7,16,23,0.82)"; ctx.fillRect(b.x,b.y,b.w,b.h)
-  ctx.fillStyle = settings.profiles[record.profile].accent; ctx.fillRect(b.x,b.y,Math.max(2,width/400),b.h)
   ctx.textBaseline = "top"
   lines.forEach((line,i) => {
     ctx.font = timestampFont(settings.timestampFont,i === 0 ? b.font * 1.12 : b.font)
-    ctx.fillStyle = i === 0 ? settings.profiles[record.profile].accent : "#FFFFFF"
-    ctx.fillText(fitText(ctx,line,b.textW),b.textX,b.textY+i*b.line)
+    const text = fitText(ctx,line,b.textW)
+    const x = settings.timestampCorner.endsWith("right") ? b.textX+b.textW-ctx.measureText(text).width : b.textX
+    const y = b.textY+i*b.line, shadow = Math.max(0.6,b.font/18)
+    ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillText(text,x+shadow,y+shadow)
+    ctx.fillStyle = "#FFFFFF"; ctx.fillText(text,x,y)
   })
   const overlays = layoutOverlays(width,height,settings,b,!!map,!!logo)
   if (map && overlays.map) { const m=overlays.map; ctx.drawImage(map,m.x,m.y,m.w,m.h) }
