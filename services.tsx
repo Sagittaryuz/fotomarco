@@ -1,5 +1,5 @@
 import { Canvas, Image, ImageRenderer, Path, ZStack } from "scripting"
-import { CaptureRecord, Fix, Settings, outputSize, orientedSize, within } from "./core"
+import { CaptureRecord, Fix, Settings, outputSize, cropSize, orientedSize, within } from "./core"
 import { drawStamp } from "./stamp"
 export const folder = Path.join(FileManager.documentsDirectory, "Momentra")
 let geoAt = 0
@@ -42,15 +42,16 @@ export async function renderStamped(image: UIImage, record: CaptureRecord, setti
   } else if (["left","right","leftMirrored","rightMirrored"].includes(image.imageOrientation)) {
     dimensions = {width:image.height,height:image.width}
   }
-  const size = outputSize(dimensions.width,dimensions.height)
+  const crop = cropSize(dimensions.width,dimensions.height,settings.aspectRatio)
+  const size = outputSize(crop.width,crop.height)
   const logoPath = settings.profiles[record.profile].logoPath
   let logo: UIImage | null = null
   if (logoPath) { logo = UIImage.fromFile(logoPath); if (!logo) record.warnings.push("Logotipo indisponível") }
   // UIImage is displayed by Image so UIKit applies its EXIF orientation before rendering.
   const data = await ImageRenderer.toJPEGData(
-    <ZStack frame={size}>
-      <Image image={image} resizable scaleToFit frame={size} />
-      <Canvas opaque={false} frame={size} draw={(ctx) => drawStamp(ctx,size.width,size.height,settings,record,map ? {image:map} : null,logo ? {image:logo} : null)} />
+    <ZStack frame={size} clipped>
+      <Image image={image} resizable scaleToFill frame={size} clipped />
+      {settings.stamp ? <Canvas opaque={false} frame={size} draw={(ctx) => drawStamp(ctx,size.width,size.height,settings,record,map ? {image:map} : null,logo ? {image:logo} : null)} /> : null}
     </ZStack>,{scale:1,opaque:true,compressionQuality:0.94})
   const path = Path.join(folder,record.id+".jpg")
   await FileManager.writeAsData(path,data)

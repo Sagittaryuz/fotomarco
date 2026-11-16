@@ -1,5 +1,5 @@
 import {
-  Button, CaptureVideoPreviewView, GeometryReader, HStack, VStack, ZStack, Text, Image,
+  Button, CaptureVideoPreviewView, GeometryReader, GlassEffectContainer, Picker, HStack, VStack, ZStack, Text, Image,
   Navigation, NavigationStack, Script, Path, Spacer, ScrollView,
   useEffect, useRef, useState,
 } from "scripting"
@@ -7,8 +7,9 @@ import type { CameraControlParameter } from "scripting"
 import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, normalizeSettings, validFix, coordinates, cleanText, within } from "./core"
 import { enrich, folder, persistRecord, renderStamped } from "./services"
 
-type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput }
+type Camera = { device: AVCaptureDevice; session: AVCaptureSession; output: AVCapturePhotoOutput | null; movie: AVCaptureMovieFileOutput | null }
 let ownedSession: AVCaptureSession | null = null
+let ownedMovie: AVCaptureMovieFileOutput | null = null
 let pending: Promise<void> | null = null
 let startPending: Promise<void> | null = null
 let incoming: CameraControlParameter[] = Script.cameraControlParameter ? [Script.cameraControlParameter] : []
@@ -26,6 +27,8 @@ function CameraPage() {
   const cameraRef = useRef<Camera | null>(null)
   const alive = useRef(true), locked = useRef(false), locating = useRef(false)
   const [busy, setBusy] = useState(false)
+  const [initializing, setInitializing] = useState(true)
+  const initializingRef = useRef(true)
   const [status, setStatus] = useState("Iniciando câmera…")
   const [settings, setSettings] = useState<Settings>(() => normalizeSettings(Storage.get(SETTINGS)))
   const settingsRef = useRef(settings)
@@ -36,6 +39,18 @@ function CameraPage() {
   const [preview, setPreview] = useState(false)
   const [previewImage, setPreviewImage] = useState<UIImage | null>(null)
   const [torch, setTorch] = useState(false)
+  const [flash, setFlash] = useState<"on"|"auto"|"off">("off")
+  const flashRef = useRef<"on"|"auto"|"off">("off")
+  const [timer, setTimer] = useState<0|3|10>(0)
+  const timerRef = useRef<0|3|10>(0)
+  const [countdown, setCountdown] = useState(0)
+  const countdownRef = useRef(0), cancelCountdown = useRef(false)
+  const [mode, setMode] = useState<"video" | "photo">("photo")
+  const modeRef = useRef<"video" | "photo">("photo")
+  const [recording, setRecording] = useState(false)
+  const recordingRef = useRef(false), stopping = useRef(false)
+  const [lastVideo, setLastVideo] = useState<{file:string;saved:boolean}|null>(()=>Storage.get("momentra.video.latest"))
+  const lastVideoRef = useRef(lastVideo)
   const say = (message: string) => { if (alive.current) setStatus(message) }
 
   function update(next: Settings) {
@@ -102,10 +117,8 @@ function CameraPage() {
           const record: CaptureRecord = {handoffKey:key,id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:null,address:"",warnings:[]}
           if (options.gps) record.warnings.push("Captura recebida: GPS do disparo não fornecido; localização atual não foi usada")
           remember(record); await persistRecord(record)
-          if (options.stamp) {
-            try { record.file = await renderStamped(image,record,options,null); record.stamped = true }
-            catch (error) { record.warnings.push("Carimbo falhou; original preservado: "+String(error)) }
-          }
+          try { record.file = await renderStamped(image,record,options,null); record.stamped = options.stamp }
+          catch (error) { record.warnings.push("Composição falhou; original preservado: "+String(error)) }
           remember(record); await persistRecord(record)
           Storage.set(key,record); processed++
           } catch (_) { failed++ /* Original remains in Scripting Captured Files; continue other assets. */ }
@@ -129,16 +142,27 @@ function CameraPage() {
     } catch (_) { say("Sem acesso ao GPS. A câmera continua disponível.") }
     finally { locating.current = false }
   }
-  async function start() {
+  async function start(target: "video" | "photo" = modeRef.current) {
+    initializingRef.current = true; setInitializing(true)
     try {
       const device = AVCaptureDevice.default("video")
       if (!device) throw new Error("Câmera indisponível neste aparelho")
       const session = new AVCaptureSession(); ownedSession = session
-      const output = new AVCapturePhotoOutput(), input = new AVCaptureDeviceInput(device)
+      const output = target === "photo" ? new AVCapturePhotoOutput() : null
+      const movie = target === "video" ? new AVCaptureMovieFileOutput() : null
+      const input = new AVCaptureDeviceInput(device)
+      const microphone = target === "video" ? AVCaptureDevice.default("audio") : null
+      if (target === "video" && !microphone) throw new Error("Microfone indisponível")
+      const audio = microphone ? new AVCaptureDeviceInput(microphone) : null
+      const activeOutput = output ?? movie!
       session.configure(() => {
-        session.sessionPreset = "photo"
-        if (!session.canAddInput(input) || !session.canAddOutput(output)) throw new Error("Não foi possível configurar a câmera")
-        session.addInput(input); session.addOutput(output)
+        session.sessionPreset = target === "photo" ? "photo" : "high"
+        if (!session.canAddInput(input) || !session.canAddOutput(activeOutput)) throw new Error("Não foi possível configurar a câmera")
+        session.addInput(input); session.addOutput(activeOutput)
+        if (audio) {
+          if (!session.canAddInput(audio)) throw new Error("Não foi possível configurar o áudio")
+          session.addInput(audio)
+        }
       })
       await session.startRunning()
       if (!alive.current || closing || startAborted.current) {
@@ -146,43 +170,185 @@ function CameraPage() {
         if (ownedSession === session) ownedSession = null
         return
       }
-      const state = {device,session,output}; cameraRef.current = state; setCamera(state)
-      say("Pronta para fotografar")
+      const state = {device,session,output,movie}; cameraRef.current = state; setCamera(state)
+      say(target === "photo" ? "Enquadre seu momento e toque no círculo" : "Vídeo com áudio · sem carimbo. Toque no círculo para gravar")
       if (settingsRef.current.gps) void locate()
     } catch (error) {
       const failed = ownedSession; ownedSession = null
       if (failed) { try { await failed.stopRunning() } finally { failed.dispose() } }
       say("Câmera: "+String(error)+". Confira a permissão do Scripting nos Ajustes e reabra.")
-    }
+    } finally { initializingRef.current = false; if (alive.current) setInitializing(false) }
   }
   async function capture() {
-    if (!cameraRef.current) return
+    if (!cameraRef.current?.output) return
     setPreview(false)
     await run(async () => {
-      // Freeze profile, time and GPS at shutter. Never stamp a later GPS fix as capture location.
+      cancelCountdown.current = false
+      for (let remaining = timerRef.current; remaining > 0; remaining--) {
+        countdownRef.current = remaining; setCountdown(remaining); say("Foto em "+remaining+"… Toque no obturador para cancelar")
+        await new Promise<void>(resolve=>setTimeout(resolve,1000))
+        if (cancelCountdown.current || closing || !alive.current) {
+          countdownRef.current = 0; setCountdown(0); say("Temporizador cancelado"); return
+        }
+      }
+      countdownRef.current = 0; setCountdown(0)
+      // Freeze profile, time and GPS at actual shutter after the countdown.
       const options = JSON.parse(JSON.stringify(settingsRef.current)) as Settings
       const capturedAt = Date.now(), id = "momentra-"+capturedAt+"-"+Math.random().toString(36).slice(2,7)
       const currentFix = options.gps ? validFix(fixRef.current,capturedAt) : null
       await FileManager.createDirectory(folder,true)
       const original = Path.join(folder,id+"-original.jpg")
       say("Capturando…")
-      const result = await cameraRef.current!.output.capturePhoto({codec:"jpeg",photoFile:original})
+      const result = await cameraRef.current!.output!.capturePhoto({codec:"jpeg",photoFile:original,flashMode:flashRef.current})
       const record: CaptureRecord = {id,original,file:original,capturedAt,profile:options.profile,stamped:false,saved:false,fix:currentFix,address:"",warnings:[]}
       // Record original first. Rendering/network failures must never discard a successful capture.
       remember(record); await persistRecord(record)
       if (options.gps && !currentFix) record.warnings.push("GPS indisponível no disparo")
-      if (options.stamp) {
-        say("Aplicando carimbo…")
+      {
+        say(options.stamp ? "Aplicando carimbo…" : "Preparando proporção…")
         try {
-          const extra = await enrich(currentFix,options)
+          const extra = options.stamp ? await enrich(currentFix,options) : {address:"",warnings:[],map:null}
           record.address = extra.address; record.warnings.push(...extra.warnings)
           record.file = await renderStamped(result.image,record,options,extra.map)
-          record.stamped = true
+          record.stamped = options.stamp
         } catch (error) { record.warnings.push("Carimbo falhou; original preservado: "+String(error)) }
       }
       remember(record); await persistRecord(record)
       say((record.stamped ? "Foto com carimbo pronta" : options.stamp ? "Original preservado, sem carimbo" : "Foto original pronta")+". Toque em Salvar."+(record.warnings.length ? " "+record.warnings.join(". ") : ""))
       if (options.gps) void locate()
+    })
+  }
+  async function changeMode(next: "video" | "photo") {
+    if (initializingRef.current || locked.current || recordingRef.current || closing || next === modeRef.current) return
+    await run(async () => {
+      const old = cameraRef.current
+      if (old) await old.session.stopRunning()
+      cameraRef.current = null; setCamera(null); setTorch(false); setPreview(false)
+      if (old) { old.session.dispose(); if (ownedSession === old.session) ownedSession = null }
+      modeRef.current = next; setMode(next)
+      say(next === "video" ? "Preparando vídeo e microfone…" : "Preparando câmera…")
+      startPending = start(next); await startPending
+    })
+  }
+  async function shutter() {
+    if (countdownRef.current) { cancelCountdown.current = true; return }
+    if (recordingRef.current) {
+      if (stopping.current) return
+      stopping.current = true; say("Finalizando vídeo…")
+      try { await cameraRef.current?.movie?.stopRecording() }
+      catch (error) { say("Não foi possível parar o vídeo: "+String(error)); stopping.current = false }
+      return
+    }
+    if (modeRef.current === "photo") { await capture(); return }
+    if (!cameraRef.current?.movie) return
+    await run(async () => {
+      await FileManager.createDirectory(folder,true)
+      const path = Path.join(folder,"momentra-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)+".mov")
+      recordingRef.current = true; setRecording(true); stopping.current = false
+      say("Gravando com áudio · toque no quadrado para parar")
+      try {
+        ownedMovie = cameraRef.current!.movie!
+        const file = await ownedMovie.startRecording(path)
+        const video = {file,saved:false}; rememberVideo(video)
+        say("Vídeo guardado no Momentra. Toque em Salvar vídeo. Sem carimbo.")
+      } finally { ownedMovie = null; recordingRef.current = false; setRecording(false); stopping.current = false }
+    })
+  }
+  function rememberVideo(video: {file:string;saved:boolean}) {
+    lastVideoRef.current = video; if (alive.current) setLastVideo(video)
+    Storage.set("momentra.video.latest",video)
+    const rows = Storage.get<{file:string;saved:boolean}[]>("momentra.video.history")
+    Storage.set("momentra.video.history",[video,...(Array.isArray(rows) ? rows.filter(x=>x?.file !== video.file) : [])].slice(0,50))
+  }
+  async function videoHistory() {
+    await run(async()=>{
+      const rows = Storage.get<{file:string;saved:boolean}[]>("momentra.video.history")
+      if (!Array.isArray(rows) || !rows.length) { say("Ainda não há vídeos no Momentra"); return }
+      const selected = await Dialog.actionSheet({title:"Vídeos recentes",actions:rows.map(x=>({label:Path.basename(x.file)+(x.saved ? " ✓" : "")})),cancelButton:true})
+      if (selected === null) return
+      if (!await FileManager.exists(rows[selected].file)) { say("Vídeo não encontrado no armazenamento local"); return }
+      rememberVideo(rows[selected]); say(rows[selected].saved ? "Vídeo selecionado já salvo no Fotos" : "Vídeo selecionado. Toque em Salvar vídeo.")
+    })
+  }
+  async function saveVideo() {
+    await run(async () => {
+      const video = lastVideoRef.current; if (!video || video.saved) return
+      if (!await Photos.saveVideo(video.file)) { say("Fotos não confirmou. O vídeo continua no Momentra."); return }
+      const saved = {...video,saved:true}; rememberVideo(saved); say("Vídeo salvo no Fotos")
+    })
+  }
+  async function flashMenu() {
+    await run(async()=>{
+      const values = ["on","auto","off"] as const
+      const labels = ["Ligado","Automático","Desligado"]
+      const choice = await Dialog.actionSheet({title:"Flash",message:"O disparo depende do suporte da câmera. Automático deixa a decisão com o iPhone.",actions:values.map((v,i)=>({label:labels[i]+(v===flashRef.current ? " ✓" : "")})),cancelButton:true})
+      if (choice === null) return
+      flashRef.current = values[choice]; setFlash(values[choice]); say("Flash: "+labels[choice])
+    })
+  }
+  async function timerMenu() {
+    await run(async()=>{
+      const values = [0,3,10] as const
+      const choice = await Dialog.actionSheet({title:"Temporizador",actions:values.map(v=>({label:(v ? v+" segundos" : "Desligado")+(v===timerRef.current ? " ✓" : "")})),cancelButton:true})
+      if (choice === null) return
+      timerRef.current = values[choice]; setTimer(values[choice]); say(values[choice] ? "Foto após "+values[choice]+" segundos" : "Temporizador desligado")
+    })
+  }
+  async function ratioMenu() {
+    await run(async()=>{
+      const values = ["4:3","16:9"] as const
+      const choice = await Dialog.actionSheet({title:"Proporção da foto",message:"A foto final é recortada ao centro. O original permanece inteiro.",actions:values.map(v=>({label:v+(v===settingsRef.current.aspectRatio ? " ✓" : "")})),cancelButton:true})
+      if (choice === null) return
+      update({...settingsRef.current,aspectRatio:values[choice]}); say("Foto final em "+values[choice])
+    })
+  }
+  function TimestampPage() {
+    const dismissSettings = Navigation.useDismiss()
+    const [value,setValue] = useState(settingsRef.current)
+    function change(patch: Partial<Settings>) { const next = {...settingsRef.current,...patch}; update(next); setValue(next) }
+    return <NavigationStack preferredColorScheme="dark"><ScrollView><VStack alignment="leading" spacing={24} padding={20}>
+      <HStack><Text font="title2">Timestamp</Text><Spacer /><Button title="Concluir" buttonStyle="glass" action={dismissSettings} /></HStack>
+      <Text font="body">Data, hora e localização ficam sempre juntas, no mesmo conjunto.</Text>
+      <Text font="caption">Sem permissão ou sinal, a localização aparece como indisponível. Nenhuma coordenada é inventada.</Text>
+      <Picker title="Fonte" value={value.timestampFont} onChanged={next=>change({timestampFont:next})} pickerStyle="menu">
+        <Text tag="system">Sistema</Text><Text tag="serif">Serifada</Text><Text tag="mono">Monoespaçada</Text>
+      </Picker>
+      <Picker title="Data e hora" value={value.timestampFormat} onChanged={next=>change({timestampFormat:next})} pickerStyle="menu">
+        <Text tag="numeric">Numérico</Text><Text tag="long">Data por extenso · hora h/min/s</Text>
+      </Picker>
+      <Picker title="Canto do timestamp" value={value.timestampCorner} onChanged={next=>change({timestampCorner:next})} pickerStyle="menu">
+        <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text>
+        <Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
+      </Picker>
+      <Text font="headline">Localização e mapa</Text>
+      <Text font="caption">Localização usa o GPS do aparelho. Endereço e mapa consultam os serviços Apple; a foto não é enviada. O mapa é opcional.</Text>
+      <Picker title="GPS" value={value.gps ? "on" : "off"} onChanged={next=>{change({gps:next === "on"}); if (next === "on") void locate(); else {fixRef.current=null;setFix(null)}}} pickerStyle="menu">
+        <Text tag="off">Desligado</Text><Text tag="on">Ativado</Text>
+      </Picker>
+      <Picker title="Mapa de satélite" value={value.map ? "on" : "off"} onChanged={next=>change({map:next === "on"})} pickerStyle="menu">
+        <Text tag="off">Não incluir</Text><Text tag="on">Incluir quando houver GPS</Text>
+      </Picker>
+      <Picker title="Tamanho do mapa" value={value.mapScale} onChanged={next=>change({mapScale:next})} pickerStyle="menu">
+        <Text tag="small">Pequeno</Text><Text tag="medium">Médio</Text><Text tag="large">Grande</Text>
+      </Picker>
+      <Picker title="Canto do mapa" value={value.mapCorner} onChanged={next=>change({mapCorner:next})} pickerStyle="menu">
+        <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
+      </Picker>
+      <Text font="headline">Imagem ou logotipo</Text>
+      <Text font="caption">Escolha a imagem em Padrão, na lateral da câmera. A proporção da arte é preservada.</Text>
+      <Picker title="Canto da imagem" value={value.logoCorner} onChanged={next=>change({logoCorner:next})} pickerStyle="menu">
+        <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
+      </Picker>
+      <Text font="caption">Sem GPS válido, o conjunto continua mostrando data, hora e localização indisponível; o mapa não é inventado.</Text>
+      <Text font="caption">As mudanças valem para as próximas fotos. Vídeos não recebem timestamp nesta versão.</Text>
+    </VStack></ScrollView></NavigationStack>
+  }
+  async function openSettings() { await run(async()=>{await Navigation.present({element:<TimestampPage />})}) }
+  async function chooseProfile() {
+    await run(async () => {
+      const selected = await Dialog.actionSheet({title:"Escolha um padrão",actions:PROFILE_IDS.map(id=>({label:id+(id === settingsRef.current.profile ? " ✓" : "")})),cancelButton:true})
+      if (selected === null) return
+      update({...settingsRef.current,profile:PROFILE_IDS[selected]}); say("Padrão "+PROFILE_IDS[selected]+" selecionado")
     })
   }
   async function save() {
@@ -200,7 +366,7 @@ function CameraPage() {
   async function editProfile() {
     await run(async () => {
       const current = settingsRef.current, id = current.profile, profile = current.profiles[id]
-      const choice = await Dialog.actionSheet({title:"Padrão "+id,actions:[{label:"Editar título"},{label:"Editar observação / serviço"},{label:"Escolher logotipo nos Arquivos"},{label:"Remover logotipo"},{label:"Posição: "+(current.position === "bottom" ? "rodapé" : "topo")},{label:"Tamanho: "+(current.size === "regular" ? "normal" : "compacto")}],cancelButton:true})
+      const choice = await Dialog.actionSheet({title:"Padrão "+id,actions:[{label:"Editar título"},{label:"Editar observação / serviço"},{label:"Escolher logotipo nos Arquivos"},{label:"Remover logotipo"},{label:"Tamanho: "+(current.size === "regular" ? "normal" : "compacto")}],cancelButton:true})
       if (choice === null) return
       const next = JSON.parse(JSON.stringify(current)) as Settings
       if (choice === 0 || choice === 1) {
@@ -219,8 +385,7 @@ function CameraPage() {
         const path = Path.join(folder,"logo-"+id+"-"+Date.now()+".png")
         await FileManager.writeAsData(path,data); next.profiles[id].logoPath = path
       } else if (choice === 3) next.profiles[id].logoPath = null
-      else if (choice === 4) next.position = current.position === "bottom" ? "top" : "bottom"
-      else if (choice === 5) next.size = current.size === "regular" ? "compact" : "regular"
+      else if (choice === 4) next.size = current.size === "regular" ? "compact" : "regular"
       update(next); say("Padrão salvo para as próximas fotos")
     })
   }
@@ -286,52 +451,69 @@ function CameraPage() {
     return () => { alive.current = false; receive = () => {} }
   },[])
 
-  function SideButton(props: {title: string; symbol: string; action: () => void; disabled?: boolean}) {
-    return <Button title={props.title} systemImage={props.symbol} action={props.action} disabled={busy || props.disabled}
-      font="caption" foregroundStyle="white" padding={10} glassEffect accessibilityLabel={props.title} />
+  function SideButton(props: {title: string; symbol: string; action: () => void; disabled?: boolean; value?:string; hint?:string}) {
+    return <Button action={props.action} disabled={busy || props.disabled} buttonStyle="plain"
+      accessibilityLabel={props.title} accessibilityValue={props.value} accessibilityHint={props.hint}>
+      <VStack spacing={4} frame={{minWidth:60,minHeight:44}} padding={4}>
+        <Image systemName={props.symbol} font="title3" />
+        <Text font="caption2">{props.title}</Text>
+      </VStack>
+    </Button>
   }
-  return <NavigationStack onCameraCaptureEvent={{isEnabled:!!camera && !closing,primaryAction:event=>{if(event.phase === "ended") void capture()}}}>
+  return <NavigationStack preferredColorScheme="dark" onCameraCaptureEvent={{isEnabled:!!camera && !closing,primaryAction:event=>{if(event.phase === "ended") void shutter()}}}>
     <GeometryReader>{geometry => {
-      const width = geometry.size.width, height = geometry.size.height
-      return <VStack spacing={10} background="#071017" foregroundStyle="white" padding={12} frame={{width,height}}>
-        <HStack>
-          <VStack alignment="leading" spacing={2}>
-            <Text font="headline" foregroundStyle="#6FDED2">MOMENTRA</Text>
-            <Text font="caption2" foregroundStyle="#B6C7D1">CAPTURE. LOCATE. REMEMBER.</Text>
-          </VStack>
-          <Spacer />
-          <Button title="Fechar" systemImage="xmark" disabled={busy} action={()=>{void closeCamera()}} accessibilityLabel="Fechar câmera" />
-        </HStack>
-        <ZStack frame={{maxWidth:"infinity",maxHeight:"infinity"}}>
-          {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspect" frame={{maxWidth:"infinity",maxHeight:"infinity"}} cornerRadius={20} masksToBounds /> : <Text font="callout">{status}</Text>}
-          {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="#071017" frame={{width:Math.min(width*0.58,280),height:Math.min(height*0.32,280)}} cornerRadius={12} /> : null}
+      const width = geometry.size.width, height = geometry.size.height, compact = height < 500
+      const glass = {glass:UIGlass.regular(),shape:{type:"rect" as const,cornerRadius:24}}
+      return <VStack spacing={compact ? 6 : 12} background="#071017" foregroundStyle="white" padding={12} frame={{width,height}}>
+        <GlassEffectContainer><HStack spacing={18}>
+          <Button buttonStyle="glass" disabled={busy || mode === "video"} accessibilityLabel="Flash" accessibilityValue={flash} action={()=>{void flashMenu()}}><Image systemName={flash === "off" ? "bolt.slash.fill" : flash === "auto" ? "bolt.badge.a" : "bolt.fill"} foregroundStyle={flash === "off" ? "white" : "#FFD60A"} frame={{minWidth:44,minHeight:44}} /></Button>
+          <Button buttonStyle="glass" disabled={busy || mode === "video"} accessibilityLabel="Temporizador" accessibilityValue={timer ? timer+" segundos" : "Desligado"} action={()=>{void timerMenu()}}><HStack spacing={3} frame={{minWidth:44,minHeight:44}}><Image systemName="timer" /><Text font="caption">{timer ? timer+"s" : ""}</Text></HStack></Button>
+          <Button title={settings.aspectRatio} buttonStyle="glass" disabled={busy || mode === "video"} accessibilityLabel="Proporção" action={()=>{void ratioMenu()}} frame={{minWidth:44,minHeight:44}} />
+          <Button buttonStyle="glass" disabled={busy} accessibilityLabel="Configurações" action={()=>{void openSettings()}}><Image systemName="gearshape" frame={{minWidth:44,minHeight:44}} /></Button>
+        </HStack></GlassEffectContainer>
+        <ZStack frame={{maxWidth:"infinity",maxHeight:"infinity",minHeight:compact ? 40 : 160}}>
+          {camera ? <CaptureVideoPreviewView session={camera.session} videoDevice={camera.device} videoGravity="resizeAspect" frame={{maxWidth:"infinity",maxHeight:"infinity"}} cornerRadius={24} masksToBounds /> : <Text font="callout">{status}</Text>}
+          {preview && previewImage ? <Image image={previewImage} resizable scaleToFit background="#071017" frame={{width:Math.min(width*0.50,260),height:Math.min(height*0.30,260)}} cornerRadius={16} /> : null}
           <HStack alignment="center">
-            <VStack spacing={16}>
-              <SideButton title={settings.profile} symbol="square.stack" action={()=>update({...settingsRef.current,profile:PROFILE_IDS[(PROFILE_IDS.indexOf(settingsRef.current.profile)+1)%PROFILE_IDS.length]})} />
-              <SideButton title="Padrão" symbol="slider.horizontal.3" action={()=>{void editProfile()}} />
-              <SideButton title={settings.stamp ? "Carimbo ✓" : "Sem carimbo"} symbol="text.viewfinder" action={()=>update({...settingsRef.current,stamp:!settingsRef.current.stamp})} />
-            </VStack>
+            <GlassEffectContainer><ScrollView frame={{width:82,maxHeight:compact ? Math.max(44,height-330) : 270}}>
+              <VStack spacing={compact ? 2 : 8} padding={6} glassEffect={glass} accessibilityElement="contain">
+                <SideButton title={settings.profile} symbol="square.stack" disabled={mode === "video"} hint="Escolher padrão do carimbo" action={()=>{void chooseProfile()}} />
+                <SideButton title="Padrão" symbol="slider.horizontal.3" disabled={mode === "video"} hint="Editar título, observação e logotipo" action={()=>{void editProfile()}} />
+                <SideButton title={settings.stamp ? "Carimbo ✓" : "Sem carimbo"} symbol="text.viewfinder" disabled={mode === "video"} value={settings.stamp ? "Ligado" : "Desligado"} action={()=>update({...settingsRef.current,stamp:!settingsRef.current.stamp})} />
+              </VStack>
+            </ScrollView></GlassEffectContainer>
             <Spacer />
-            <VStack spacing={16}>
-              <SideButton title={settings.gps ? "GPS ✓" : "GPS"} symbol="location" action={()=>{void gpsMenu()}} />
-              <SideButton title={torch ? "Luz ✓" : "Luz"} symbol="flashlight.on.fill" disabled={!camera?.device.hasTorch} action={()=>{void run(async()=>{await cameraRef.current!.device.setTorchMode(torch ? "off" : "on");setTorch(!torch)})}} />
-              <SideButton title="Recentes" symbol="photo.on.rectangle" action={()=>{void history()}} />
-            </VStack>
+            <GlassEffectContainer><ScrollView frame={{width:82,maxHeight:compact ? Math.max(44,height-330) : 270}}>
+              <VStack spacing={compact ? 2 : 8} padding={6} glassEffect={glass} accessibilityElement="contain">
+                <SideButton title={settings.gps ? "GPS ✓" : "GPS"} symbol="location" disabled={mode === "video"} value={settings.gps ? "Ligado" : "Desligado"} action={()=>{void gpsMenu()}} />
+                <SideButton title={torch ? "Luz ✓" : "Luz"} symbol="flashlight.on.fill" disabled={!camera?.device.hasTorch} value={torch ? "Ligada" : "Desligada"} action={()=>{void run(async()=>{await cameraRef.current!.device.setTorchMode(torch ? "off" : "on");setTorch(!torch)})}} />
+                <SideButton title="Recentes" symbol={mode === "video" ? "video" : "photo.on.rectangle"} action={()=>{if (mode === "video") void videoHistory(); else void history()}} />
+              </VStack>
+            </ScrollView></GlassEffectContainer>
           </HStack>
         </ZStack>
-        <HStack>
-          <Button title={preview ? "Câmera" : "Prévia"} systemImage={preview ? "camera" : "photo"} disabled={busy || (!preview && !last)} action={()=>{ if (preview && !camera) void run(restoreCamera); else setPreview(!preview) }} />
+        <HStack spacing={10}>
+          {mode === "photo" ? <Button title={preview ? "Câmera" : "Prévia"} systemImage="photo" font="caption" buttonStyle="glass" disabled={busy || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}} /> : null}
           <Spacer />
-          <Button title={busy ? "Aguarde" : "Fotografar"} systemImage="camera.circle.fill" font="title" foregroundStyle="#6FDED2" disabled={busy || !camera} action={()=>{void capture()}} accessibilityLabel="Fotografar" />
-          <Spacer />
-          <Button title={last?.saved ? "Salva ✓" : "Salvar"} systemImage="square.and.arrow.down" disabled={!last || busy || last.saved} action={()=>{void save()}} />
+          {mode === "photo" ? <Button title={last?.saved ? "Salva ✓" : "Salvar"} systemImage="square.and.arrow.down" font="caption" buttonStyle="glass" disabled={!last || busy || last.saved} action={()=>{void save()}} /> : <Button title={lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"} font="caption" buttonStyle="glass" disabled={!lastVideo || busy || lastVideo.saved} action={()=>{void saveVideo()}} />}
+          {mode === "photo" ? <Button accessibilityLabel="Exportar" buttonStyle="glass" disabled={!last || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" frame={{minWidth:44,minHeight:44}} /></Button> : null}
+          <Button buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" frame={{minWidth:44,minHeight:44}} /></Button>
         </HStack>
-        <ScrollView frame={{height:height < 500 ? 36 : 64}}><Text font="caption" foregroundStyle="#B6C7D1">{status}</Text></ScrollView>
-        <HStack>
-          <Text font="caption2" foregroundStyle="#8196A3">{settings.gps ? coordinates(validFix(fix,Date.now())) : "GPS desligado"} · v{VERSION}</Text>
-          <Spacer />
-          <Button title="Exportar" disabled={!last || busy} font="caption" action={()=>{void exportFiles()}} />
-        </HStack>
+        <ScrollView frame={{height:compact ? 28 : 46}}><Text font="caption" foregroundStyle="#B6C7D1">{status}</Text></ScrollView>
+        {!compact && mode === "photo" ? <Text font="caption2" foregroundStyle="#B6C7D1">{settings.profile} · {settings.gps ? coordinates(validFix(fix,Date.now())) : "GPS desligado"}</Text> : null}
+        <Button buttonStyle="plain" disabled={(!recording && !countdown && busy) || !camera}
+          accessibilityLabel={countdown ? "Cancelar temporizador" : recording ? "Parar gravação" : mode === "photo" ? "Fotografar" : "Gravar vídeo"}
+          accessibilityHint={mode === "photo" ? "Captura uma foto com o padrão selecionado" : "Toque novamente para parar"}
+          action={()=>{void shutter()}}>
+          <ZStack frame={{width:compact ? 60 : 76,height:compact ? 60 : 76}}>
+            <Image systemName="circle" font={compact ? 58 : 74} foregroundStyle="white" />
+            <Image systemName={recording ? "stop.fill" : "circle.fill"} font={recording ? 28 : compact ? 46 : 60} foregroundStyle={mode === "photo" ? "white" : "#FF514D"} />
+          {countdown ? <Text font="title" foregroundStyle="black">{String(countdown)}</Text> : null}
+          </ZStack>
+        </Button>
+        <Picker title="Modo de captura" value={mode} onChanged={(next: "video" | "photo")=>{void changeMode(next)}} pickerStyle="segmented" disabled={initializing || busy || recording} frame={{width:Math.min(width-48,280),minHeight:44}} cornerRadius={24} accessibilityLabel="Modo de captura">
+          <Text tag="video">Vídeo</Text><Text tag="photo">Câmera</Text>
+        </Picker>
       </VStack>
     }}</GeometryReader>
   </NavigationStack>
@@ -340,6 +522,8 @@ async function main() {
   try { await Navigation.present({element:<CameraPage />,modalPresentationStyle:"fullScreen"}) }
   finally {
     closing = true; unsubscribe()
+    // Finalize recording before waiting for its pending promise (including external dismissal).
+    if (ownedMovie) await ownedMovie.stopRecording().catch(()=>{})
     // Wait for in-flight capture/writes before disposing the camera or exiting.
     await pending?.catch(()=>{})
     const old = ownedSession; ownedSession = null

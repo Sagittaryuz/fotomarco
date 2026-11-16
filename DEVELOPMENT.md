@@ -48,3 +48,32 @@ As declarações completas do host são sincronizadas pelo Scripting CLI a parti
 - https://github.com/ScriptingApp/scripting-app-development
 
 Documentação efetivamente lida: AVCaptureSession, Camera Control/capture handoff/events, Photos, Location, MapSnapshotter, Canvas, ImageRenderer, ImageIO, UIImage, DocumentPicker, Storage, Dialog, GeometryReader e Liquid Glass.
+
+
+## Atualização 0.3.0 · interface amigável e Liquid Glass
+
+Fonte: pedido direto do Marcos, encaminhado pelo coordenador em 16/11/2026; correção específica: parte inferior só seletor deslizável Vídeo à esquerda / Câmera à direita, obturador simples logo acima. Mantidos perfis e controles laterais.
+
+Implementado material nativo regular em dois rails independentes, um vidro por rail, filhos plain, VoiceOver contain/labels/values/hints, seleção explícita de perfil e texto em português. Picker segmented usa seleção nativa e transição do sistema. Não forçamos animação que ignore Reduzir Movimento. A renderização real e redução de transparência precisam de aparelho.
+
+Vídeo usa sessão exclusiva reconstruída com preset high, movie output e entrada de microfone. O botão físico segue o modo ativo. Gravação impede mudança de modo/fechamento normal; segundo toque finaliza. Fechamento externo finaliza movie antes de aguardar promise pendente. Falhas liberam bloqueio e permitem voltar a foto. Não há carimbo no vídeo. Sem exclusão automática. Último vídeo persistido e salvamento manual deduplicado.
+
+Causas evitadas: startRecording só resolve após finalização, portanto stop antes de await pending ao sair; seletor bloqueado durante start/permissão evita duas sessões; controles exclusivos de foto não ficam ativos em vídeo.
+
+Validação: check e 26 testes núcleo/render + 15 fluxos mock. Testes novos verificam rails, ordem e posição dos controles, modo bloqueado na inicialização/gravação, ciclo vídeo/salvar/voltar foto, falha na gravação, fechamento externo e layout compacto estrutural. Não equivale a validação SwiftUI/AVFoundation física.
+
+Checklist nativo adicional: iOS26+, aparência e legibilidade sobre cena clara/escura; fonte ampliada/VoiceOver/Reduzir Transparência/Reduzir Movimento; seletor Vídeo/Câmera em retrato/paisagem; permissão de microfone negada e retorno à foto; gravar áudio/vídeo, parar pelo toque e botão físico; finalizar interrupção; salvar uma vez e reabrir; manter carimbos/fotos anteriores intactos.
+
+Fontes oficiais consultadas:
+- https://scriptingapp.github.io/guide/View%20Modifiers/Liquid%20Glass/Liquid%20Glass%20Effect/
+- https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass
+- Documentação Scripting App Store: Picker, Button, Accessibility, Preferred Color Scheme, AVCaptureSession Quick Start e Session Control, Photos.saveVideo.
+
+
+### Complementos finais da especificação 0.3.0
+
+Pedidos diretos adicionais encaminhados em 16/11: topo com flash, timer, proporção e configurações; popup marca opção atual. Nova página timestamp agrupa data/hora/localização; fontes, formatos e quatro cantos. Página também contém GPS, mapa opcional, escala visual/canto do mapa e canto de logo/arte. O nome do modo longo explicita data por extenso com hora h/min/s, não números de hora escritos por palavras.
+
+Implementado recorte central 4:3/16:9 após orientação EXIF, com original preservado; grava composição inclusive sem carimbo. Visor segue enquadramento nativo e não simula máscara exata de crop. Flash usa flashMode documentado no capturePhoto; amarelo representa opção armada, hardware não foi verificado. Temporizador cancelável de 3/10s, snapshot de hora/GPS após a contagem. Configurações migradas com defaults; data/hora/localização nunca têm chaves de visibilidade independentes.
+
+Mapa/logo separados do bloco timestamp e posicionados com resolução de colisão. 44 testes núcleo/render (inclui 576 combinações de overlays) + 19 testes de fluxo mock; não são homologação de APIs/vidro/fonte/permissões em iPhone. Último checklist nativo deve incluir flash auto/on/off em aparelho com/sem suporte, timer/cancelar, proporção/crop, configuração/persistência, quatro cantos, mapa/logo, texto longo e telas pequenas.
