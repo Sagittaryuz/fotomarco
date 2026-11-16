@@ -1,4 +1,4 @@
-# Momentra · 0.3.5
+# Momentra · 0.3.6
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -42,6 +42,10 @@ GPS continua opt-in, com atualização a cada 30 segundos enquanto a câmera est
 O mapa disponível e correspondente é reaproveitado no disparo. A foto congela hora, GPS e preferências no instante real da captura (depois do temporizador). A sobreposição some ao revisar uma foto e no modo Vídeo, que não recebe carimbo. A prévia de tela e a foto compartilham o desenho, mas paridade exata de pixels/campo de visão requer teste físico.
 
 **Provedor de mapas atual: Apple.** Login Google opcional foi integrado na 0.3.4, somente para identidade. Google Maps continua indisponível: envolve billing e restrições de incorporação da imagem. Não foi ativada cobrança. Veja [condições Google](CLOUD_STORAGE.md).
+
+## Configurações · 0.3.6
+
+Página clara com cartões brancos, ícones circulares coloridos de 44 pt e botão Voltar à câmera. Interruptores controlam carimbo, GPS, mapa e permissão de salvamento manual na galeria, sem representar o estado das permissões do iOS. Fontes, formatos, cantos e escala continuam selecionáveis. Conta Google foi preservada; Google Fotos e somente nuvem aparecem apenas como aviso de indisponibilidade, sem botão inoperante. A câmera permanece escura.
 
 ## Controles superiores e configurações
 
@@ -111,7 +115,7 @@ node --test backend/worker.test.mjs
 
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
 - 47 verificações de núcleo/layout/renderização sintética.
-- 29 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 30 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
 - 14 testes isolados do módulo Google e 29 do backend OAuth, com dados sintéticos.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.

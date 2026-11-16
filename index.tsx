@@ -1,5 +1,5 @@
 import {
-  Button, Canvas, CaptureVideoPreviewView, GeometryReader, GlassEffectContainer, Picker, HStack, VStack, ZStack, Text, Image,
+  Button, Toggle, Canvas, CaptureVideoPreviewView, GeometryReader, GlassEffectContainer, Picker, HStack, VStack, ZStack, Text, Image,
   Navigation, NavigationStack, Script, Path, Spacer, ScrollView,
   useEffect, useRef, useState,
 } from "scripting"
@@ -362,52 +362,50 @@ function CameraPage() {
     const dismissSettings = Navigation.useDismiss()
     const [value,setValue] = useState(settingsRef.current)
     function change(patch: Partial<Settings>) { const next = {...settingsRef.current,...patch}; update(next); setValue(next) }
-    return <NavigationStack preferredColorScheme="dark"><ScrollView><VStack alignment="leading" spacing={24} padding={20}>
-      <HStack><Text font="title2">Timestamp</Text><Spacer /><Button title="Concluir" buttonStyle="glass" action={dismissSettings} /></HStack>
-      <Text font="body">Data, hora e localização ficam sempre juntas, no mesmo conjunto.</Text>
-      <Text font="caption">Sem permissão ou sinal, a localização aparece como indisponível. Nenhuma coordenada é inventada.</Text>
-      <Picker title="Fonte" value={value.timestampFont} onChanged={next=>change({timestampFont:next})} pickerStyle="menu">
-        <Text tag="system">Sistema</Text><Text tag="serif">Serifada</Text><Text tag="mono">Monoespaçada</Text>
-      </Picker>
-      <Picker title="Data e hora" value={value.timestampFormat} onChanged={next=>change({timestampFormat:next})} pickerStyle="menu">
-        <Text tag="numeric">Numérico</Text><Text tag="long">Data por extenso · hora h/min/s</Text>
-      </Picker>
-      <Picker title="Canto do timestamp" value={value.timestampCorner} onChanged={next=>change({timestampCorner:next})} pickerStyle="menu">
-        <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text>
-        <Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
-      </Picker>
-      <Text font="headline">Localização e mapa</Text>
-      <Text font="caption">Localização usa o GPS do aparelho. Endereço e mapa consultam os serviços Apple; a foto não é enviada. O mapa é opcional.</Text>
-      <Picker title="GPS" value={value.gps ? "on" : "off"} onChanged={next=>{change({gps:next === "on"}); if (next === "on") void locate(); else {fixRef.current=null;setFix(null)}}} pickerStyle="menu">
-        <Text tag="off">Desligado</Text><Text tag="on">Ativado</Text>
-      </Picker>
-      <Picker title="Mapa de satélite" value={value.map ? "on" : "off"} onChanged={next=>change({map:next === "on"})} pickerStyle="menu">
-        <Text tag="off">Não incluir</Text><Text tag="on">Incluir quando houver GPS</Text>
-      </Picker>
-      <Picker title="Tamanho do mapa" value={value.mapScale} onChanged={next=>change({mapScale:next})} pickerStyle="menu">
-        <Text tag="small">Pequeno</Text><Text tag="medium">Médio</Text><Text tag="large">Grande</Text>
-      </Picker>
-      <Picker title="Canto do mapa" value={value.mapCorner} onChanged={next=>change({mapCorner:next})} pickerStyle="menu">
-        <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
-      </Picker>
-      <Text font="headline">Imagem ou logotipo</Text>
-      <Text font="caption">Escolha a imagem em Padrão, na lateral da câmera. A proporção da arte é preservada.</Text>
-      <Picker title="Canto da imagem" value={value.logoCorner} onChanged={next=>change({logoCorner:next})} pickerStyle="menu">
-        <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
-      </Picker>
-      <Text font="caption">Sem GPS válido, o conjunto continua mostrando data, hora e localização indisponível; o mapa não é inventado.</Text>
-      <Text font="headline">Armazenamento</Text>
-      <Picker title="Cópia na galeria Fotos" value={value.allowGallery ? "manual" : "never"} onChanged={next=>change({allowGallery:next === "manual"})} pickerStyle="menu">
-        <Text tag="manual">Permitir salvamento manual</Text><Text tag="never">Não salvar na galeria</Text>
-      </Picker>
-      <Text font="caption">Capturas continuam guardadas localmente no Momentra. Desativar a galeria bloqueia Salvar e Salvar vídeo, mas não apaga cópias anteriores. Isso ainda não é armazenamento somente na nuvem.</Text>
-      <GoogleAccount />
-      <Text font="headline">Google Fotos · indisponível</Text>
-      <Text font="caption">O login acima identifica sua conta, mas não autoriza acesso às fotos. Envio e galeria Google Fotos ainda não estão disponíveis. Nenhuma foto é enviada ao Google por esta versão.</Text>
-      <Button title="Somente nuvem · indisponível" disabled buttonStyle="bordered" />
-      <Text font="caption">A integração poderá acessar as fotos enviadas pelo próprio Momentra, não toda a biblioteca automaticamente. A API do Google Fotos não é destinada a guardar dados internos empresariais. Captura, carimbo e envio também precisam de armazenamento temporário no aparelho.</Text>
-      <Text font="caption">As mudanças valem para as próximas fotos. Vídeos não recebem timestamp nesta versão.</Text>
-    </VStack></ScrollView></NavigationStack>
+    function Icon(props:{symbol:string;color:string}) {
+      return <Image systemName={props.symbol} font="title3" foregroundStyle="white" frame={{width:44,height:44}} background={props.color} cornerRadius={22} masksToBounds accessibilityHidden />
+    }
+    function Row(props:{symbol:string;color:string;children:any}) {
+      return <HStack spacing={12} padding={{leading:14,trailing:14,top:10,bottom:10}} frame={{minHeight:64}}><Icon symbol={props.symbol} color={props.color} />{props.children}</HStack>
+    }
+    function Rule() { return <HStack frame={{height:1}} background="#E5E5EA" padding={{leading:70,trailing:14}} /> }
+    function Group(props:{title:string;children:any;note?:string}) {
+      return <VStack alignment="leading" spacing={8}>
+        <Text font="headline" foregroundStyle="#63636C" padding={{leading:18}}>{props.title}</Text>
+        <VStack spacing={0} background="white" cornerRadius={24}>{props.children}</VStack>
+        {props.note ? <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>{props.note}</Text> : null}
+      </VStack>
+    }
+    return <NavigationStack preferredColorScheme="light"><VStack spacing={0} background="#F2F2F7" foregroundStyle="#17171B" accessibilityIdentifier="momentra.settings">
+      <ZStack frame={{height:64}} background="white">
+        <Text font="headline">Configurações</Text>
+        <HStack padding={{leading:16,trailing:16}}><Button buttonStyle="plain" accessibilityLabel="Voltar à câmera" action={dismissSettings} frame={{width:44,height:44}} background="#F2F2F7" cornerRadius={22} masksToBounds><Image systemName="chevron.left" font="title3" frame={{width:44,height:44}} /></Button><Spacer /></HStack>
+      </ZStack>
+      <ScrollView><VStack alignment="leading" spacing={28} padding={{leading:16,trailing:16,top:28,bottom:32}}>
+        <HStack><Spacer /><VStack spacing={8}><Icon symbol="camera.fill" color="#3478F6" /><Text font="title2">Momentra</Text><Text font="subheadline" foregroundStyle="#63636C">{ "v"+VERSION }</Text></VStack><Spacer /></HStack>
+        <Group title="Data, hora e localização" note="As três informações ficam sempre juntas. Sem permissão ou sinal, a localização aparece como indisponível. As mudanças valem para as próximas fotos; vídeos não recebem carimbo.">
+          <Row symbol="text.viewfinder" color="#3478F6"><Toggle title="Carimbo na foto" value={value.stamp} onChanged={next=>change({stamp:next})} toggleStyle="switch" /></Row><Rule />
+          <Row symbol="textformat" color="#6854DE"><Picker title="Fonte" value={value.timestampFont} onChanged={next=>change({timestampFont:next})} pickerStyle="menu"><Text tag="system">Sistema</Text><Text tag="serif">Serifada</Text><Text tag="mono">Monoespaçada</Text></Picker></Row><Rule />
+          <Row symbol="calendar" color="#F28B32"><Picker title="Data e hora" value={value.timestampFormat} onChanged={next=>change({timestampFormat:next})} pickerStyle="menu"><Text tag="numeric">Numérico</Text><Text tag="long">Data por extenso · hora h/min/s</Text></Picker></Row><Rule />
+          <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do timestamp" value={value.timestampCorner} onChanged={next=>change({timestampCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
+        </Group>
+        <Group title="Localização e mapa" note="GPS é uma opção do Momentra, não o estado da permissão do iOS. Ao ativar, o aparelho pode pedir autorização. Endereço e mapa usam serviços Apple; a foto não é enviada. Sem GPS válido, nenhum mapa é inventado.">
+          <Row symbol="location.fill" color="#F28B32"><Toggle title="GPS" value={value.gps} onChanged={next=>{change({gps:next}); if (next) void locate(); else {fixRef.current=null;setFix(null)}}} toggleStyle="switch" /></Row><Rule />
+          <Row symbol="map.fill" color="#4EBF64"><Toggle title="Mapa de satélite" value={value.map} onChanged={next=>change({map:next})} toggleStyle="switch" /></Row><Rule />
+          <Row symbol="arrow.up.left.and.arrow.down.right" color="#3478F6"><Picker title="Tamanho do mapa" value={value.mapScale} onChanged={next=>change({mapScale:next})} pickerStyle="menu"><Text tag="small">Pequeno</Text><Text tag="medium">Médio</Text><Text tag="large">Grande</Text></Picker></Row><Rule />
+          <Row symbol="viewfinder" color="#3478F6"><Picker title="Canto do mapa" value={value.mapCorner} onChanged={next=>change({mapCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
+        </Group>
+        <Group title="Imagem ou logotipo" note="Escolha a imagem em Padrão, na lateral da câmera. A proporção da arte é preservada.">
+          <Row symbol="photo.fill" color="#4EBF64"><Picker title="Canto da imagem" value={value.logoCorner} onChanged={next=>change({logoCorner:next})} pickerStyle="menu"><Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text></Picker></Row>
+        </Group>
+        <Group title="Armazenamento" note="Ativado permite salvar manualmente no Fotos; não salva automaticamente nem indica permissão do iOS. Desativado bloqueia Salvar e Salvar vídeo, sem apagar cópias anteriores. As capturas continuam locais no Momentra, não na nuvem.">
+          <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
+        </Group>
+        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /></VStack></Group>
+        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos e armazenamento somente na nuvem ainda não estão disponíveis. Nenhuma foto é enviada ao Google. A captura e o carimbo usam armazenamento local temporário.</Text>
+        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>Momentra · As opções acima são funções reais do aplicativo. Permissões do sistema são solicitadas apenas ao usar o recurso correspondente.</Text>
+      </VStack></ScrollView>
+    </VStack></NavigationStack>
   }
   async function openSettings() { await run(async()=>{setShowGoogleIntro(false);Storage.set("momentra.google.intro.v1",true);await Navigation.present({element:<TimestampPage />})}) }
   async function chooseProfile() {

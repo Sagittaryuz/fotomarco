@@ -1,5 +1,5 @@
 // Pure data/layout logic. No device services or network calls.
-export const VERSION = "0.3.5"
+export const VERSION = "0.3.6"
 export const PROFILE_IDS = ["HAMOA", "PIRESCO", "PESSOAL"] as const
 export type ProfileID = typeof PROFILE_IDS[number]
 export type Profile = { title: string; note: string; logoPath: string | null; accent: string }
