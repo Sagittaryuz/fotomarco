@@ -3,7 +3,7 @@ const fs = require('node:fs'), path = require('node:path'), esbuild = require('e
   const root=path.resolve(__dirname,'..');
   const m=JSON.parse(fs.readFileSync(path.join(root,'script.json'),'utf8'));
   for(const key of ['name','version','icon','color']) if(!m[key]) throw Error('Missing manifest '+key);
-  if(m.version!=='0.5.0') throw Error('Version mismatch');
+  if(m.version!=='0.5.1') throw Error('Version mismatch');
   const program=ts.createProgram([path.join(root,'core.ts'),path.join(root,'stamp.ts'),path.join(root,'camera_layout.ts')],{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,lib:['lib.es2022.d.ts','lib.dom.d.ts']});
   const errors=ts.getPreEmitDiagnostics(program); if(errors.length) throw Error(ts.formatDiagnosticsWithColorAndContext(errors,{getCanonicalFileName:x=>x,getCurrentDirectory:()=>root,getNewLine:()=> '\n'}));
   await esbuild.build({entryPoints:[path.join(root,'index.tsx')],bundle:true,write:false,format:'esm',target:'es2022',jsx:'automatic',jsxImportSource:'scripting',external:['scripting','scripting/jsx-runtime']});

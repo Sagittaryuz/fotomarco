@@ -448,13 +448,13 @@ function CameraPage() {
           <Row symbol="externaldrive.fill" color="#3478F6"><Picker title="Destino das novas fotos" value={value.storageMode} onChanged={next=>change({storageMode:next})} pickerStyle="menu"><Text tag="local">Local</Text><Text tag="cloud">Somente nuvem após verificar</Text></Picker></Row><Rule />
           <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" disabled={value.storageMode === "cloud"} value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
         </Group>
-        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /><Button title="Google Fotos pessoal" buttonStyle="bordered" action={()=>{void Navigation.present({element:<GooglePhotosPage capture={lastRef.current} onArchived={()=>{setPreviewImage(null);setPreview(false);say("Estado da nuvem atualizado. Consulte Google Fotos pessoal para visualizar.")}} />})}} /><DiagnosticReport /></VStack></Group>
+        <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /><Button title="Google Fotos pessoal" buttonStyle="bordered" action={()=>{void Navigation.present({modalPresentationStyle:"fullScreen",element:<GooglePhotosPage capture={lastRef.current} onArchived={()=>{setPreviewImage(null);setPreview(false);say("Estado da nuvem atualizado. Consulte Google Fotos pessoal para visualizar.")}} />})}} /><DiagnosticReport /></VStack></Group>
         <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos pessoal depende de ativação do serviço, consentimento separado e envio manual da foto selecionada. No modo somente nuvem, JPEGs do Momentra só são removidos após confirmar original e final idênticos no Google. Qualquer divergência mantém cópia local pendente.</Text>
         <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>Momentra · As opções acima são funções reais do aplicativo. Permissões do sistema são solicitadas apenas ao usar o recurso correspondente.</Text>
       </VStack></ScrollView>
     </VStack></NavigationStack>
   }
-  async function openSettings() { await run(async()=>{setShowGoogleIntro(false);Storage.set("momentra.google.intro.v1",true);await Navigation.present({element:<TimestampPage />})}) }
+  async function openSettings() { await run(async()=>{setShowGoogleIntro(false);Storage.set("momentra.google.intro.v1",true);await Navigation.present({element:<TimestampPage />,modalPresentationStyle:"fullScreen"})}) }
   async function chooseProfile() {
     await run(async () => {
       const selected = await Dialog.actionSheet({title:"Escolha um padrão",actions:PROFILE_IDS.map(id=>({label:id+(id === settingsRef.current.profile ? " ✓" : "")})),cancelButton:true})
@@ -538,7 +538,7 @@ function CameraPage() {
         const archived=getCloudArchiveState(record.id)
         if (record.storageIntent === "cloud" && archived) {
           lastRef.current=record;setLast(record);setPreviewImage(null);setPreview(false)
-          await Navigation.present({element:<GooglePhotosPage capture={record} onArchived={()=>{setPreviewImage(null);setPreview(false)}} />})
+          await Navigation.present({modalPresentationStyle:"fullScreen",element:<GooglePhotosPage capture={record} onArchived={()=>{setPreviewImage(null);setPreview(false)}} />})
           return
         }
         say("Arquivo não encontrado no armazenamento local"); return

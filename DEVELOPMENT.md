@@ -197,3 +197,10 @@ Verificação:48core/layout/render+39runtime+123Node=210checks aprovados, checkm
 Aviso `/privacy` atualizado apenas no texto de retenção para refletir nova opção; OAuth, escopos, segredos, gate e custo permanecem iguais. Publicação desse texto e do script0.5.0 será verificada antes da entrega consolidada.
 
 Aviso público0.5.0 publicado e confirmado: Worker58ffc7d5, fonteSHA25641dfac8a1178e95dc4cbc5dc5a398cc57972d99ecfe85055490b6e97b12678c1. Apenas texto de retenção mudou. Coordenador conferiu `/privacy`200 com SHA256/doisitens/JSON e `/health`200/version2/photos:true. Não houve alteraçãoOAuth/escopos/secrets/gate/billing, nem upload/limpeza reais. Prévia sintética320pt dos estados parcial/nuvem inspecionada sem cortes; rótulos traduzidos para português. GetState sem recibo não presume arquivo local existente.
+
+
+## 0.5.1 · apresentação e abertura direta
+
+Pedido da chamada16/11 às21:11UTC, encaminhado pelo coordenador: janela pequena e atalho passando primeiro pelo Scripting; tratar juntos. Inspeção da distribuição5ae85cee mostrou que a câmera já solicita fullScreen; causa no aparelho não reproduzida. Três apresentações internas não tinham estilo explícito e portanto usavam pageSheet padrão documentado. Configurações e Photos agora também pedem fullScreen. Sem alterações na geometria4:3, dados, OAuth ou backend.
+
+Guia de abertura agora distingue run_single/Momentra (executar sem duplicar), open/Momentra (editor) e AbrirApp. O host Scripting é necessário; não foi prometido eliminar sua transição. Atalho instalado não acessível, não alterado. Regressão mock confere câmera, configurações repetidas e ambos caminhos Photos. Check+48core/layout/render+40runtime+123Node passaram. Tipos completos e testes físicos do iPhone não executados. Nenhuma captura ou envio real.

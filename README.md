@@ -1,4 +1,4 @@
-# Momentra · 0.5.0
+# Momentra · 0.5.1
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -157,3 +157,12 @@ Depois do envio, ambos os itens são baixados novamente por URLs novas e compara
 “Somente nuvem” aqui significa **sem os dois JPEGs persistidos no Momentra após a verificação**, não ausência de qualquer dado no iPhone: JSON/IDs, processamento temporário e possível cache do Scripting continuam locais. Galeria, exportações anteriores e arquivos externos não são tocados. A disponibilidade futura dos itens depende da conta Google e de não serem excluídos ali pelo usuário.
 
 A implementação foi testada com dados sintéticos/mocks, inclusive falha parcial e mudança de conta. Nenhuma foto real foi enviada e nenhum arquivo real do usuário foi removido durante o desenvolvimento. O ciclo nativo completo ainda requer a validação única no iPhone.
+
+
+## 0.5.1 · Abertura e páginas em tela cheia
+
+Câmera mantém apresentação `fullScreen`; Configurações e Google Fotos agora também solicitam tela cheia, em vez da folha modal padrão. Isso corrige a configuração dessas páginas, não comprova a causa de uma câmera pequena no aparelho.
+
+Para abrir direto a execução instalada, o atalho deve usar **Abrir URLs** com `scripting://run_single/Momentra`, não somente **Abrir App Scripting**, nem `scripting://open/Momentra` (editor). A execução única evita instâncias concorrentes. O Scripting continua sendo o aplicativo hospedeiro e pode aparecer durante a transição; um script não se torna aplicativo iOS independente. O atalho já instalado no iPhone não foi alterado remotamente.
+
+Fontes: [execução e URL schemes](https://scriptingapp.github.io/guide/Script/Script), [apresentação de páginas](https://scriptingapp.github.io/guide/Views/Present%20views/Present%20a%20simple%20view/). A aparência e a transição reais dependem da versão instalada e ainda requerem validação no aparelho.
