@@ -214,7 +214,7 @@ function CameraPage() {
         } catch (error) { record.warnings.push("Carimbo falhou; original preservado: "+String(error)) }
       }
       remember(record); await persistRecord(record)
-      say((record.stamped ? "Foto com carimbo pronta" : options.stamp ? "Original preservado, sem carimbo" : "Foto original pronta")+". Toque em Salvar."+(record.warnings.length ? " "+record.warnings.join(". ") : ""))
+      say((record.stamped ? "Foto com carimbo pronta" : options.stamp ? "Original preservado, sem carimbo" : "Foto original pronta")+(settingsRef.current.allowGallery ? ". Toque em Salvar." : ". Guardada localmente no Momentra, sem cópia na galeria e sem envio à nuvem.")+(record.warnings.length ? " "+record.warnings.join(". ") : ""))
       if (options.gps) void locate()
     })
   }
@@ -250,7 +250,7 @@ function CameraPage() {
         ownedMovie = cameraRef.current!.movie!
         const file = await ownedMovie.startRecording(path)
         const video = {file,saved:false}; rememberVideo(video)
-        say("Vídeo guardado no Momentra. Toque em Salvar vídeo. Sem carimbo.")
+        say(settingsRef.current.allowGallery ? "Vídeo guardado no Momentra. Toque em Salvar vídeo. Sem carimbo." : "Vídeo guardado localmente no Momentra, sem galeria e sem envio à nuvem. Sem carimbo.")
       } finally { ownedMovie = null; recordingRef.current = false; setRecording(false); stopping.current = false }
     })
   }
@@ -272,6 +272,7 @@ function CameraPage() {
   }
   async function saveVideo() {
     await run(async () => {
+      if (!settingsRef.current.allowGallery) { say("Galeria desativada. Vídeo preservado no armazenamento local do Momentra; não está na nuvem."); return }
       const video = lastVideoRef.current; if (!video || video.saved) return
       if (!await Photos.saveVideo(video.file)) { say("Fotos não confirmou. O vídeo continua no Momentra."); return }
       const saved = {...video,saved:true}; rememberVideo(saved); say("Vídeo salvo no Fotos")
@@ -340,6 +341,15 @@ function CameraPage() {
         <Text tag="top-left">Superior esquerdo</Text><Text tag="top-right">Superior direito</Text><Text tag="bottom-left">Inferior esquerdo</Text><Text tag="bottom-right">Inferior direito</Text>
       </Picker>
       <Text font="caption">Sem GPS válido, o conjunto continua mostrando data, hora e localização indisponível; o mapa não é inventado.</Text>
+      <Text font="headline">Armazenamento</Text>
+      <Picker title="Cópia na galeria Fotos" value={value.allowGallery ? "manual" : "never"} onChanged={next=>change({allowGallery:next === "manual"})} pickerStyle="menu">
+        <Text tag="manual">Permitir salvamento manual</Text><Text tag="never">Não salvar na galeria</Text>
+      </Picker>
+      <Text font="caption">Capturas continuam guardadas localmente no Momentra. Desativar a galeria bloqueia Salvar e Salvar vídeo, mas não apaga cópias anteriores. Isso ainda não é armazenamento somente na nuvem.</Text>
+      <Text font="headline">Google Fotos · não configurado</Text>
+      <Text font="caption">Login e envio ainda indisponíveis: é necessário configurar o aplicativo OAuth e um retorno de login compatível. Nenhuma foto é enviada ao Google por esta versão.</Text>
+      <Button title="Somente nuvem · indisponível" disabled buttonStyle="bordered" />
+      <Text font="caption">A integração poderá acessar as fotos enviadas pelo próprio Momentra, não toda a biblioteca automaticamente. A API do Google Fotos não é destinada a guardar dados internos empresariais. Captura, carimbo e envio também precisam de armazenamento temporário no aparelho.</Text>
       <Text font="caption">As mudanças valem para as próximas fotos. Vídeos não recebem timestamp nesta versão.</Text>
     </VStack></ScrollView></NavigationStack>
   }
@@ -353,6 +363,7 @@ function CameraPage() {
   }
   async function save() {
     await run(async () => {
+      if (!settingsRef.current.allowGallery) { say("Galeria desativada. Foto preservada no armazenamento local do Momentra; não está na nuvem."); return }
       const record = lastRef.current
       if (!record || record.saved) return
       say("Salvando no Fotos…")
@@ -495,7 +506,7 @@ function CameraPage() {
         <HStack spacing={10}>
           {mode === "photo" ? <Button title={preview ? "Câmera" : "Prévia"} systemImage="photo" font="caption" buttonStyle="glass" disabled={busy || (!preview && !last)} action={()=>{if (preview && !camera) void run(restoreCamera); else setPreview(!preview)}} /> : null}
           <Spacer />
-          {mode === "photo" ? <Button title={last?.saved ? "Salva ✓" : "Salvar"} systemImage="square.and.arrow.down" font="caption" buttonStyle="glass" disabled={!last || busy || last.saved} action={()=>{void save()}} /> : <Button title={lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"} font="caption" buttonStyle="glass" disabled={!lastVideo || busy || lastVideo.saved} action={()=>{void saveVideo()}} />}
+          {mode === "photo" ? <Button title={last?.saved ? "Salva ✓" : "Salvar"} systemImage="square.and.arrow.down" font="caption" buttonStyle="glass" disabled={!settings.allowGallery || !last || busy || last.saved} action={()=>{void save()}} /> : <Button title={lastVideo?.saved ? "Vídeo salvo ✓" : "Salvar vídeo"} font="caption" buttonStyle="glass" disabled={!settings.allowGallery || !lastVideo || busy || lastVideo.saved} action={()=>{void saveVideo()}} />}
           {mode === "photo" ? <Button accessibilityLabel="Exportar" buttonStyle="glass" disabled={!last || busy} action={()=>{void exportFiles()}}><Image systemName="square.and.arrow.up" frame={{minWidth:44,minHeight:44}} /></Button> : null}
           <Button buttonStyle="plain" disabled={busy} accessibilityLabel="Fechar" action={()=>{void closeCamera()}}><Image systemName="xmark" frame={{minWidth:44,minHeight:44}} /></Button>
         </HStack>

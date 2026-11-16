@@ -77,3 +77,12 @@ Pedidos diretos adicionais encaminhados em 16/11: topo com flash, timer, propor�
 Implementado recorte central 4:3/16:9 após orientação EXIF, com original preservado; grava composição inclusive sem carimbo. Visor segue enquadramento nativo e não simula máscara exata de crop. Flash usa flashMode documentado no capturePhoto; amarelo representa opção armada, hardware não foi verificado. Temporizador cancelável de 3/10s, snapshot de hora/GPS após a contagem. Configurações migradas com defaults; data/hora/localização nunca têm chaves de visibilidade independentes.
 
 Mapa/logo separados do bloco timestamp e posicionados com resolução de colisão. 44 testes núcleo/render (inclui 576 combinações de overlays) + 19 testes de fluxo mock; não são homologação de APIs/vidro/fonte/permissões em iPhone. Último checklist nativo deve incluir flash auto/on/off em aparelho com/sem suporte, timer/cancelar, proporção/crop, configuração/persistência, quatro cantos, mapa/logo, texto longo e telas pequenas.
+
+
+## 0.3.1 · armazenamento sem galeria e avaliação Google Fotos
+
+Fonte: pedido Marcos encaminhado em 16/11 para opção somente nuvem, login Google inicial e acessar fotos capturadas pelo app. Pesquisa oficial documentada em CLOUD_STORAGE.md. A parte completa depende de cliente OAuth, callback compatível, consentimento e adequação da política Google, especialmente uso empresarial. Não configurados nem contornados.
+
+Implementado apenas o componente viável independente: allowGallery persistente (default true preserva manual anterior), controles e handlers bloqueiam gravação em Photos quando false, textos deixam claro que arquivos seguem locais e não houve envio. Opção somente nuvem permanece indisponível, sem falso botão de login. Sem remoção de arquivos, criação de credenciais, acesso externo ou custos. Check + 44 testes core + 20 runtime mock passaram.
+
+Próximo passo: resolver destino profissional/pessoal e configuração OAuth aprovada, validar iPhone antes de habilitar uploads ou descarte temporário. Não transformar consentimento de login em autorização para upload de arquivos antigos.

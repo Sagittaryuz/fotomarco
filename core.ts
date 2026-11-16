@@ -1,12 +1,12 @@
 // Pure data/layout logic. No device services or network calls.
-export const VERSION = "0.3.0"
+export const VERSION = "0.3.1"
 export const PROFILE_IDS = ["HAMOA", "PIRESCO", "PESSOAL"] as const
 export type ProfileID = typeof PROFILE_IDS[number]
 export type Profile = { title: string; note: string; logoPath: string | null; accent: string }
 export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right"
 export type Settings = {
   mapScale: "small" | "medium" | "large"; mapCorner: Corner; logoCorner: Corner
-  profile: ProfileID; stamp: boolean; gps: boolean; map: boolean
+  profile: ProfileID; allowGallery: boolean; stamp: boolean; gps: boolean; map: boolean
   timestampFont: "system" | "serif" | "mono"; timestampFormat: "numeric" | "long"
   timestampCorner: "top-left" | "top-right" | "bottom-left" | "bottom-right"; aspectRatio: "4:3" | "16:9"
   position: "bottom" | "top"; size: "compact" | "regular"; profiles: Record<ProfileID, Profile>
@@ -14,7 +14,7 @@ export type Settings = {
 export type Fix = { latitude: number; longitude: number; timestamp: number }
 export type CaptureRecord = { handoffKey?: string; id: string; original: string; file: string; capturedAt: number; profile: ProfileID; stamped: boolean; saved: boolean; fix: Fix | null; address: string; warnings: string[] }
 export function defaults(): Settings {
-  return { mapScale:"medium", mapCorner:"bottom-right", logoCorner:"top-left", profile: "HAMOA", stamp: true, gps: false, map: false, timestampFont: "system", timestampFormat: "numeric", timestampCorner: "bottom-left", aspectRatio: "4:3", position: "bottom", size: "regular", profiles: {
+  return { allowGallery:true, mapScale:"medium", mapCorner:"bottom-right", logoCorner:"top-left", profile: "HAMOA", stamp: true, gps: false, map: false, timestampFont: "system", timestampFormat: "numeric", timestampCorner: "bottom-left", aspectRatio: "4:3", position: "bottom", size: "regular", profiles: {
     HAMOA: { title: "HAMOA", note: "", logoPath: null, accent: "#6FDED2" },
     PIRESCO: { title: "PIRESCO ENGENHARIA", note: "", logoPath: null, accent: "#E8C787" },
     PESSOAL: { title: "MOMENTRA", note: "", logoPath: null, accent: "#BBAAFF" },
@@ -27,7 +27,7 @@ export function normalizeSettings(raw: unknown): Settings {
   const d = defaults(); if (!raw || typeof raw !== "object") return d
   const r = raw as Partial<Settings>
   if (PROFILE_IDS.includes(r.profile as ProfileID)) d.profile = r.profile!
-  for (const key of ["stamp", "gps", "map"] as const) if (typeof r[key] === "boolean") d[key] = r[key]!
+  for (const key of ["stamp", "gps", "map", "allowGallery"] as const) if (typeof r[key] === "boolean") d[key] = r[key]!
   if (r.position === "top") d.position = "top"
   d.timestampCorner = r.position === "top" ? "top-left" : "bottom-left"
   if (["top-left","top-right","bottom-left","bottom-right"].includes(r.timestampCorner!)) d.timestampCorner = r.timestampCorner!

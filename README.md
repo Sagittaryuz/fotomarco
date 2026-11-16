@@ -1,4 +1,4 @@
-# Momentra · 0.3.0
+# Momentra · 0.3.1
 
 Câmera para **Scripting PRO no iPhone**, com controles laterais, padrões editáveis e carimbo gravado na foto.
 
@@ -55,6 +55,12 @@ O JPEG com carimbo tem até **3072 px no maior lado**, qualidade 94%, sem amplia
 
 O script inicia uma câmera customizada quando aberto normalmente. A Tela Bloqueada pode usar a câmera nativa do Scripting e entregar arquivos depois. Momentra processa fotos recebidas, conserva a hora fornecida pelo lote e não usa o GPS atual para simular a localização daquela captura. Lotes repetidos são deduplicados por lote/arquivo. Vídeos permanecem nos Arquivos Capturados do Scripting e não recebem carimbo nesta versão.
 
+## Galeria e nuvem
+
+Em Configurações, **Cópia na galeria Fotos → Não salvar na galeria** bloqueia o salvamento de fotos e vídeos no Fotos. Arquivos continuam guardados **localmente no Momentra**; cópias anteriores não são apagadas. Isso não equivale a somente nuvem.
+
+Google Fotos, login e upload ainda não estão configurados. A tela sinaliza a indisponibilidade. A integração exige OAuth/retorno compatível e consentimento; a API permite listar conteúdo criado pelo próprio aplicativo e não é destinada a dados internos empresariais. Consulte [avaliação e próximos passos](CLOUD_STORAGE.md).
+
 ## Armazenamento e recuperação
 
 - Originais, JPEGs finais e registros JSON ficam na pasta `Momentra` do armazenamento de documentos do Scripting.
@@ -79,7 +85,7 @@ npm test
 
 - Sintaxe de todos os módulos TSX, manifesto e TypeScript estrito do núcleo puro.
 - 44 verificações de núcleo/layout/renderização sintética.
-- 19 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
+- 20 fluxos do aplicativo com APIs nativas simuladas, incluindo erros, cancelamento, eventos físicos repetidos, encerramento, orientação e entrega de fotos da câmera nativa.
 - As imagens geradas em `.validation` são **sintéticas**, não screenshots do iOS.
 - **Não executado aqui:** importação no iPhone, tipagem integral contra os arquivos `.d.ts` sincronizados pelo aparelho, captura real, permissões iOS, Liquid Glass real, mapa Apple e salvamento real no Fotos.
 

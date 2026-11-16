@@ -1,0 +1,35 @@
+# Armazenamento e Google Fotos · avaliação 16/11/2026
+
+## Entregue na 0.3.1
+
+Configurações → Cópia na galeria Fotos permite bloquear salvamento na galeria para fotos e vídeos. A preferência persiste; os handlers também bloqueiam a chamada Photos, não apenas os botões. O padrão mantém o comportamento anterior: salvar manualmente. Cópias existentes não são apagadas.
+
+**Isto não é modo somente nuvem:** originais, composição e vídeos continuam no armazenamento local do Momentra. Google Fotos aparece explicitamente não configurado; não há login falso, upload, listagem remota nem exclusão automática. Nenhuma credencial ou infraestrutura foi criada, nenhuma conta foi acessada e nenhum arquivo foi transmitido.
+
+## Viabilidade e condições
+
+A Google Photos Library API suporta upload e listagem de mídia criada pelo próprio aplicativo. Desde a mudança de março de 2025, não permite simplesmente listar toda a biblioteca do usuário. Para outras fotos, existe Picker com seleção explícita, não acesso geral silencioso. Fontes: [introdução](https://developers.google.com/photos/library/guides/get-started-library), [mudanças](https://developers.google.com/photos/support/updates).
+
+O fluxo mínimo requer projeto Google, Library API ativada, cliente OAuth compatível, tela de consentimento e autorização do usuário. Escopos necessários para a funcionalidade proposta: photoslibrary.appendonly e photoslibrary.readonly.appcreateddata. Contas de serviço não servem. Aplicações distribuídas podem exigir verificação OAuth e política de privacidade; configurar/testar pessoalmente não equivale a aprovação pública. [Autorização](https://developers.google.com/photos/overview/authorization).
+
+Scripting tem OAuth2 com PKCE/state/renovação e Keychain por script. Porém seu callback padrão scripting://oauth_callback/... não prova compatibilidade com os redirects/clientes Google. Não inventar client ID, usar client secret em código público, copiar credenciais de outro app, desativar state nem recorrer ao antigo fluxo copiar/colar. É necessário validar uma rota admitida pelo Google e pelo host: integração nativa apropriada, ou serviço HTTPS sob controle do projeto, com tokens protegidos e retorno vinculado à sessão. Isso depende de configuração e, potencialmente, infraestrutura adicional ainda não estabelecida. Fontes: [Scripting OAuth2](https://scriptingapp.github.io/guide/Utilities/OAuth2), [Google iOS](https://developers.google.com/identity/sign-in/ios/start-integrating), [migração OOB](https://developers.google.com/identity/protocols/oauth2/resources/oob-migration).
+
+**Restrição importante para perfis de trabalho:** a política Google Photos proíbe guardar dados internos empresariais e criar substituto de galeria geral. A integração pessoal que acrescenta câmera/carimbo pode ser viável, mas fotos profissionais devem usar um destino apropriado de arquivos/objetos, após definição e autorização. Não encaminhar automaticamente imagens de trabalho para Google Fotos. [Política](https://developers.google.com/photos/support/api-policy).
+
+## Critérios antes de habilitar “somente nuvem”
+
+1. Definir destino compatível com uso pessoal/profissional e aprovar configurações, permissões e eventuais custos.
+2. Validar OAuth no iPhone, armazenamento de tokens seguro, cancelamento, revogação e troca de conta sem misturar mídias.
+3. Exibir consentimento/privacidade antes do primeiro envio. Autenticar não autoriza upload oculto de arquivos antigos.
+4. Capturar/processar em espaço temporário privado, sem chamar Photos.savePhoto/saveVideo. Mesmo modo nuvem precisa de bytes temporários no aparelho.
+5. Persistir fila e estado; preservar arquivo se offline, sem espaço remoto, token expirado ou falha. Não chamar arquivo “na nuvem” só porque houve login.
+6. Upload dos bytes + mediaItems.batchCreate, conferir sucesso individual e salvar ID remoto. Respostas ambíguas não permitem apagar fonte nem repetir criação sem reconciliação.
+7. Liberar apenas arquivos temporários do próprio Momentra após comprovação de cópia equivalente recuperável e dentro da autorização aplicável. Nunca apagar galeria/arquivos anteriores implicitamente. Descrever retenção offline ao usuário.
+8. Listar itens criados pela mesma integração; respeitar paginação, expiração de URLs, indisponibilidade, desconexão e exclusão. Sem thumbnail cache permanente se o modo prometer apenas retenção temporária.
+9. Testar fluxo real capturar→enviar→abrir remoto→limpar temporário, sem salvar na galeria; falhas, interrupções e duplicidade.
+
+A API faz upload em duas fases e consome armazenamento da conta Google (não significa espaço ilimitado); recomenda upload retomável em dispositivos móveis. [Upload oficial](https://developers.google.com/photos/library/guides/upload-media).
+
+## Verificação desta entrega
+
+44 testes núcleo/render + 20 fluxos simulados e check de manifesto/TypeScript/bundle. Teste novo confirma bloqueio de Photos para foto/vídeo mesmo invocando handlers, persistência da preferência e preservação local. Sem autenticação/envio/teste Google real ou teste físico no iPhone. A função completa somente nuvem está pendente, não concluída.
