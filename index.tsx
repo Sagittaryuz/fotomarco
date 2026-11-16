@@ -402,7 +402,7 @@ function CameraPage() {
           <Row symbol="photo.on.rectangle" color="#4EBF64"><Toggle title="Cópia na galeria Fotos" value={value.allowGallery} onChanged={next=>change({allowGallery:next})} toggleStyle="switch" /></Row>
         </Group>
         <Group title="Conta"><VStack alignment="leading" padding={18}><GoogleAccount /></VStack></Group>
-        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos e armazenamento somente na nuvem ainda não estão disponíveis. Nenhuma foto é enviada ao Google. A captura e o carimbo usam armazenamento local temporário.</Text>
+        <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}} accessibilityIdentifier="momentra.cloud-unavailable">Google Fotos e armazenamento somente na nuvem ainda não estão disponíveis. Nenhuma foto é enviada ao Google. A captura e o carimbo usam armazenamento local; os arquivos permanecem no Momentra.</Text>
         <Text font="caption" foregroundStyle="#63636C" padding={{leading:18,trailing:18}}>Momentra · As opções acima são funções reais do aplicativo. Permissões do sistema são solicitadas apenas ao usar o recurso correspondente.</Text>
       </VStack></ScrollView>
     </VStack></NavigationStack>
