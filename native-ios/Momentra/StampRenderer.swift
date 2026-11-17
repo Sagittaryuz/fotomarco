@@ -1,6 +1,8 @@
 import CoreLocation
 import UIKit
 import MapKit
+import ImageIO
+import UniformTypeIdentifiers
 
 struct StampSnapshot {
     let capturedAt: Date
@@ -104,7 +106,58 @@ enum StampRenderer {
             let textRect = CGRect(x: box.minX + margin + mapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
             text.draw(in: textRect, withAttributes: attrs)
         }
-        return result.jpegData(compressionQuality: 0.95)
+        guard let outputImage = result.cgImage,
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let original = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        let properties = PhotoMetadata.properties(original: original, snapshot: snapshot, size: size)
+        CGImageDestinationAddImage(destination, outputImage, properties as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
+    }
+}
+
+enum PhotoMetadata {
+    static func properties(original: [String: Any], snapshot: StampSnapshot?, size: CGSize) -> [String: Any] {
+        var result: [String: Any] = [
+            kCGImagePropertyOrientation as String: 1,
+            kCGImagePropertyPixelWidth as String: Int(size.width),
+            kCGImagePropertyPixelHeight as String: Int(size.height),
+            kCGImageDestinationLossyCompressionQuality as String: 0.95
+        ]
+        // A whitelist prevents old GPS, thumbnails, and arbitrary location metadata from leaking.
+        func copyFields(_ dictionary: CFString, _ keys: [CFString]) {
+            guard let source = original[dictionary as String] as? [String: Any] else { return }
+            var selected: [String: Any] = [:]
+            for key in keys { if let value = source[key as String] { selected[key as String] = value } }
+            if !selected.isEmpty { result[dictionary as String] = selected }
+        }
+        copyFields(kCGImagePropertyTIFFDictionary, [kCGImagePropertyTIFFMake, kCGImagePropertyTIFFModel, kCGImagePropertyTIFFSoftware])
+        copyFields(kCGImagePropertyExifDictionary, [kCGImagePropertyExifDateTimeOriginal, kCGImagePropertyExifExposureTime, kCGImagePropertyExifFNumber, kCGImagePropertyExifISOSpeedRatings, kCGImagePropertyExifFocalLength, kCGImagePropertyExifLensModel])
+        if let location = snapshot?.location, snapshot?.gpsEnabled == true {
+            let latitude = location.coordinate.latitude, longitude = location.coordinate.longitude
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "yyyy:MM:dd"
+            let date = formatter.string(from: location.timestamp)
+            formatter.dateFormat = "HH:mm:ss.SSS"
+            var gps: [String: Any] = [
+                kCGImagePropertyGPSLatitude as String: abs(latitude),
+                kCGImagePropertyGPSLatitudeRef as String: latitude < 0 ? "S" : "N",
+                kCGImagePropertyGPSLongitude as String: abs(longitude),
+                kCGImagePropertyGPSLongitudeRef as String: longitude < 0 ? "W" : "E",
+                kCGImagePropertyGPSDateStamp as String: date,
+                kCGImagePropertyGPSTimeStamp as String: formatter.string(from: location.timestamp)
+            ]
+            if location.verticalAccuracy >= 0 {
+                gps[kCGImagePropertyGPSAltitude as String] = abs(location.altitude)
+                gps[kCGImagePropertyGPSAltitudeRef as String] = location.altitude < 0 ? 1 : 0
+            }
+            result[kCGImagePropertyGPSDictionary as String] = gps
+        }
+        return result
     }
 }
 
