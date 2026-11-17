@@ -69,6 +69,18 @@ struct CameraScreen: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                     }
+                    if !camera.zoomOptions.isEmpty {
+                        HStack(spacing: 8) {
+                            ForEach(camera.zoomOptions, id: \.self) { factor in
+                                Button { camera.setZoom(factor) } label: {
+                                    Text("\(Int(factor))×").font(.caption.bold())
+                                        .frame(width: 44, height: 36)
+                                        .background(abs(camera.zoomFactor - factor) < 0.01 ? .white : .black.opacity(0.7), in: Capsule())
+                                        .foregroundStyle(abs(camera.zoomFactor - factor) < 0.01 ? .black : .white)
+                                }.accessibilityLabel("Zoom \(Int(factor)) vezes")
+                            }
+                        }.padding(.bottom, 10)
+                    }
                     Picker("Modo", selection: $mode) {
                         ForEach(CaptureMode.allCases, id: \.self) { value in
                             Text(value.rawValue).tag(value).disabled(value == .video && !camera.videoAvailable)

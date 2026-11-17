@@ -23,6 +23,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     @Published private(set) var isRecording = false
     @Published private(set) var isFinishingRecording = false
     @Published private(set) var videoAvailable = false
+    @Published private(set) var zoomOptions: [CGFloat] = []
+    @Published private(set) var zoomFactor: CGFloat = 1
     @Published private(set) var hasFlash = false
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
 
@@ -61,6 +63,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         input = candidate
         configured = true
         DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo }
+        publishZoom(for: device)
     }
 
     func stop() {
@@ -113,6 +116,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.input = replacement
                 self.session.commitConfiguration()
                 DispatchQueue.main.async { self.hasFlash = device.hasFlash }
+                self.publishZoom(for: device)
             } else {
                 if self.session.canAddInput(previous) { self.session.addInput(previous) }
                 else {
@@ -126,6 +130,29 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.session.commitConfiguration()
                 self.report("Não foi possível trocar de câmera.")
             }
+        }
+    }
+
+    private func publishZoom(for device: AVCaptureDevice) {
+        let lower = device.minAvailableVideoZoomFactor
+        let upper = device.maxAvailableVideoZoomFactor
+        let options: [CGFloat] = [1, 2, 3].filter { $0 >= lower && $0 <= upper }
+        let current = device.videoZoomFactor
+        DispatchQueue.main.async { self.zoomOptions = options; self.zoomFactor = current }
+    }
+
+    func setZoom(_ factor: CGFloat) {
+        guard ready, !isSwitching, !isCapturing, !isFinishingRecording else { return }
+        queue.async {
+            guard let device = self.input?.device,
+                  factor >= device.minAvailableVideoZoomFactor,
+                  factor <= device.maxAvailableVideoZoomFactor else { return }
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = factor
+                device.unlockForConfiguration()
+                DispatchQueue.main.async { self.zoomFactor = factor }
+            } catch { self.report("Não foi possível alterar o zoom da câmera.") }
         }
     }
 
