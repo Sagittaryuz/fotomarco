@@ -10,6 +10,7 @@ struct CameraScreen: View {
     @StateObject private var location = LocationService()
     @StateObject private var pressure = PressureService()
     @StateObject private var weather = ForecastService()
+    @StateObject private var updates = UpdateService()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
@@ -90,7 +91,12 @@ struct CameraScreen: View {
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape.fill").font(.title2)
                                 .frame(width: 44, height: 44)
-                        }.accessibilityLabel("Configurações").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
+                                .overlay(alignment: .topTrailing) {
+                                    if updates.availableVersion != nil {
+                                        Circle().fill(.red).frame(width: 10, height: 10).padding(3)
+                                    }
+                                }
+                        }.accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }.padding(.horizontal, 18)
                     Spacer(minLength: 8)
                     if countdown > 0 {
@@ -187,6 +193,7 @@ struct CameraScreen: View {
             }
         }
         .statusBarHidden()
+        .task { await updates.check() }
         .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
         .onChange(of: scenePhase) { _, phase in
@@ -232,6 +239,20 @@ struct CameraScreen: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 Form {
+                    Section("Atualizações") {
+                        if let version = updates.availableVersion {
+                            Text("Nova versão disponível: \(version)").font(.headline)
+                            Link("Abrir instruções da atualização", destination: UpdateService.releasesURL)
+                            Text("Baixe o IPA indicado e use o Signulous para assinar e instalar. A atualização não é instalada automaticamente.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button(updates.checking ? "Verificando…" : "Verificar atualizações") {
+                            Task { await updates.check() }
+                        }.disabled(updates.checking)
+                        if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
+                        Text("A consulta ao GitHub envia o IP da conexão para verificar versões publicadas.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     Section("Perfil do carimbo") {
                         Picker("Perfil", selection: $profile) {
                             Text("HAMOA").tag("HAMOA")
