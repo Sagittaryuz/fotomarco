@@ -19,6 +19,8 @@ info['GIDClientID'] = client
 types = info.setdefault('CFBundleURLTypes', [])
 if not any(reverse in item.get('CFBundleURLSchemes', []) for item in types):
     types.append({'CFBundleURLSchemes': [reverse]})
+if not any('momentra' in item.get('CFBundleURLSchemes', []) for item in types):
+    types.append({'CFBundleURLSchemes': ['momentra']})
 with path.open('wb') as f:
     plistlib.dump(info, f)
 print('Google iOS client configuration applied')

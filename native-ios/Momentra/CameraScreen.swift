@@ -15,6 +15,7 @@ struct CameraScreen: View {
     @StateObject private var pressure = PressureService()
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
+    @StateObject private var directUpdate = DirectUpdateAccess.shared
     @StateObject private var googlePhotos = GooglePhotosManager()
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
@@ -350,12 +351,20 @@ struct CameraScreen: View {
                     Section("Atualizações") {
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
-                            Link("Abrir instruções da atualização", destination: UpdateService.releasesURL)
+                            if directUpdate.ready {
+                                Button("Atualizar agora") { Task { await directUpdate.install(expectedVersion: version) } }
+                                    .disabled(directUpdate.busy)
+                            } else {
+                                Text("Para atualizar diretamente, ative uma vez pelo link pessoal de instalação.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                                Link("Ver instruções", destination: UpdateService.releasesURL)
+                            }
                         }
                         Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
                             Task { await updates.check(force: true) }
                         }.disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
+                        if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
                     }
                     Section("Conta Google") {
                         LabeledContent("Conta", value: GIDSignIn.sharedInstance.currentUser?.profile?.email ?? "Não conectada")
