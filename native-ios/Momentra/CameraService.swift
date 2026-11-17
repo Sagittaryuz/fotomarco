@@ -137,10 +137,15 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
             }
-            let rendered = snapshot.flatMap { StampRenderer.render(data, snapshot: $0) }
-            let imageData = rendered ?? data
-            if snapshot != nil && rendered == nil { self.report("Não foi possível aplicar o carimbo; a foto original será salva.") }
-            self.savePhoto(imageData)
+            guard let snapshot else { self.savePhoto(data); return }
+            StampMap.load(snapshot: snapshot, queue: self.queue) { map in
+                if snapshot.mapEnabled && snapshot.location != nil && map == nil {
+                    self.report("Mapa indisponível. A foto será salva com as demais informações.")
+                }
+                let rendered = StampRenderer.render(data, snapshot: snapshot, map: map)
+                if rendered == nil { self.report("Não foi possível aplicar o carimbo; a foto original será salva.") }
+                self.savePhoto(rendered ?? data)
+            }
         }
     }
 

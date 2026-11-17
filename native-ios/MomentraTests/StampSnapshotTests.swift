@@ -6,8 +6,9 @@ final class StampSnapshotTests: XCTestCase {
     func testDisabledGPSNeverAppearsInStamp() {
         let now = Date()
         let location = CLLocation(latitude: -17.9, longitude: -51.7)
-        let snapshot = StampSnapshot(capturedAt: now, gpsEnabled: false, location: location, heading: nil)
+        let snapshot = StampSnapshot(capturedAt: now, gpsEnabled: false, mapEnabled: true, location: location, heading: nil)
         XCTAssertNil(snapshot.location)
+        XCTAssertFalse(snapshot.mapEnabled)
         XCTAssertTrue(snapshot.lines.contains("Localização desativada"))
     }
 

@@ -6,6 +6,7 @@ struct CameraScreen: View {
     @StateObject private var location = LocationService()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
+    @AppStorage("native.map.enabled") private var mapEnabled = false
     @State private var showSettings = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -43,7 +44,7 @@ struct CameraScreen: View {
                     HStack {
                         Spacer().frame(maxWidth: .infinity)
                         Button {
-                            let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, location: location.location, heading: location.heading) : nil
+                            let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, location: location.location, heading: location.heading) : nil
                             camera.capture(snapshot: snapshot)
                         } label: {
                             Circle().fill(.white).padding(7)
@@ -77,7 +78,8 @@ struct CameraScreen: View {
                 Form {
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
-                    Text("O carimbo nativo está em desenvolvimento: inclui data e dados disponíveis do GPS. Mapa, endereço e demais opções ainda não foram migrados.")
+                    Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
+                    Text("O mapa usa o serviço MapKit da Apple quando o GPS e o mapa estão ativados. Endereço e demais opções ainda estão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .navigationTitle("Configurações")

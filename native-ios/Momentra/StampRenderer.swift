@@ -1,15 +1,18 @@
 import CoreLocation
 import UIKit
+import MapKit
 
 struct StampSnapshot {
     let capturedAt: Date
     let gpsEnabled: Bool
+    let mapEnabled: Bool
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
+        self.mapEnabled = gpsEnabled && mapEnabled
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
            location.horizontalAccuracy >= 0, location.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(location.timestamp) <= 60 {
@@ -42,7 +45,7 @@ struct StampSnapshot {
 }
 
 enum StampRenderer {
-    static func render(_ data: Data, snapshot: StampSnapshot) -> Data? {
+    static func render(_ data: Data, snapshot: StampSnapshot, map: UIImage? = nil) -> Data? {
         guard let image = UIImage(data: data) else { return nil }
         let size = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard size.width > 0, size.height > 0 else { return nil }
@@ -59,14 +62,51 @@ enum StampRenderer {
             paragraph.lineBreakMode = .byWordWrapping
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
             let text = snapshot.lines.joined(separator: "\n") as NSString
-            let textWidth = size.width - margin * 4
+            let mapSide = map == nil ? 0 : unit * 0.20
+            let mapGap = map == nil ? 0 : margin
+            let textWidth = size.width - margin * 4 - mapSide - mapGap
             let measured = text.boundingRect(with: CGSize(width: textWidth, height: size.height * 0.6), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil)
-            let height = ceil(measured.height) + margin * 2
+            let height = max(ceil(measured.height), mapSide) + margin * 2
             let box = CGRect(x: margin, y: size.height - margin - height, width: size.width - margin * 2, height: height)
             context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.65).cgColor)
             context.cgContext.fill(box)
-            text.draw(in: box.insetBy(dx: margin, dy: margin), withAttributes: attrs)
+            if let map {
+                let mapRect = CGRect(x: box.minX + margin, y: box.minY + margin, width: mapSide, height: mapSide)
+                map.draw(in: mapRect)
+                let markerSize = mapSide * 0.12
+                let marker = CGRect(x: mapRect.midX-markerSize/2, y: mapRect.midY-markerSize/2, width: markerSize, height: markerSize)
+                context.cgContext.setFillColor(UIColor.systemBlue.cgColor)
+                context.cgContext.fillEllipse(in: marker)
+                context.cgContext.setStrokeColor(UIColor.white.cgColor)
+                context.cgContext.setLineWidth(max(1, mapSide * 0.012))
+                context.cgContext.strokeEllipse(in: marker)
+            }
+            let textRect = CGRect(x: box.minX + margin + mapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
+            text.draw(in: textRect, withAttributes: attrs)
         }
         return result.jpegData(compressionQuality: 0.95)
+    }
+}
+
+enum StampMap {
+    // Completion is serialized onto the caller's queue and fires at most once.
+    static func load(snapshot: StampSnapshot, queue: DispatchQueue, completion: @escaping (UIImage?) -> Void) {
+        guard snapshot.mapEnabled, let location = snapshot.location else { completion(nil); return }
+        let options = MKMapSnapshotter.Options()
+        options.region = MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 350, longitudinalMeters: 350)
+        options.size = CGSize(width: 256, height: 256)
+        let snapshotter = MKMapSnapshotter(options: options)
+        var finished = false
+        let finish: (UIImage?) -> Void = { image in
+            guard !finished else { return }
+            finished = true
+            completion(image)
+        }
+        snapshotter.start(with: queue) { result, _ in finish(result?.image) }
+        queue.asyncAfter(deadline: .now() + 8) {
+            guard !finished else { return }
+            snapshotter.cancel()
+            finish(nil)
+        }
     }
 }
