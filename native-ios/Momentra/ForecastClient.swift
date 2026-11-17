@@ -21,9 +21,9 @@ enum ForecastCachePolicy {
     }
 
     static func retryDate(now: Date, expires: String?, retryAfter: String?, status: Int) -> Date {
-        var result = now.addingTimeInterval(status == 429 ? 86400 : 10800)
+        var result = now.addingTimeInterval(status == 429 || status == 503 ? 86400 : 10800)
         if let expiry = httpDate(expires), expiry > result { result = expiry }
-        if status == 429, let retryAfter {
+        if let retryAfter {
             if let seconds = Double(retryAfter), seconds.isFinite, seconds >= 0 {
                 result = seconds > 3_153_600_000 ? .distantFuture : max(result, now.addingTimeInterval(seconds))
             } else if let date = httpDate(retryAfter) { result = max(result, date) }
@@ -117,11 +117,13 @@ enum ForecastClient {
         try store.write(ForecastCacheRecord(requestedAt: now, retryAt: now.addingTimeInterval(86400), lastModified: previous?.lastModified, responseBody: previous?.responseBody), key: key)
         guard isForeground(), !Task.isCancelled else { throw ForecastError.inactive }
         let (data, response) = try await transport(request)
-        guard isForeground(), !Task.isCancelled else { throw ForecastError.inactive }
         let status = response.statusCode
         let retryAt = ForecastCachePolicy.retryDate(now: now, expires: response.value(forHTTPHeaderField: "Expires"), retryAfter: response.value(forHTTPHeaderField: "Retry-After"), status: status)
+        // Record server limits even if the response is invalid or the app loses foreground.
+        let conservativeRetry = max(now.addingTimeInterval(86400), retryAt)
+        try store.write(ForecastCacheRecord(requestedAt: now, retryAt: conservativeRetry, lastModified: previous?.lastModified, responseBody: previous?.responseBody), key: key)
+        guard isForeground(), !Task.isCancelled else { throw ForecastError.inactive }
         if status == 429 {
-            try store.write(ForecastCacheRecord(requestedAt: now, retryAt: retryAt, lastModified: previous?.lastModified, responseBody: previous?.responseBody), key: key)
             throw ForecastError.cooldown
         }
         guard status == 200 || status == 304 else { throw ForecastError.unavailable }

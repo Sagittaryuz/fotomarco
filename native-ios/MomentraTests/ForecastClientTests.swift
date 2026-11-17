@@ -47,6 +47,8 @@ final class ForecastClientTests: XCTestCase {
         XCTAssertTrue(lock.mayRequest(at: now.addingTimeInterval(10800)))
         let retry = ForecastCachePolicy.retryDate(now: now, expires: nil, retryAfter: "172800", status: 429)
         XCTAssertEqual(retry.timeIntervalSince(now), 172800, accuracy: 0.001)
+        let serviceUnavailable = ForecastCachePolicy.retryDate(now: now, expires: nil, retryAfter: "172800", status: 503)
+        XCTAssertEqual(serviceUnavailable.timeIntervalSince(now), 172800, accuracy: 0.001)
     }
 
     func testCorruptCacheDoesNotPermitRequest() throws {
@@ -57,5 +59,24 @@ final class ForecastClientTests: XCTestCase {
         let bad = ForecastCacheRecord(requestedAt: now, retryAt: now, lastModified: nil, responseBody: nil)
         try store.write(bad, key: "-17.1000,-51.1000")
         XCTAssertThrowsError(try store.read("-17.1000,-51.1000"))
+    }
+
+    func testInvalidResponseStillHonorsLongServerExpiry() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ForecastCacheStore(root: root)
+        let now = ISO8601DateFormatter().date(from: "2026-11-16T20:30:00Z")!
+        let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: -17.1, longitude: -51.1), altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: now)
+        let transport: ForecastClient.Transport = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Expires": "Wed, 18 Nov 2026 20:30:00 GMT"])!
+            return (Data("invalid".utf8), response)
+        }
+        do {
+            _ = try await ForecastClient.fetch(location: location, now: now, consent: true, isForeground: { true }, store: store, transport: transport)
+            XCTFail("Resposta inválida não deve ser usada")
+        } catch {}
+        let key = try XCTUnwrap(ForecastModel.coordinateKey(location.coordinate))
+        let record = try XCTUnwrap(store.read(key))
+        XCTAssertEqual(record.retryAt.timeIntervalSince(now), 172800, accuracy: 0.001)
     }
 }
