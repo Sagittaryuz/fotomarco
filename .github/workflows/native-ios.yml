@@ -27,6 +27,16 @@ jobs:
           APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
           test -f "$APP/Info.plist"
           test -f "$APP/Momentra"
+          if [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ]; then
+            CAPTURE="$APP/Extensions/MomentraCaptureExtension.appex"
+            CONTROL="$APP/PlugIns/MomentraCameraControl.appex"
+            test -f "$CAPTURE/MomentraCaptureExtension"
+            test -f "$CONTROL/MomentraCameraControl"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CAPTURE/Info.plist")" = 'br.com.momentra.camera.capture'
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CONTROL/Info.plist")" = 'br.com.momentra.camera.control'
+            test "$(/usr/libexec/PlistBuddy -c 'Print :EXAppExtensionAttributes:EXExtensionPointIdentifier' "$CAPTURE/Info.plist")" = 'com.apple.securecapture'
+            test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$CONTROL/Info.plist")" = 'com.apple.widgetkit-extension'
+          fi
           mkdir -p "$RUNNER_TEMP/Payload"
           ditto "$APP" "$RUNNER_TEMP/Payload/Momentra.app"
           ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
