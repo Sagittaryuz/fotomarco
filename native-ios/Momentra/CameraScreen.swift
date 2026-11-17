@@ -24,6 +24,7 @@ struct CameraScreen: View {
     @AppStorage("native.stamp.font") private var stampFont = "system"
     @AppStorage("native.logo.corner") private var logoCorner = "auto"
     @AppStorage("native.map.scale") private var mapScale = "medium"
+    @AppStorage("native.map.corner") private var mapCorner = "auto"
     @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
     @AppStorage("native.profile") private var profile = "HAMOA"
     @AppStorage("native.profile.hamoa.title") private var hamoaTitle = "HAMOA"
@@ -322,6 +323,15 @@ struct CameraScreen: View {
                         Text("Médio").tag("medium")
                         Text("Grande").tag("large")
                     }.disabled(!gpsEnabled || !stampEnabled || !mapEnabled)
+                    Picker("Posição do mapa na foto", selection: $mapCorner) {
+                        Text("Automática").tag("auto")
+                        Text("Superior esquerda").tag("top-left")
+                        Text("Superior direita").tag("top-right")
+                        Text("Inferior esquerda").tag("bottom-left")
+                        Text("Inferior direita").tag("bottom-right")
+                    }.disabled(!gpsEnabled || !stampEnabled || !mapEnabled)
+                    Text("O mapa pode ser deslocado para evitar sobreposição; a prévia é aproximada.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     Toggle("Endereço no carimbo", isOn: $addressEnabled).disabled(!gpsEnabled || !stampEnabled)
                     Toggle("Pressão do sensor", isOn: $pressureEnabled).disabled(!pressure.available || !stampEnabled)
                     if !pressure.available { Text("Sensor de pressão indisponível neste aparelho.").font(.footnote).foregroundStyle(.secondary) }
@@ -398,7 +408,7 @@ struct CameraScreen: View {
                         let data = try file.read(upToCount: 65_537) ?? Data()
                         let transfer = try SettingsTransfer.decode(data)
                         apply(transfer)
-                        importMessage = "Ajustes compatíveis importados. Posições laterais do texto e cantos do mapa ainda não são aplicados; os logotipos devem ser importados separadamente."
+                        importMessage = "Ajustes compatíveis importados. A posição lateral do texto ainda não é aplicada; os logotipos devem ser importados separadamente."
                     } catch {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
@@ -472,7 +482,7 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {
@@ -506,6 +516,7 @@ struct CameraScreen: View {
         if let format = s.timestampFormat { dateFormat = format }
         if let font = s.timestampFont { stampFont = font }
         if let scale = s.mapScale { mapScale = scale }
+        if let corner = s.mapCorner { mapCorner = corner }
         if let corner = s.logoCorner { logoCorner = corner }
         photoAspect = s.aspectRatio
     }

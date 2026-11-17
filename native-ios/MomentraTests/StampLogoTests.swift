@@ -59,4 +59,18 @@ final class StampLogoTests: XCTestCase {
             snapshot: snapshot, address: String(repeating: "Rua Exemplo ", count: 20))
         XCTAssertNotNil(result)
     }
+
+    func testSeparateMapAndLogoAvoidEachOtherAndStamp() throws {
+        let image = CGSize(width: 400, height: 600)
+        let stamp = CGRect(x: 14, y: 480, width: 372, height: 106)
+        let map = try XCTUnwrap(StampRenderer.logoRect(imageSize: image, logoSize: CGSize(width: 80, height: 80),
+            stamp: stamp, margin: 14, corner: "bottom-left", stampPosition: "bottom"))
+        let logo = try XCTUnwrap(StampRenderer.logoRect(imageSize: image, logoSize: CGSize(width: 50, height: 50),
+            stamp: stamp, margin: 14, corner: "bottom-left", stampPosition: "bottom", additional: [map]))
+        XCTAssertFalse(map.intersects(stamp))
+        XCTAssertFalse(logo.intersects(stamp))
+        XCTAssertFalse(logo.intersects(map))
+        XCTAssertEqual(map.minX, 14)
+        XCTAssertEqual(logo.minX, 14)
+    }
 }
