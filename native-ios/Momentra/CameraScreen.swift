@@ -2,12 +2,14 @@ import SwiftUI
 import AVFoundation
 
 struct CameraScreen: View {
+    private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
     @StateObject private var camera = CameraService()
     @StateObject private var location = LocationService()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @State private var showSettings = false
+    @State private var mode: CaptureMode = .photo
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -24,13 +26,13 @@ struct CameraScreen: View {
                             Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
                                 .font(.title2).frame(width: 44, height: 44)
                         }
-                        .disabled(!camera.hasFlash || camera.isCapturing || camera.isSwitching)
+                        .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching)
                         .accessibilityLabel("Flash")
                         Spacer()
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape.fill").font(.title2)
                                 .frame(width: 44, height: 44)
-                        }.accessibilityLabel("Configurações")
+                        }.accessibilityLabel("Configurações").disabled(camera.isRecording || camera.isFinishingRecording)
                     }.padding(.horizontal, 18)
                     Spacer(minLength: 4)
                     CameraPreview(session: camera.session)
@@ -38,26 +40,35 @@ struct CameraScreen: View {
                         .frame(maxWidth: .infinity)
                         .clipped()
                     Spacer(minLength: 8)
-                    Text("FOTO").font(.caption.bold()).tracking(1.5)
-                        .padding(.vertical, 10).padding(.horizontal, 32)
-                        .background(.white, in: Capsule()).foregroundStyle(.black)
+                    Picker("Modo", selection: $mode) {
+                        ForEach(CaptureMode.allCases, id: \.self) { value in
+                            Text(value.rawValue).tag(value).disabled(value == .video && !camera.videoAvailable)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 260)
+                    .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching)
                     HStack {
                         Spacer().frame(maxWidth: .infinity)
                         Button {
-                            let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, location: location.location, heading: location.heading) : nil
-                            camera.capture(snapshot: snapshot)
+                            if mode == .video {
+                                if camera.isRecording { camera.stopRecording() } else { camera.startRecording() }
+                            } else {
+                                let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, location: location.location, heading: location.heading) : nil
+                                camera.capture(snapshot: snapshot)
+                            }
                         } label: {
-                            Circle().fill(.white).padding(7)
+                            Circle().fill(mode == .video ? .red : .white).padding(camera.isRecording ? 18 : 7)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
                                 .frame(width: min(82, geometry.size.width * 0.22), height: min(82, geometry.size.width * 0.22))
                         }
-                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching)
-                        .accessibilityLabel("Fotografar")
+                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isFinishingRecording)
+                        .accessibilityLabel(mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
                         HStack {
                             Spacer()
                             Button { camera.flipCamera() } label: {
                                 Image(systemName: "camera.rotate").font(.title2).frame(width: 44, height: 44)
-                            }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching)
+                            }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording)
                                 .accessibilityLabel("Trocar câmera")
                             Spacer()
                         }.frame(maxWidth: .infinity)
@@ -80,6 +91,8 @@ struct CameraScreen: View {
                     Toggle("Carimbo", isOn: $stampEnabled)
                     Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
                     Text("O mapa usa o serviço MapKit da Apple quando o GPS e o mapa estão ativados. Endereço e demais opções ainda estão em desenvolvimento.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .navigationTitle("Configurações")

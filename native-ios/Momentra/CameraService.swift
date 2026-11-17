@@ -4,18 +4,25 @@ import SwiftUI
 import ImageIO
 import UniformTypeIdentifiers
 
-final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate {
+final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate, AVCaptureFileOutputRecordingDelegate {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "br.com.momentra.camera.session")
     private let photoOutput = AVCapturePhotoOutput()
+    private let movieOutput = AVCaptureMovieFileOutput()
     private var input: AVCaptureDeviceInput?
+    private var microphoneInput: AVCaptureDeviceInput?
     private var configured = false
     private var wantsSession = false
+    private var startingRecording = false
+    private var stopRequested = false
     private var pendingStamp: StampSnapshot?
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
     @Published private(set) var isCapturing = false
     @Published private(set) var isSwitching = false
+    @Published private(set) var isRecording = false
+    @Published private(set) var isFinishingRecording = false
+    @Published private(set) var videoAvailable = false
     @Published private(set) var hasFlash = false
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
 
@@ -49,21 +56,27 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         guard session.canAddInput(candidate), session.canAddOutput(photoOutput) else { throw CameraError.configuration }
         session.addInput(candidate)
         session.addOutput(photoOutput)
+        let supportsVideo = session.canAddOutput(movieOutput)
+        if supportsVideo { session.addOutput(movieOutput) }
         input = candidate
         configured = true
-        DispatchQueue.main.async { self.hasFlash = device.hasFlash }
+        DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo }
     }
 
     func stop() {
         queue.async {
             self.wantsSession = false
-            if self.session.isRunning { self.session.stopRunning() }
+            if self.movieOutput.isRecording || self.startingRecording {
+                self.stopRequested = true
+                if self.movieOutput.isRecording { self.movieOutput.stopRecording() }
+                DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = true }
+            } else if self.session.isRunning { self.session.stopRunning() }
         }
         DispatchQueue.main.async { self.ready = false }
     }
 
     func capture(snapshot: StampSnapshot?) {
-        guard ready, !isCapturing, !isSwitching else { return }
+        guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isCapturing = true
         let selectedFlash = flashMode
         queue.async {
@@ -82,7 +95,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     func flipCamera() {
-        guard ready, !isCapturing, !isSwitching else { return }
+        guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isSwitching = true
         queue.async {
             defer { DispatchQueue.main.async { self.isSwitching = false } }
@@ -106,10 +119,97 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     self.input = nil
                     self.configured = false
                     self.session.removeOutput(self.photoOutput)
+                    if self.session.outputs.contains(self.movieOutput) { self.session.removeOutput(self.movieOutput) }
+                    if let microphone = self.microphoneInput { self.session.removeInput(microphone); self.microphoneInput = nil }
                     DispatchQueue.main.async { self.ready = false }
                 }
                 self.session.commitConfiguration()
                 self.report("Não foi possível trocar de câmera.")
+            }
+        }
+    }
+
+    func startRecording() {
+        guard ready, videoAvailable, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
+        // Lock immediately, including while the permission sheet is visible.
+        isFinishingRecording = true
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] allowed in
+            guard let self else { return }
+            self.queue.async {
+                guard allowed, self.wantsSession, self.session.isRunning else {
+                    if !allowed { self.report("Permita o acesso ao microfone para gravar vídeos com áudio.") }
+                    DispatchQueue.main.async { self.isFinishingRecording = false }
+                    return
+                }
+                do {
+                    if self.microphoneInput == nil {
+                        guard let microphone = AVCaptureDevice.default(for: .audio) else { throw CameraError.microphone }
+                        let audio = try AVCaptureDeviceInput(device: microphone)
+                        self.session.beginConfiguration()
+                        guard self.session.canAddInput(audio) else {
+                            self.session.commitConfiguration()
+                            throw CameraError.microphone
+                        }
+                        self.session.addInput(audio)
+                        self.microphoneInput = audio
+                        self.session.commitConfiguration()
+                    }
+                    let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                    let directory = base.appendingPathComponent("Videos", isDirectory: true)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+                    let file = directory.appendingPathComponent(UUID().uuidString + ".mov")
+                    self.stopRequested = false
+                    self.startingRecording = true
+                    self.movieOutput.startRecording(to: file, recordingDelegate: self)
+                    DispatchQueue.main.async { self.isFinishingRecording = false; self.isRecording = true }
+                } catch {
+                    self.report(error.localizedDescription)
+                    DispatchQueue.main.async { self.isFinishingRecording = false }
+                }
+            }
+        }
+    }
+
+    func stopRecording() {
+        guard isRecording, !isFinishingRecording else { return }
+        isRecording = false
+        isFinishingRecording = true
+        queue.async {
+            self.stopRequested = true
+            if self.movieOutput.isRecording { self.movieOutput.stopRecording() }
+        }
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        queue.async {
+            self.startingRecording = false
+            if self.stopRequested || !self.wantsSession { self.movieOutput.stopRecording() }
+        }
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        queue.async {
+            self.startingRecording = false
+            self.stopRequested = false
+            if !self.wantsSession && self.session.isRunning { self.session.stopRunning() }
+            let completed = (error as NSError?)?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool ?? (error == nil)
+            guard completed, FileManager.default.fileExists(atPath: outputFileURL.path) else {
+                self.report("A gravação não foi concluída. O arquivo disponível permanece no aplicativo.")
+                DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+                return
+            }
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                guard status == .authorized || status == .limited else {
+                    self.report("O vídeo permanece no aplicativo; permita o acesso ao Fotos para salvá-lo na biblioteca.")
+                    DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+                    return
+                }
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetCreationRequest.forAsset().addResource(with: .video, fileURL: outputFileURL, options: nil)
+                }) { success, _ in
+                    if !success { self.report("O vídeo permanece no aplicativo, mas não foi salvo no Fotos.") }
+                    DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+                }
             }
         }
     }
@@ -170,11 +270,12 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private func report(_ text: String) { DispatchQueue.main.async { self.errorMessage = text } }
 
     private enum CameraError: LocalizedError {
-        case unavailable, configuration
+        case unavailable, configuration, microphone
         var errorDescription: String? {
             switch self {
             case .unavailable: return "Câmera indisponível neste aparelho."
             case .configuration: return "Não foi possível configurar a câmera."
+            case .microphone: return "Microfone indisponível para gravação."
             }
         }
     }
