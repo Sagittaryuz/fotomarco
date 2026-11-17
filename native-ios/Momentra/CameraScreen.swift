@@ -8,10 +8,12 @@ struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
     @StateObject private var camera = CameraService()
     @StateObject private var location = LocationService()
+    @StateObject private var pressure = PressureService()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @AppStorage("native.address.enabled") private var addressEnabled = false
+    @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
     @AppStorage("native.profile") private var profile = "HAMOA"
     @AppStorage("native.profile.hamoa.title") private var hamoaTitle = "HAMOA"
@@ -158,13 +160,14 @@ struct CameraScreen: View {
             }
         }
         .statusBarHidden()
-        .onAppear { camera.start(); location.setEnabled(gpsEnabled); refreshLogo() }
-        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false) }
+        .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo() }
+        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled) }
-            else { cancelCountdown(); camera.stop(); location.setEnabled(false) }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled) }
+            else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false) }
         }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
+        .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
         .onChange(of: profile) { _, _ in refreshLogo() }
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
@@ -214,6 +217,8 @@ struct CameraScreen: View {
                     Toggle("Carimbo", isOn: $stampEnabled)
                     Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
                     Toggle("Endereço no carimbo", isOn: $addressEnabled).disabled(!gpsEnabled || !stampEnabled)
+                    Toggle("Pressão do sensor", isOn: $pressureEnabled).disabled(!pressure.available || !stampEnabled)
+                    if !pressure.available { Text("Sensor de pressão indisponível neste aparelho.").font(.footnote).foregroundStyle(.secondary) }
                     Text("Mapa e endereço usam serviços da Apple quando ativados e podem enviar a localização para obtê-los.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
@@ -312,7 +317,7 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, pressure: pressureEnabled ? pressure.sample : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {
