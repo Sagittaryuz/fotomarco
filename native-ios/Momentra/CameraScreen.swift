@@ -109,11 +109,11 @@ struct CameraScreen: View {
                         HStack(spacing: 8) {
                             ForEach(camera.zoomOptions, id: \.self) { factor in
                                 Button { camera.setZoom(factor) } label: {
-                                    Text("\(Int(factor))×").font(.caption.bold())
+                                    Text(factor == 0.5 ? "0,5×" : "\(Int(factor))×").font(.caption.bold())
                                         .frame(width: 44, height: 36)
                                         .background(abs(camera.zoomFactor - factor) < 0.01 ? .white : .black.opacity(0.7), in: Capsule())
                                         .foregroundStyle(abs(camera.zoomFactor - factor) < 0.01 ? .black : .white)
-                                }.accessibilityLabel("Zoom \(Int(factor)) vezes")
+                                }.accessibilityLabel("Zoom \(factor == 0.5 ? "meio" : String(Int(factor))) vezes")
                             }
                         }.padding(.bottom, 10)
                     }

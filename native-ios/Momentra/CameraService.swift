@@ -51,7 +51,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     private func configure() throws {
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+        guard let device = preferredCamera(position: .back) else {
             throw CameraError.unavailable
         }
         let candidate = try AVCaptureDeviceInput(device: device)
@@ -66,7 +66,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         input = candidate
         configured = true
         DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo; self.activeDevice = device }
-        publishZoom(for: device)
+        resetZoom(for: device)
     }
 
     func stop() {
@@ -109,7 +109,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             defer { DispatchQueue.main.async { self.isSwitching = false } }
             guard self.wantsSession, let previous = self.input else { return }
             let position: AVCaptureDevice.Position = previous.device.position == .back ? .front : .back
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
+            guard let device = self.preferredCamera(position: position),
                   let replacement = try? AVCaptureDeviceInput(device: device) else {
                 self.report("A outra câmera não está disponível.")
                 return
@@ -121,7 +121,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.input = replacement
                 self.session.commitConfiguration()
                 DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.activeDevice = device }
-                self.publishZoom(for: device)
+                self.resetZoom(for: device)
             } else {
                 if self.session.canAddInput(previous) { self.session.addInput(previous) }
                 else {
@@ -147,11 +147,42 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         connection.videoRotationAngle = captureRotation
     }
 
+    private func preferredCamera(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+        let types: [AVCaptureDevice.DeviceType] = position == .back
+            ? [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera]
+            : [.builtInWideAngleCamera]
+        return types.lazy.compactMap { AVCaptureDevice.default($0, for: .video, position: position) }.first
+    }
+
+    private func zoomScale(for device: AVCaptureDevice) -> ZoomScale {
+        let constituents = device.constituentDevices
+        let switches = device.virtualDeviceSwitchOverVideoZoomFactors
+        let wideIndex = constituents.firstIndex { $0.deviceType == .builtInWideAngleCamera }
+        let wideFactor: CGFloat
+        if let index = wideIndex, index > 0, switches.indices.contains(index - 1) {
+            wideFactor = CGFloat(truncating: switches[index - 1])
+        } else {
+            wideFactor = 1
+        }
+        return ZoomScale(wideFactor: wideFactor, minimum: device.minAvailableVideoZoomFactor, maximum: device.maxAvailableVideoZoomFactor)
+    }
+
+    private func resetZoom(for device: AVCaptureDevice) {
+        let scale = zoomScale(for: device)
+        if let factor = scale.deviceFactor(for: 1) {
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = factor
+                device.unlockForConfiguration()
+            } catch { report("Não foi possível ajustar o zoom inicial.") }
+        }
+        publishZoom(for: device)
+    }
+
     private func publishZoom(for device: AVCaptureDevice) {
-        let lower = device.minAvailableVideoZoomFactor
-        let upper = device.maxAvailableVideoZoomFactor
-        let options: [CGFloat] = [1, 2, 3].filter { $0 >= lower && $0 <= upper }
-        let current = device.videoZoomFactor
+        let scale = zoomScale(for: device)
+        let options = scale.options
+        let current = device.videoZoomFactor / scale.wideFactor
         DispatchQueue.main.async { self.zoomOptions = options; self.zoomFactor = current }
     }
 
@@ -159,11 +190,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         guard ready, !isSwitching, !isCapturing, !isFinishingRecording else { return }
         queue.async {
             guard let device = self.input?.device,
-                  factor >= device.minAvailableVideoZoomFactor,
-                  factor <= device.maxAvailableVideoZoomFactor else { return }
+                  let deviceFactor = self.zoomScale(for: device).deviceFactor(for: factor) else { return }
             do {
                 try device.lockForConfiguration()
-                device.videoZoomFactor = factor
+                device.videoZoomFactor = deviceFactor
                 device.unlockForConfiguration()
                 DispatchQueue.main.async { self.zoomFactor = factor }
             } catch { self.report("Não foi possível alterar o zoom da câmera.") }
