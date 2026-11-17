@@ -2,13 +2,43 @@ import CoreLocation
 import Foundation
 
 @MainActor
+protocol PreviewGeocoding: AnyObject {
+    func resolve(_ location: CLLocation, completion: @escaping (String?) -> Void)
+    func cancel()
+}
+
+@MainActor
+private final class ApplePreviewGeocoder: PreviewGeocoding {
+    private let geocoder = CLGeocoder()
+    func resolve(_ location: CLLocation, completion: @escaping (String?) -> Void) {
+        geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "pt_BR")) { placemarks, _ in
+            let result = placemarks?.first.flatMap { StampAddress.format($0) }
+            Task { @MainActor in completion(result) }
+        }
+    }
+    func cancel() { geocoder.cancelGeocode() }
+}
+
+@MainActor
 final class AddressPreviewService: ObservableObject {
     @Published private(set) var address: String?
     private var addressLocation: CLLocation?
     private var addressTime: Date?
     private var lastAttempt: Date?
-    private var geocoder: CLGeocoder?
+    private var geocoder: PreviewGeocoding?
     private var generation = 0
+    private let makeGeocoder: () -> PreviewGeocoding
+    private let clock: () -> Date
+
+    init() {
+        self.makeGeocoder = { ApplePreviewGeocoder() }
+        self.clock = Date.init
+    }
+
+    init(makeGeocoder: @escaping () -> PreviewGeocoding, clock: @escaping () -> Date) {
+        self.makeGeocoder = makeGeocoder
+        self.clock = clock
+    }
 
     func update(location: CLLocation?, enabled: Bool, now: Date = Date()) {
         guard enabled, let location, Self.valid(location, at: now) else { clear(); return }
@@ -18,17 +48,15 @@ final class AddressPreviewService: ObservableObject {
         lastAttempt = now
         generation += 1
         let requestGeneration = generation
-        let request = CLGeocoder()
+        let request = makeGeocoder()
         geocoder = request
-        request.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "pt_BR")) { [weak self] placemarks, _ in
-            Task { @MainActor in
-                guard let self, self.generation == requestGeneration else { return }
-                self.geocoder = nil
-                guard let placemark = placemarks?.first, let formatted = StampAddress.format(placemark) else { return }
-                self.address = formatted
-                self.addressLocation = location
-                self.addressTime = Date()
-            }
+        request.resolve(location) { [weak self] formatted in
+            guard let self, self.generation == requestGeneration else { return }
+            self.geocoder = nil
+            guard let formatted else { return }
+            self.address = formatted
+            self.addressLocation = location
+            self.addressTime = self.clock()
         }
     }
 
@@ -40,7 +68,7 @@ final class AddressPreviewService: ObservableObject {
 
     func clear() {
         generation += 1
-        geocoder?.cancelGeocode()
+        geocoder?.cancel()
         geocoder = nil
         address = nil
         addressLocation = nil
