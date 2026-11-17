@@ -382,7 +382,7 @@ struct CameraScreen: View {
                         let data = try file.read(upToCount: 65_537) ?? Data()
                         let transfer = try SettingsTransfer.decode(data)
                         apply(transfer)
-                        importMessage = "Ajustes compatíveis importados. Logotipos e opções ainda não implementadas permanecem no Scripting."
+                        importMessage = "Ajustes compatíveis importados. Posições laterais e cantos do mapa e do logotipo ainda não são aplicados; os logotipos devem ser importados separadamente."
                     } catch {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
