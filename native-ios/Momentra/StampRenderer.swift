@@ -62,6 +62,14 @@ enum PhotoAspect: String, CaseIterable {
     case standard = "4:3"
     case wide = "16:9"
 
+    func fittedSize(in bounds: CGSize) -> CGSize? {
+        guard bounds.width.isFinite, bounds.height.isFinite, bounds.width > 0, bounds.height > 0 else { return nil }
+        let landscapeRatio: CGFloat = self == .standard ? 4 / 3 : 16 / 9
+        let ratio = bounds.width >= bounds.height ? landscapeRatio : 1 / landscapeRatio
+        let width = min(bounds.width, bounds.height * ratio)
+        return CGSize(width: width, height: width / ratio)
+    }
+
     func crop(in size: CGSize) -> CGRect? {
         guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return nil }
         let landscapeRatio: CGFloat = self == .standard ? 4 / 3 : 16 / 9

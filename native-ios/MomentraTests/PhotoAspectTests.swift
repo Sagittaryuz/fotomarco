@@ -23,6 +23,19 @@ final class PhotoAspectTests: XCTestCase {
         XCTAssertNil(PhotoAspect.wide.crop(in: CGSize(width: CGFloat.infinity, height: 100)))
     }
 
+    func testPreviewFitsAvailableBoundsWithoutChangingAspect() throws {
+        for bounds in [CGSize(width: 390, height: 844), CGSize(width: 844, height: 390)] {
+            for aspect in PhotoAspect.allCases {
+                let size = try XCTUnwrap(aspect.fittedSize(in: bounds))
+                let ratio: CGFloat = aspect == .standard ? 4.0 / 3.0 : 16.0 / 9.0
+                let actual = bounds.width >= bounds.height ? size.width / size.height : size.height / size.width
+                XCTAssertEqual(actual, ratio, accuracy: 0.0001)
+                XCTAssertLessThanOrEqual(size.width, bounds.width)
+                XCTAssertLessThanOrEqual(size.height, bounds.height)
+            }
+        }
+    }
+
     func testRenderedPhotoUsesRequestedDimensions() throws {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
