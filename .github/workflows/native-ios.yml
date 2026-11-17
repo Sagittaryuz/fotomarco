@@ -7,6 +7,32 @@ on:
 permissions:
   contents: read
 jobs:
+  device-package-check:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: native-ios
+        run: xcodegen generate
+      - name: Compile unsigned app for iPhone
+        working-directory: native-ios
+        run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
+      - name: Check unsigned IPA structure
+        run: |
+          APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
+          test -f "$APP/Info.plist"
+          test -f "$APP/Momentra"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          ditto "$APP" "$RUNNER_TEMP/Payload/Momentra.app"
+          ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
+          unzip -t "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
+          lipo -archs "$APP/Momentra"
+          shasum -a 256 "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
   simulator-build:
     runs-on: macos-latest
     timeout-minutes: 20
