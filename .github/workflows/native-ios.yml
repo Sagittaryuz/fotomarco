@@ -43,6 +43,14 @@ jobs:
           unzip -t "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
           lipo -archs "$APP/Momentra"
           shasum -a 256 "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
+      - name: Preserve unsigned candidate for signing
+        if: github.ref_name == 'feat/native-camera-control'
+        uses: actions/upload-artifact@v4
+        with:
+          name: momentra-unsigned-camera-control-candidate
+          path: ${{ runner.temp }}/Momentra-unsigned-draft.ipa
+          if-no-files-found: error
+          retention-days: 3
   simulator-build:
     runs-on: macos-latest
     timeout-minutes: 20
