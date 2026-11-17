@@ -46,17 +46,34 @@ struct StampSnapshot {
     }
 }
 
+enum PhotoAspect: String, CaseIterable {
+    case standard = "4:3"
+    case wide = "16:9"
+
+    func crop(in size: CGSize) -> CGRect? {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return nil }
+        let landscapeRatio: CGFloat = self == .standard ? 4 / 3 : 16 / 9
+        let ratio = size.width >= size.height ? landscapeRatio : 1 / landscapeRatio
+        let width = floor(min(size.width, size.height * ratio))
+        let height = floor(min(size.height, size.width / ratio))
+        guard width >= 1, height >= 1 else { return nil }
+        return CGRect(x: (size.width-width)/2, y: (size.height-height)/2, width: width, height: height)
+    }
+}
+
 enum StampRenderer {
-    static func render(_ data: Data, snapshot: StampSnapshot, map: UIImage? = nil, address: String? = nil) -> Data? {
+    static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil) -> Data? {
         guard let image = UIImage(data: data) else { return nil }
-        let size = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-        guard size.width > 0, size.height > 0 else { return nil }
+        let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        guard let crop = aspect.crop(in: sourceSize) else { return nil }
+        let size = crop.size
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
         let result = renderer.image { context in
-            image.draw(in: CGRect(origin: .zero, size: size))
+            image.draw(in: CGRect(x: -crop.minX, y: -crop.minY, width: sourceSize.width, height: sourceSize.height))
+            guard let snapshot else { return }
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
             let font = UIFont.systemFont(ofSize: max(12, unit * 0.027), weight: .medium)

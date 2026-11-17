@@ -10,6 +10,7 @@ struct CameraScreen: View {
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @AppStorage("native.address.enabled") private var addressEnabled = false
+    @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
     @State private var showSettings = false
     @State private var showOriginals = false
     @State private var mode: CaptureMode = .photo
@@ -51,6 +52,15 @@ struct CameraScreen: View {
                         }
                         .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                         .accessibilityLabel("Temporizador")
+                        Menu {
+                            ForEach(PhotoAspect.allCases, id: \.rawValue) { aspect in
+                                Button(aspect.rawValue) { photoAspect = aspect.rawValue }
+                            }
+                        } label: {
+                            Text(photoAspect).font(.caption.bold()).frame(width: 44, height: 44)
+                        }
+                        .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
+                        .accessibilityLabel("Proporção da foto")
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape.fill").font(.title2)
                                 .frame(width: 44, height: 44)
@@ -182,7 +192,7 @@ struct CameraScreen: View {
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading) : nil
-        camera.capture(snapshot: snapshot)
+        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard)
     }
 }
 
