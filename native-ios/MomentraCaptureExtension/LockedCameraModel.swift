@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreLocation
+import Photos
 import SwiftUI
 import UIKit
 
@@ -112,11 +113,14 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         let id = UUID().uuidString
         do { try jpeg.write(to: directory.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic) }
         catch { DispatchQueue.main.async { self.error = "Não foi possível guardar a foto." }; return }
-        guard let context = stampContext, context.stampEnabled else { return }
-        let snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: context.title,
-            note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
-            longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading)
-        let aspect = PhotoAspect(rawValue: context.aspect) ?? .standard
+        let context = stampContext
+        let snapshot: StampSnapshot?
+        if let context, context.stampEnabled {
+            snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: context.title,
+                note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
+                longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading)
+        } else { snapshot = nil }
+        let aspect = PhotoAspect(rawValue: context?.aspect ?? "4:3") ?? .standard
         guard let stamped = StampRenderer.render(jpeg, aspect: aspect, snapshot: snapshot) else {
             DispatchQueue.main.async { self.error = "A foto original foi salva, mas não foi possível aplicar o carimbo." }; return
         }
@@ -124,7 +128,21 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
             let processed = directory.appendingPathComponent("Processed", isDirectory: true)
             try FileManager.default.createDirectory(at: processed, withIntermediateDirectories: true)
             try stamped.write(to: processed.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic)
-        } catch { DispatchQueue.main.async { self.error = "A foto original foi salva, mas não foi possível guardar a cópia carimbada." } }
+        } catch {
+            DispatchQueue.main.async { self.error = "A foto original foi salva, mas não foi possível guardar a cópia processada." }
+            return
+        }
+        guard context?.saveToPhotos == true else { return }
+        let authorization = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        guard authorization == .authorized || authorization == .limited else {
+            DispatchQueue.main.async { self.error = "A foto está em Capturas. Abra o Momentra e permita salvar no Fotos para usar essa opção." }
+            return
+        }
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetCreationRequest.forAsset().addResource(with: .photo, data: stamped, options: nil)
+        }) { success, _ in
+            if !success { DispatchQueue.main.async { self.error = "A foto está em Capturas, mas não foi possível salvá-la no Fotos." } }
+        }
     }
 }
 

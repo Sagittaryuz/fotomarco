@@ -55,6 +55,7 @@ targets:
       path: MomentraCaptureExtension/Info.plist
       properties:
         NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS.'
+        NSPhotoLibraryAddUsageDescription: 'Permite salvar fotos na biblioteca.'
         EXAppExtensionAttributes:
           EXExtensionPointIdentifier: com.apple.securecapture
     settings:

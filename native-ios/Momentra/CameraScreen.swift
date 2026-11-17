@@ -511,7 +511,7 @@ struct CameraScreen: View {
         let context = MomentraCaptureContext(stampEnabled: stampEnabled, gpsEnabled: gpsEnabled,
             title: String(activeTitle.wrappedValue.prefix(40)), note: String(activeNote.wrappedValue.prefix(96)),
             compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal,
-            longDate: dateFormat == "long", fontStyle: stampFont, aspect: photoAspect)
+            longDate: dateFormat == "long", fontStyle: stampFont, aspect: photoAspect, saveToPhotos: saveToPhotos)
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 

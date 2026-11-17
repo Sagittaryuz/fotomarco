@@ -11,6 +11,7 @@ struct MomentraCaptureContext: Codable, Equatable, Sendable {
     let longDate: Bool
     let fontStyle: String
     let aspect: String
+    let saveToPhotos: Bool?
 }
 
 /// Shared by the app, capture extension, and control widget targets.
