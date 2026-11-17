@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import MapKit
+import UniformTypeIdentifiers
 
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
@@ -20,6 +21,8 @@ struct CameraScreen: View {
     @AppStorage("native.profile.pessoal.note") private var pessoalNote = ""
     @State private var showSettings = false
     @State private var showOriginals = false
+    @State private var showSettingsImport = false
+    @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
     @State private var countdown = 0
@@ -165,7 +168,8 @@ struct CameraScreen: View {
                         }
                         TextField("Título", text: activeTitle)
                         TextField("Observação", text: activeNote)
-                        Text("As preferências do Scripting não são importadas automaticamente.")
+                        Button("Importar ajustes do Scripting") { showSettingsImport = true }
+                        Text("Exporte os ajustes no Momentra para Scripting. Logotipos e algumas opções ainda não são importados.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
@@ -179,6 +183,24 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
+                .fileImporter(isPresented: $showSettingsImport, allowedContentTypes: [.json]) { result in
+                    do {
+                        let url = try result.get()
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        let file = try FileHandle(forReadingFrom: url)
+                        defer { try? file.close() }
+                        let data = try file.read(upToCount: 65_537) ?? Data()
+                        let transfer = try SettingsTransfer.decode(data)
+                        apply(transfer)
+                        importMessage = "Ajustes compatíveis importados. Logotipos e opções ainda não implementadas permanecem no Scripting."
+                    } catch {
+                        importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
+                    }
+                }
+                .alert("Importar ajustes", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                    Button("OK") { importMessage = nil }
+                } message: { Text(importMessage ?? "") }
             }
         }
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
@@ -231,6 +253,16 @@ struct CameraScreen: View {
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
         StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, location: location.location, heading: location.heading)
+    }
+
+    private func apply(_ transfer: SettingsTransfer) {
+        let s = transfer.settings
+        guard let h = s.profiles["HAMOA"], let p = s.profiles["PIRESCO"], let personal = s.profiles["PESSOAL"] else { return }
+        hamoaTitle = h.title; hamoaNote = h.note
+        pirescoTitle = p.title; pirescoNote = p.note
+        pessoalTitle = personal.title; pessoalNote = personal.note
+        profile = s.profile; stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
+        photoAspect = s.aspectRatio
     }
 }
 

@@ -4,7 +4,7 @@ import {
   useEffect, useRef, useState,
 } from "scripting"
 import type { CameraControlParameter } from "scripting"
-import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, HeadingSample, normalizeSettings, validFix, coordinates, cleanText, within } from "./core"
+import { VERSION, PROFILE_IDS, Settings, CaptureRecord, Fix, HeadingSample, normalizeSettings, validFix, coordinates, cleanText, within, nativeSettingsTransfer } from "./core"
 import { enrich, folder, persistRecord, renderStamped } from "./services"
 import { requestMetForecast, metCoordinateKey, ModelWeather } from "./meteorology"
 import { cameraLayout } from "./camera_layout"
@@ -479,6 +479,7 @@ function CameraPage() {
               <SettingsAction title={value.gps ? "GPS ✓" : "GPS"} symbol="location" disabled={mode === "video"} value={value.gps ? "Ligado" : "Desligado"} action={()=>{void gpsMenu().then(()=>setValue(settingsRef.current))}} />
                 <SettingsAction title={torchValue ? "Luz ✓" : "Luz"} symbol="flashlight.on.fill" disabled={!camera?.device.hasTorch} value={torchValue ? "Ligada" : "Desligada"} action={()=>{void run(async()=>{await cameraRef.current!.device.setTorchMode(torchValue ? "off" : "on");setTorch(!torchValue);setTorchValue(!torchValue)})}} />
                 <SettingsAction title="Recentes" symbol={mode === "video" ? "video" : "photo.on.rectangle"} action={()=>{if (mode === "video") void videoHistory(); else void history()}} />
+                <SettingsAction title="Exportar ajustes para app nativo" symbol="square.and.arrow.up" disabled={mode === "video"} hint="Exportar apenas opções e textos dos perfis; logotipos não são incluídos" action={()=>{void exportNativeSettings()}} />
               </VStack></Group>
         <Group title="Data, hora e localização" note="As três informações ficam sempre juntas. Sem permissão ou sinal, a localização aparece como indisponível. As mudanças valem para as próximas fotos; vídeos não recebem carimbo.">
           <Row symbol="text.viewfinder" color="#3478F6"><Toggle title="Carimbo na foto" value={value.stamp} onChanged={next=>change({stamp:next})} toggleStyle="switch" frame={{maxWidth:"infinity",alignment:"leading"}} /></Row><Rule />
@@ -613,6 +614,13 @@ function CameraPage() {
       const data = await FileManager.readAsData(path)
       const result = await DocumentPicker.exportFiles({files:[{data,name:Path.basename(path)}]})
       say(result.length ? "Arquivo exportado" : "Exportação cancelada; foto preservada")
+    })
+  }
+  async function exportNativeSettings() {
+    await run(async () => {
+      const payload = nativeSettingsTransfer(settingsRef.current)
+      const result = await DocumentPicker.exportFiles({files:[{name:"momentra-ajustes.json",data:Data.fromUTF8(JSON.stringify(payload,null,2))}]})
+      say(result.length ? "Ajustes exportados; logotipos não incluídos" : "Exportação cancelada; ajustes preservados")
     })
   }
   async function consultForecast() {
