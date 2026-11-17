@@ -44,4 +44,19 @@ final class StampLogoTests: XCTestCase {
         XCTAssertNil(StampRenderer.logoRect(imageSize: CGSize(width: 50, height: 50), logoSize: CGSize(width: 40, height: 40),
             stamp: CGRect(x: 5, y: 5, width: 40, height: 40), margin: 5, corner: "top-left", stampPosition: "top"))
     }
+
+    func testLongAddressStillLeavesSpaceForLogo() throws {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let base = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 300), format: format).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+        }
+        let logo = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40), format: format).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        }
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, title: String(repeating: "A", count: 40),
+            note: String(repeating: "B", count: 96), logo: logo, logoCorner: "bottom-right", location: nil, heading: nil)
+        let result = StampRenderer.render(try XCTUnwrap(base.jpegData(compressionQuality: 1)), aspect: .standard,
+            snapshot: snapshot, address: String(repeating: "Rua Exemplo ", count: 20))
+        XCTAssertNotNil(result)
+    }
 }

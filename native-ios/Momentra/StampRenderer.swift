@@ -178,7 +178,14 @@ enum StampRenderer {
             let mapSide = map == nil ? 0 : unit * mapFraction
             let mapGap = map == nil ? 0 : margin
             let textWidth = size.width - margin * 4 - mapSide - mapGap
-            guard let layout = fitText(text, width: textWidth, maxHeight: size.height - margin * 4,
+            let logoSize: CGSize?
+            if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
+                let maxSide = unit * 0.15
+                let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
+                logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
+            } else { logoSize = nil }
+            let availableTextHeight = size.height - margin * (logoSize == nil ? 4 : 5) - (logoSize?.height ?? 0)
+            guard let layout = fitText(text, width: textWidth, maxHeight: availableTextHeight,
                                        initialSize: fontSize, style: snapshot.fontStyle, paragraph: paragraph) else { fits = false; return }
             let attrs: [NSAttributedString.Key: Any] = [.font: layout.font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
             let height = max(layout.height, mapSide) + margin * 2
@@ -199,10 +206,7 @@ enum StampRenderer {
             }
             let textRect = CGRect(x: box.minX + margin + mapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
             text.draw(in: textRect, withAttributes: attrs)
-            if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
-                let maxSide = unit * 0.15
-                let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
-                let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
+            if let logo = snapshot.logo, let logoSize {
                 guard let logoRect = StampRenderer.logoRect(imageSize: size, logoSize: logoSize, stamp: box, margin: margin,
                                               corner: snapshot.logoCorner, stampPosition: snapshot.position) else { fits = false; return }
                 logo.draw(in: logoRect)
