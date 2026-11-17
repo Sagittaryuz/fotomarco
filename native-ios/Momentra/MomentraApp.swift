@@ -5,7 +5,7 @@ import GoogleSignIn
 struct MomentraApp: App {
     var body: some Scene {
         WindowGroup {
-            CameraScreen().onOpenURL { url in
+            AppWelcomeGate().onOpenURL { url in
                 if NativeGoogleAuth.configured { _ = GIDSignIn.sharedInstance.handle(url) }
             }
         }
