@@ -242,9 +242,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 if snapshot.mapEnabled && snapshot.location != nil && map == nil {
                     self.report("Mapa indisponível. A foto será salva com as demais informações.")
                 }
-                let rendered = StampRenderer.render(data, snapshot: snapshot, map: map)
-                if rendered == nil { self.report("Não foi possível aplicar o carimbo; a foto original será salva.") }
-                self.savePhoto(rendered ?? data)
+                StampAddress.load(snapshot: snapshot, queue: self.queue) { address in
+                    if snapshot.addressEnabled && snapshot.location != nil && address == nil {
+                        self.report("Endereço indisponível. A foto será salva com as demais informações.")
+                    }
+                    let rendered = StampRenderer.render(data, snapshot: snapshot, map: map, address: address)
+                    if rendered == nil { self.report("Não foi possível aplicar o carimbo; a foto original será salva.") }
+                    self.savePhoto(rendered ?? data)
+                }
             }
         }
     }

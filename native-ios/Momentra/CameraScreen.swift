@@ -8,6 +8,7 @@ struct CameraScreen: View {
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
+    @AppStorage("native.address.enabled") private var addressEnabled = false
     @State private var showSettings = false
     @State private var mode: CaptureMode = .photo
     @Environment(\.scenePhase) private var scenePhase
@@ -54,7 +55,7 @@ struct CameraScreen: View {
                             if mode == .video {
                                 if camera.isRecording { camera.stopRecording() } else { camera.startRecording() }
                             } else {
-                                let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, location: location.location, heading: location.heading) : nil
+                                let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading) : nil
                                 camera.capture(snapshot: snapshot)
                             }
                         } label: {
@@ -90,7 +91,8 @@ struct CameraScreen: View {
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
                     Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
-                    Text("O mapa usa o serviço MapKit da Apple quando o GPS e o mapa estão ativados. Endereço e demais opções ainda estão em desenvolvimento.")
+                    Toggle("Endereço no carimbo", isOn: $addressEnabled).disabled(!gpsEnabled || !stampEnabled)
+                    Text("Mapa e endereço usam serviços da Apple quando ativados e podem enviar a localização para obtê-los.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)

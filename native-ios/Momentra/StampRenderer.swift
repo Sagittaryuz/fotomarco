@@ -6,13 +6,15 @@ struct StampSnapshot {
     let capturedAt: Date
     let gpsEnabled: Bool
     let mapEnabled: Bool
+    let addressEnabled: Bool
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
+        self.addressEnabled = gpsEnabled && addressEnabled
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
            location.horizontalAccuracy >= 0, location.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(location.timestamp) <= 60 {
@@ -45,7 +47,7 @@ struct StampSnapshot {
 }
 
 enum StampRenderer {
-    static func render(_ data: Data, snapshot: StampSnapshot, map: UIImage? = nil) -> Data? {
+    static func render(_ data: Data, snapshot: StampSnapshot, map: UIImage? = nil, address: String? = nil) -> Data? {
         guard let image = UIImage(data: data) else { return nil }
         let size = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard size.width > 0, size.height > 0 else { return nil }
@@ -61,7 +63,8 @@ enum StampRenderer {
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byWordWrapping
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
-            let text = snapshot.lines.joined(separator: "\n") as NSString
+            let lines = (address.map { [$0] } ?? []) + snapshot.lines
+            let text = lines.joined(separator: "\n") as NSString
             let mapSide = map == nil ? 0 : unit * 0.20
             let mapGap = map == nil ? 0 : margin
             let textWidth = size.width - margin * 4 - mapSide - mapGap
@@ -85,6 +88,33 @@ enum StampRenderer {
             text.draw(in: textRect, withAttributes: attrs)
         }
         return result.jpegData(compressionQuality: 0.95)
+    }
+}
+
+enum StampAddress {
+    static func load(snapshot: StampSnapshot, queue: DispatchQueue, completion: @escaping (String?) -> Void) {
+        guard snapshot.addressEnabled, let location = snapshot.location else { completion(nil); return }
+        let geocoder = CLGeocoder()
+        var finished = false
+        let finish: (String?) -> Void = { address in
+            guard !finished else { return }
+            finished = true
+            completion(address)
+        }
+        geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "pt_BR")) { placemarks, _ in
+            let placemark = placemarks?.first
+            let street = [placemark?.thoroughfare, placemark?.subThoroughfare].compactMap { $0 }.joined(separator: ", ")
+            let parts = [street, placemark?.subLocality, placemark?.locality, placemark?.administrativeArea, placemark?.postalCode, placemark?.country]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let address = parts.isEmpty ? nil : String(parts.joined(separator: ", ").prefix(240))
+            queue.async { finish(address) }
+        }
+        queue.asyncAfter(deadline: .now() + 8) {
+            guard !finished else { return }
+            geocoder.cancelGeocode()
+            finish(nil)
+        }
     }
 }
 
