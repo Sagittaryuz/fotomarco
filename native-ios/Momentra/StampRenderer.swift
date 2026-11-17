@@ -12,6 +12,7 @@ struct StampSnapshot {
     let title: String
     let note: String
     let logo: UIImage?
+    let logoCorner: String
     let compact: Bool
     let position: String
     let longDate: Bool
@@ -22,7 +23,7 @@ struct StampSnapshot {
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, position: String = "bottom", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -34,6 +35,7 @@ struct StampSnapshot {
         self.title = clean(title, limit: 40)
         self.note = clean(note, limit: 96)
         self.logo = logo
+        self.logoCorner = ["auto", "top-left", "top-right", "bottom-left", "bottom-right"].contains(logoCorner) ? logoCorner : "auto"
         self.compact = compact
         self.position = position == "top" ? "top" : "bottom"
         self.longDate = longDate
@@ -112,6 +114,26 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func logoRect(imageSize: CGSize, logoSize: CGSize, stamp: CGRect, margin: CGFloat, corner: String, stampPosition: String) -> CGRect? {
+        guard imageSize.width > 0, imageSize.height > 0, logoSize.width > 0, logoSize.height > 0, margin >= 0 else { return nil }
+        let useLeft = corner.hasSuffix("-left")
+        let useTop = corner == "auto" ? stampPosition == "top" : corner.hasPrefix("top-")
+        let x = useLeft ? margin : imageSize.width - margin - logoSize.width
+        var y: CGFloat
+        if corner == "auto" {
+            y = useTop ? min(imageSize.height - margin - logoSize.height, stamp.maxY + margin) : max(margin, stamp.minY - margin - logoSize.height)
+        } else {
+            y = useTop ? margin : imageSize.height - margin - logoSize.height
+        }
+        var rect = CGRect(origin: CGPoint(x: x, y: y), size: logoSize)
+        if rect.intersects(stamp) {
+            y = useTop ? stamp.maxY + margin : stamp.minY - margin - logoSize.height
+            rect.origin.y = y
+        }
+        let safe = CGRect(x: margin, y: margin, width: imageSize.width - margin * 2, height: imageSize.height - margin * 2)
+        return safe.contains(rect) && !rect.intersects(stamp) ? rect : nil
+    }
+
     static func fitText(_ text: NSString, width: CGFloat, maxHeight: CGFloat, initialSize: CGFloat,
                         style: String, paragraph: NSParagraphStyle) -> (font: UIFont, height: CGFloat)? {
         guard width > 0, maxHeight > 0, initialSize.isFinite else { return nil }
@@ -181,8 +203,8 @@ enum StampRenderer {
                 let maxSide = unit * 0.15
                 let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
                 let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
-                let logoY = snapshot.position == "top" ? min(size.height - margin - logoSize.height, box.maxY + margin) : max(margin, box.minY - margin - logoSize.height)
-                let logoRect = CGRect(x: size.width - margin - logoSize.width, y: logoY, width: logoSize.width, height: logoSize.height)
+                guard let logoRect = StampRenderer.logoRect(imageSize: size, logoSize: logoSize, stamp: box, margin: margin,
+                                              corner: snapshot.logoCorner, stampPosition: snapshot.position) else { fits = false; return }
                 logo.draw(in: logoRect)
             }
         }

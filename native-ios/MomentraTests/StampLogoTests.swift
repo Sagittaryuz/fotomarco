@@ -27,4 +27,21 @@ final class StampLogoTests: XCTestCase {
     func testLogoPathRejectsDirectories() {
         XCTAssertNil(ProfileLogoStore.load("../outside.png"))
     }
+
+    func testLogoCornersAvoidStampAndRemainInsideImage() throws {
+        let image = CGSize(width: 400, height: 600)
+        let stamp = CGRect(x: 14, y: 450, width: 372, height: 136)
+        let logo = CGSize(width: 50, height: 30)
+        let safe = CGRect(x: 14, y: 14, width: 372, height: 572)
+        for corner in ["top-left", "top-right", "bottom-left", "bottom-right", "auto"] {
+            let rect = try XCTUnwrap(StampRenderer.logoRect(imageSize: image, logoSize: logo, stamp: stamp,
+                margin: 14, corner: corner, stampPosition: "bottom"))
+            XCTAssertTrue(safe.contains(rect))
+            XCTAssertFalse(rect.intersects(stamp))
+            if corner.hasSuffix("-left") { XCTAssertEqual(rect.minX, 14) }
+            if corner.hasSuffix("-right") { XCTAssertEqual(rect.maxX, 386) }
+        }
+        XCTAssertNil(StampRenderer.logoRect(imageSize: CGSize(width: 50, height: 50), logoSize: CGSize(width: 40, height: 40),
+            stamp: CGRect(x: 5, y: 5, width: 40, height: 40), margin: 5, corner: "top-left", stampPosition: "top"))
+    }
 }

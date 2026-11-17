@@ -22,6 +22,7 @@ struct CameraScreen: View {
     @AppStorage("native.stamp.position") private var stampPosition = "bottom"
     @AppStorage("native.stamp.dateFormat") private var dateFormat = "numeric"
     @AppStorage("native.stamp.font") private var stampFont = "system"
+    @AppStorage("native.logo.corner") private var logoCorner = "auto"
     @AppStorage("native.map.scale") private var mapScale = "medium"
     @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
     @AppStorage("native.profile") private var profile = "HAMOA"
@@ -274,6 +275,15 @@ struct CameraScreen: View {
                         Button { showLogoImport = true } label: {
                             Label("Escolher logotipo dos Arquivos", systemImage: "folder")
                         }.disabled(logoLoading)
+                        Picker("Posição do logotipo na foto", selection: $logoCorner) {
+                            Text("Automática").tag("auto")
+                            Text("Superior esquerda").tag("top-left")
+                            Text("Superior direita").tag("top-right")
+                            Text("Inferior esquerda").tag("bottom-left")
+                            Text("Inferior direita").tag("bottom-right")
+                        }
+                        Text("O logotipo pode ser deslocado para não cobrir o carimbo; a prévia é aproximada.")
+                            .font(.footnote).foregroundStyle(.secondary)
                         if !activeLogoName.isEmpty {
                             Button("Remover logotipo do perfil", role: .destructive) {
                                 setLogo("", for: profile)
@@ -388,7 +398,7 @@ struct CameraScreen: View {
                         let data = try file.read(upToCount: 65_537) ?? Data()
                         let transfer = try SettingsTransfer.decode(data)
                         apply(transfer)
-                        importMessage = "Ajustes compatíveis importados. Posições laterais e cantos do mapa e do logotipo ainda não são aplicados; os logotipos devem ser importados separadamente."
+                        importMessage = "Ajustes compatíveis importados. Posições laterais do texto e cantos do mapa ainda não são aplicados; os logotipos devem ser importados separadamente."
                     } catch {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
@@ -462,7 +472,7 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, compact: stampSize == "compact", position: stampPosition, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {
@@ -496,6 +506,7 @@ struct CameraScreen: View {
         if let format = s.timestampFormat { dateFormat = format }
         if let font = s.timestampFont { stampFont = font }
         if let scale = s.mapScale { mapScale = scale }
+        if let corner = s.logoCorner { logoCorner = corner }
         photoAspect = s.aspectRatio
     }
 }
