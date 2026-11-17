@@ -11,10 +11,11 @@ struct StampSnapshot {
     let addressEnabled: Bool
     let title: String
     let note: String
+    let logo: UIImage?
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -25,6 +26,7 @@ struct StampSnapshot {
         }
         self.title = clean(title, limit: 40)
         self.note = clean(note, limit: 96)
+        self.logo = logo
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
            location.horizontalAccuracy >= 0, location.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(location.timestamp) <= 60 {
@@ -123,6 +125,13 @@ enum StampRenderer {
             }
             let textRect = CGRect(x: box.minX + margin + mapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
             text.draw(in: textRect, withAttributes: attrs)
+            if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
+                let maxSide = unit * 0.15
+                let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
+                let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
+                let logoRect = CGRect(x: size.width - margin - logoSize.width, y: max(margin, box.minY - margin - logoSize.height), width: logoSize.width, height: logoSize.height)
+                logo.draw(in: logoRect)
+            }
         }
         guard let outputImage = result.cgImage,
               let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }

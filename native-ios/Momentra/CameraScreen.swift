@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import MapKit
 import UniformTypeIdentifiers
+import PhotosUI
 
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
@@ -19,6 +20,9 @@ struct CameraScreen: View {
     @AppStorage("native.profile.piresco.note") private var pirescoNote = ""
     @AppStorage("native.profile.pessoal.title") private var pessoalTitle = "MOMENTRA"
     @AppStorage("native.profile.pessoal.note") private var pessoalNote = ""
+    @AppStorage("native.profile.hamoa.logo") private var hamoaLogo = ""
+    @AppStorage("native.profile.piresco.logo") private var pirescoLogo = ""
+    @AppStorage("native.profile.pessoal.logo") private var pessoalLogo = ""
     @State private var showSettings = false
     @State private var showOriginals = false
     @State private var showSettingsImport = false
@@ -27,6 +31,9 @@ struct CameraScreen: View {
     @State private var timerSeconds = 0
     @State private var countdown = 0
     @State private var countdownTask: Task<Void, Never>?
+    @State private var selectedLogo: PhotosPickerItem?
+    @State private var logoLoading = false
+    @State private var logo: UIImage?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -150,13 +157,30 @@ struct CameraScreen: View {
             }
         }
         .statusBarHidden()
-        .onAppear { camera.start(); location.setEnabled(gpsEnabled) }
+        .onAppear { camera.start(); location.setEnabled(gpsEnabled); refreshLogo() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled) }
             else { cancelCountdown(); camera.stop(); location.setEnabled(false) }
         }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
+        .onChange(of: profile) { _, _ in refreshLogo() }
+        .onChange(of: selectedLogo) { _, item in
+            guard let item else { return }
+            let targetProfile = profile
+            logoLoading = true
+            Task { @MainActor in
+                defer { logoLoading = false; selectedLogo = nil }
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else { throw ProfileLogoStore.LogoError.invalid }
+                    let name = try await Task.detached(priority: .utility) { try ProfileLogoStore.save(data) }.value
+                    setLogo(name, for: targetProfile)
+                    if profile == targetProfile { refreshLogo() }
+                } catch {
+                    importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível salvar o logotipo. A imagem anterior foi preservada."
+                }
+            }
+        }
         .sheet(isPresented: $showOriginals) { OriginalsView() }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
@@ -169,6 +193,15 @@ struct CameraScreen: View {
                         }
                         TextField("Título", text: activeTitle)
                         TextField("Observação", text: activeNote)
+                        PhotosPicker(selection: $selectedLogo, matching: .images) {
+                            Label("Escolher logotipo", systemImage: "photo")
+                        }.disabled(logoLoading)
+                        if !activeLogoName.isEmpty {
+                            Button("Remover logotipo do perfil", role: .destructive) {
+                                setLogo("", for: profile)
+                                refreshLogo()
+                            }.disabled(logoLoading)
+                        }
                         Button("Importar ajustes do Scripting") { showSettingsImport = true }
                         Text("Exporte os ajustes no Momentra para Scripting. Logotipos e algumas opções ainda não são importados.")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -199,7 +232,7 @@ struct CameraScreen: View {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
                 }
-                .alert("Importar ajustes", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                .alert("Momentra", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
                     Button("OK") { importMessage = nil }
                 } message: { Text(importMessage ?? "") }
             }
@@ -253,8 +286,26 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, location: location.location, heading: location.heading)
     }
+
+    private var activeLogoName: String {
+        switch profile {
+        case "PIRESCO": return pirescoLogo
+        case "PESSOAL": return pessoalLogo
+        default: return hamoaLogo
+        }
+    }
+
+    private func setLogo(_ name: String, for profileID: String) {
+        switch profileID {
+        case "PIRESCO": pirescoLogo = name
+        case "PESSOAL": pessoalLogo = name
+        default: hamoaLogo = name
+        }
+    }
+
+    private func refreshLogo() { logo = ProfileLogoStore.load(activeLogoName) }
 
     private func apply(_ transfer: SettingsTransfer) {
         let s = transfer.settings
@@ -293,6 +344,10 @@ private struct LiveStampView: View {
                 }
             }
             Spacer(minLength: 0)
+            if let logo = snapshot.logo {
+                Image(uiImage: logo).resizable().scaledToFit().frame(width: 38, height: 38)
+                    .accessibilityLabel("Logotipo do perfil")
+            }
         }
         .foregroundStyle(.white)
         .padding(10)
