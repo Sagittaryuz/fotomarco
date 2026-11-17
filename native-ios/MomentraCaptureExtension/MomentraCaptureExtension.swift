@@ -30,16 +30,25 @@ private struct LockedCaptureView: UIViewControllerRepresentable {
         picker.cameraDevice = .rear
         picker.mediaTypes = [UTType.image.identifier]
         picker.delegate = context.coordinator
+        let overlay = UIHostingController(rootView: LockedStampOverlay(settings: captureContext))
+        overlay.view.backgroundColor = .clear
+        overlay.view.isUserInteractionEnabled = false
+        overlay.view.frame = picker.view.bounds
+        overlay.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        picker.cameraOverlayView = overlay.view
+        context.coordinator.overlay = overlay
         return picker
     }
 
     func updateUIViewController(_ picker: UIImagePickerController, context: Context) {
         context.coordinator.captureContext = captureContext
+        context.coordinator.overlay?.rootView = LockedStampOverlay(settings: captureContext)
     }
 
     final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let directory: URL
         var captureContext: MomentraCaptureContext?
+        var overlay: UIHostingController<LockedStampOverlay>?
         init(directory: URL, captureContext: MomentraCaptureContext?) {
             self.directory = directory
             self.captureContext = captureContext
@@ -75,6 +84,36 @@ private struct LockedCaptureView: UIViewControllerRepresentable {
             let alert = UIAlertController(title: "Não foi possível guardar a foto", message: "Tente fotografar novamente.", preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "OK", style: .default))
             picker.present(alert, animated: true)
+        }
+    }
+}
+
+private struct LockedStampOverlay: View {
+    let settings: MomentraCaptureContext?
+
+    var body: some View {
+        VStack {
+            if settings?.position == "top" { Spacer().frame(height: 80) }
+            else { Spacer() }
+            if let settings, settings.stampEnabled {
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !settings.title.isEmpty { Text(settings.title).font(.caption.bold()) }
+                        if !settings.note.isEmpty { Text(settings.note).font(.caption) }
+                        Text(timeline.date, format: .dateTime.day().month().year().hour().minute().second())
+                            .font(.caption.monospacedDigit())
+                        Text(settings.gpsEnabled ? "Localização indisponível nesta captura" : "Localização desativada")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+                }
+            }
+            if settings?.position == "top" { Spacer() }
+            else { Spacer().frame(height: 165) }
         }
     }
 }
