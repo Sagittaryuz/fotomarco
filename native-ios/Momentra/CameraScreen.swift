@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import MapKit
 
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
@@ -17,6 +18,10 @@ struct CameraScreen: View {
         GeometryReader { geometry in
             ZStack {
                 Color.black.ignoresSafeArea()
+                CameraPreview(session: camera.session)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
                 VStack(spacing: 0) {
                     HStack {
                         Menu {
@@ -35,12 +40,15 @@ struct CameraScreen: View {
                                 .frame(width: 44, height: 44)
                         }.accessibilityLabel("Configurações").disabled(camera.isRecording || camera.isFinishingRecording)
                     }.padding(.horizontal, 18)
-                    Spacer(minLength: 4)
-                    CameraPreview(session: camera.session)
-                        .aspectRatio(3 / 4, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .clipped()
                     Spacer(minLength: 8)
+                    if mode == .photo && stampEnabled {
+                        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                            let snapshot = StampSnapshot(capturedAt: timeline.date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading)
+                            LiveStampView(snapshot: snapshot)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                    }
                     Picker("Modo", selection: $mode) {
                         ForEach(CaptureMode.allCases, id: \.self) { value in
                             Text(value.rawValue).tag(value).disabled(value == .video && !camera.videoAvailable)
@@ -104,5 +112,39 @@ struct CameraScreen: View {
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
+    }
+}
+
+private struct LiveStampView: View {
+    let snapshot: StampSnapshot
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            if snapshot.mapEnabled, let coordinate = snapshot.location?.coordinate {
+                Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350)), interactionModes: []) {
+                    Annotation("Localização", coordinate: coordinate) {
+                        Circle().fill(.blue).frame(width: 13, height: 13).overlay(Circle().stroke(.white, lineWidth: 2))
+                    }
+                }
+                .frame(width: 80, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .id("\(Int(coordinate.latitude * 1000))-\(Int(coordinate.longitude * 1000))")
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(snapshot.lines, id: \.self) { line in
+                    Text(line).font(.caption.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+                }
+                if snapshot.addressEnabled && snapshot.location != nil {
+                    Text("Endereço após a captura").font(.caption2).foregroundStyle(.white.opacity(0.8))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding(10)
+        .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 }
