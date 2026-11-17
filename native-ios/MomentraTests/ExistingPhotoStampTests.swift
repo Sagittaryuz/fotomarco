@@ -1,9 +1,25 @@
 import XCTest
 import UIKit
 import CoreLocation
+import ImageIO
 @testable import Momentra
 
 final class ExistingPhotoStampTests: XCTestCase {
+    func testOriginalExifTimeDoesNotInventTimeZone() {
+        let dateKey = kCGImagePropertyExifDateTimeOriginal as String
+        let offsetKey = kCGImagePropertyExifOffsetTimeOriginal as String
+        let exifKey = kCGImagePropertyExifDictionary as String
+        func metadata(_ date: String, _ offset: String? = nil) -> [String: Any] {
+            var exif = [dateKey: date]
+            if let offset { exif[offsetKey] = offset }
+            return [exifKey: exif]
+        }
+        XCTAssertEqual(ExistingPhotoStamp.exifDateText(properties: metadata("2026:11:16 20:05:00")), "16/11/2026 20:05:00 (fuso não informado)")
+        XCTAssertEqual(ExistingPhotoStamp.exifDateText(properties: metadata("2026:11:16 20:05:00", "-03:00")), "16/11/2026 20:05:00 GMT-03:00")
+        XCTAssertEqual(ExistingPhotoStamp.exifDateText(properties: metadata("2026:11:16 20:05:00", "+99:00")), "16/11/2026 20:05:00 (fuso não informado)")
+        XCTAssertNil(ExistingPhotoStamp.exifDateText(properties: metadata("2026:02:30 20:05:00")))
+    }
+
     func testUsesOnlyAvailableMetadata() {
         let zone = TimeZone(secondsFromGMT: 0)!
         XCTAssertTrue(ExistingPhotoStamp.lines(date: nil, location: nil, timeZone: zone).isEmpty)

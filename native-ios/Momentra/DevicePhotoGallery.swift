@@ -107,6 +107,7 @@ private struct DevicePhotoDetail: View {
     @Environment(\.dismiss) private var dismiss
     @State private var data: Data?
     @State private var preview: UIImage?
+    @State private var originalDateText: String?
     @State private var loading = true
     @State private var saving = false
     @State private var message: String?
@@ -119,13 +120,13 @@ private struct DevicePhotoDetail: View {
                     if let preview { Image(uiImage: preview).resizable().scaledToFit() }
                     else if loading { ProgressView("Abrindo foto…").padding(50) }
                     else { ContentUnavailableView("Não foi possível abrir", systemImage: "photo.badge.exclamationmark") }
-                    Text(ExistingPhotoStamp.description(date: asset.creationDate, location: asset.location))
+                    Text(ExistingPhotoStamp.description(date: asset.creationDate, location: asset.location, originalDateText: originalDateText))
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Text("O carimbo cria uma cópia em Capturas. O original não será alterado. A cópia não mantém os metadados do arquivo original.")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Button("Criar cópia com carimbo") { createCopy() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(data == nil || saving || ExistingPhotoStamp.lines(date: asset.creationDate, location: asset.location).isEmpty)
+                        .disabled(data == nil || saving || ExistingPhotoStamp.lines(date: asset.creationDate, location: asset.location, originalDateText: originalDateText).isEmpty)
                     if saving { ProgressView("Criando cópia…") }
                 }.padding()
             }
@@ -158,13 +159,15 @@ private struct DevicePhotoDetail: View {
                       ] as CFDictionary) else { return }
                 data = bytes
                 preview = UIImage(cgImage: image)
+                let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+                originalDateText = ExistingPhotoStamp.exifDateText(properties: properties)
             }
         }
     }
 
     private func createCopy() {
         guard let data, !saving else { return }
-        let lines = ExistingPhotoStamp.lines(date: asset.creationDate, location: asset.location)
+        let lines = ExistingPhotoStamp.lines(date: asset.creationDate, location: asset.location, originalDateText: originalDateText)
         guard !lines.isEmpty else { return }
         saving = true
         Task {
@@ -186,9 +189,11 @@ private struct DevicePhotoDetail: View {
 }
 
 enum ExistingPhotoStamp {
-    static func lines(date: Date?, location: CLLocation?, timeZone: TimeZone = .current) -> [String] {
+    static func lines(date: Date?, location: CLLocation?, originalDateText: String? = nil, timeZone: TimeZone = .current) -> [String] {
         var result: [String] = []
-        if let date, date.timeIntervalSince1970.isFinite {
+        if let originalDateText {
+            result.append(originalDateText)
+        } else if let date, date.timeIntervalSince1970.isFinite {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "pt_BR")
             formatter.timeZone = timeZone
@@ -201,9 +206,38 @@ enum ExistingPhotoStamp {
         return result
     }
 
-    static func description(date: Date?, location: CLLocation?) -> String {
-        let fields = lines(date: date, location: location)
-        return fields.isEmpty ? "Data e localização indisponíveis nesta foto." : fields.joined(separator: "\n") + (date == nil ? "" : "\nHorário exibido no fuso atual do iPhone.")
+    static func description(date: Date?, location: CLLocation?, originalDateText: String? = nil) -> String {
+        let fields = lines(date: date, location: location, originalDateText: originalDateText)
+        guard !fields.isEmpty else { return "Data e localização indisponíveis nesta foto." }
+        let explanation = originalDateText != nil ? "\nHorário original informado pela foto." : date == nil ? "" : "\nData informada pelo Fotos, exibida no fuso atual do iPhone."
+        return fields.joined(separator: "\n") + explanation
+    }
+
+    static func exifDateText(properties: [String: Any]) -> String? {
+        guard let exif = properties[kCGImagePropertyExifDictionary as String] as? [String: Any],
+              let raw = exif[kCGImagePropertyExifDateTimeOriginal as String] as? String,
+              raw.utf8.count == 19 else { return nil }
+        let input = DateFormatter()
+        input.locale = Locale(identifier: "en_US_POSIX")
+        input.timeZone = TimeZone(secondsFromGMT: 0)
+        input.calendar = Calendar(identifier: .gregorian)
+        input.isLenient = false
+        input.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        guard let date = input.date(from: raw), input.string(from: date) == raw else { return nil }
+        input.dateFormat = "dd/MM/yyyy HH:mm:ss"
+        let text = input.string(from: date)
+        guard let offset = exif[kCGImagePropertyExifOffsetTimeOriginal as String] as? String else {
+            return text + " (fuso não informado)"
+        }
+        let chars = Array(offset.utf8)
+        guard chars.count == 6, (chars[0] == 43 || chars[0] == 45), chars[3] == 58,
+              [chars[1], chars[2], chars[4], chars[5]].allSatisfy({ (48...57).contains($0) }) else {
+            return text + " (fuso não informado)"
+        }
+        let hours = Int(chars[1] - 48) * 10 + Int(chars[2] - 48)
+        let minutes = Int(chars[4] - 48) * 10 + Int(chars[5] - 48)
+        guard hours <= 14, minutes < 60, hours < 14 || minutes == 0 else { return text + " (fuso não informado)" }
+        return text + " GMT" + offset
     }
 
     static func render(_ data: Data, lines: [String]) -> Data? {
