@@ -620,7 +620,10 @@ function CameraPage() {
   async function exportNativeSettings() {
     await run(async () => {
       const payload = nativeSettingsTransfer(settingsRef.current)
-      const result = await DocumentPicker.exportFiles({files:[{name:"momentra-ajustes.json",data:Data.fromUTF8(JSON.stringify(payload,null,2))}]})
+      const json = JSON.stringify(payload,null,2)
+      const data = typeof Data.fromRawString === "function" ? Data.fromRawString(json) : Data.fromString(json)
+      if (!data) throw new Error("Não foi possível preparar os ajustes para exportação")
+      const result = await DocumentPicker.exportFiles({files:[{name:"momentra-ajustes.json",data}]})
       say(result.length ? "Ajustes exportados; logotipos não incluídos" : "Exportação cancelada; ajustes preservados")
     })
   }
