@@ -1,10 +1,13 @@
 import SwiftUI
 import GoogleSignIn
+import AVFoundation
 
-/// Shown once per installation, including existing installations after an update.
+/// The welcome is only for new installations. Existing users keep their access.
 struct AppWelcomeGate: View {
     @AppStorage("welcomeCompletedV1") private var completed = false
+    @AppStorage("lastPresentedVersion") private var lastPresentedVersion = ""
     @State private var page = 0
+    @State private var showNews = false
     @State private var signingIn = false
     @State private var message: String?
 
@@ -12,10 +15,12 @@ struct AppWelcomeGate: View {
         Group {
             if completed {
                 CameraScreen()
+                    .sheet(isPresented: $showNews) { news }
             } else {
                 welcome
             }
         }
+        .onAppear { restoreExistingUser() }
     }
 
     private var welcome: some View {
@@ -33,23 +38,24 @@ struct AppWelcomeGate: View {
                     Text(description).font(.body).foregroundStyle(.white.opacity(0.75))
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     if page == 0 {
-                        if NativeGoogleAuth.configured {
-                            GoogleWelcomeButton(action: signIn)
-                                .frame(height: 48).disabled(signingIn)
-                            if signingIn { ProgressView().tint(.white) }
-                        } else {
+                        GoogleWelcomeButton(action: signIn)
+                            .frame(height: 48).disabled(signingIn)
+                        if signingIn { ProgressView().tint(.white) }
+                        if !NativeGoogleAuth.configured {
                             Text("O login do Google ainda não está configurado nesta versão.")
                                 .font(.footnote).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
                         }
                         Button("Continuar por enquanto") { page = 1 }
                             .foregroundStyle(.white.opacity(0.8))
                     } else {
-                        Button(page == 3 ? "Começar a usar" : "Continuar") {
-                            if page == 3 { completed = true } else { page += 1 }
-                        }
-                        .font(.headline).foregroundStyle(.black)
-                        .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        .background(.white, in: Capsule())
+                        Button {
+                            if page == 3 { lastPresentedVersion = currentVersion; completed = true } else { page += 1 }
+                        } label: {
+                            Text(page == 3 ? "Começar a usar" : "Continuar")
+                                .font(.headline).foregroundStyle(.black)
+                                .frame(maxWidth: .infinity).padding(.vertical, 15)
+                                .background(.white, in: Capsule()).contentShape(Capsule())
+                        }.buttonStyle(.plain)
                         Button("Voltar") { page -= 1 }.foregroundStyle(.white.opacity(0.8))
                     }
                     HStack(spacing: 8) {
@@ -69,6 +75,31 @@ struct AppWelcomeGate: View {
         } message: { Text(message ?? "") }
     }
 
+    private var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
+
+    private func restoreExistingUser() {
+        let existing = completed || AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+        guard existing else { return }
+        let version = currentVersion
+        let updated = !version.isEmpty && lastPresentedVersion != version
+        completed = true
+        if updated { lastPresentedVersion = version; showNews = true }
+    }
+
+    private var news: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Image(systemName: "sparkles").font(.system(size: 48)).accessibilityHidden(true)
+                Text("Novidades do Momentra").font(.title.bold())
+                Text("Esta versão melhora a abertura da câmera e a instalação das atualizações.")
+                    .multilineTextAlignment(.center).foregroundStyle(.secondary)
+                Button("Continuar") { showNews = false }.buttonStyle(.borderedProminent)
+            }.padding(30)
+        }.presentationDetents([.medium, .large])
+    }
+
     private var icon: String { ["person.crop.circle", "camera.aperture", "location.viewfinder", "photo.on.rectangle.angled"][page] }
     private var title: String { ["Bem-vindo ao Momentra", "Registre seus momentos", "Localização no carimbo", "Suas fotos, do seu jeito"][page] }
     private var description: String {
@@ -79,7 +110,10 @@ struct AppWelcomeGate: View {
     }
 
     private func signIn() {
-        guard NativeGoogleAuth.configured, !signingIn,
+        guard NativeGoogleAuth.configured else {
+            message = "O login Google ainda precisa ser configurado para este aplicativo."; return
+        }
+        guard !signingIn,
               let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
               var controller = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
             message = "Não foi possível abrir o login. Tente novamente."; return

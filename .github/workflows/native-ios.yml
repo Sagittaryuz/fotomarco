@@ -1,7 +1,7 @@
 name: Validate native iOS draft
 on:
   push:
-    branches: [feat/native-ios, feat/native-camera-control]
+    branches: [feat/native-ios, feat/native-camera-control, feat/native-direct-updates]
     paths: ['native-ios/**', '.github/workflows/native-ios.yml']
   workflow_dispatch:
 permissions:
@@ -27,7 +27,7 @@ jobs:
           APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
           test -f "$APP/Info.plist"
           test -f "$APP/Momentra"
-          if [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ]; then
+          if [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ] || [ "$GITHUB_REF_NAME" = "feat/native-direct-updates" ]; then
             CAPTURE="$APP/Extensions/MomentraCaptureExtension.appex"
             CONTROL="$APP/PlugIns/MomentraCameraControl.appex"
             test -f "$CAPTURE/MomentraCaptureExtension"
@@ -44,7 +44,7 @@ jobs:
           lipo -archs "$APP/Momentra"
           shasum -a 256 "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
       - name: Preserve unsigned candidate for signing
-        if: github.ref_name == 'feat/native-camera-control'
+        if: github.ref_name == 'feat/native-camera-control' || github.ref_name == 'feat/native-direct-updates'
         uses: actions/upload-artifact@v4
         with:
           name: momentra-unsigned-camera-control-candidate
