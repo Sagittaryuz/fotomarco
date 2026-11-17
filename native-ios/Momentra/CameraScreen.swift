@@ -4,6 +4,7 @@ import AVKit
 import MapKit
 import UniformTypeIdentifiers
 import PhotosUI
+import ImageIO
 
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
@@ -55,6 +56,7 @@ struct CameraScreen: View {
     @State private var selectedLogo: PhotosPickerItem?
     @State private var logoLoading = false
     @State private var logo: UIImage?
+    @State private var galleryThumbnail: UIImage?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -67,6 +69,7 @@ struct CameraScreen: View {
                     .frame(width: previewSize.width, height: previewSize.height)
                     .clipped()
                 VStack(spacing: 0) {
+                    Text("Momentra.").font(.headline).padding(.top, 4).padding(.bottom, 4)
                     HStack {
                         Menu {
                             Button("Desligado") { camera.flashMode = .off }
@@ -78,7 +81,7 @@ struct CameraScreen: View {
                         }
                         .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching || countdown > 0)
                         .accessibilityLabel("Flash")
-                        Spacer()
+                        Spacer(minLength: 0)
                         Menu {
                             Button("Desligado") { timerSeconds = 0 }
                             Button("3 segundos") { timerSeconds = 3 }
@@ -91,6 +94,7 @@ struct CameraScreen: View {
                         }
                         .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                         .accessibilityLabel("Temporizador")
+                        Spacer(minLength: 0)
                         Menu {
                             ForEach(PhotoAspect.allCases, id: \.rawValue) { aspect in
                                 Button(aspect.rawValue) { photoAspect = aspect.rawValue }
@@ -100,6 +104,7 @@ struct CameraScreen: View {
                         }
                         .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                         .accessibilityLabel("Proporção da foto")
+                        Spacer(minLength: 0)
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape.fill").font(.title2)
                                 .frame(width: 44, height: 44)
@@ -109,7 +114,7 @@ struct CameraScreen: View {
                                     }
                                 }
                         }.accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
-                    }.padding(.horizontal, 18)
+                    }.padding(.horizontal, 28).padding(.bottom, 6)
                     if let version = updates.availableVersion {
                         Button("Atualização \(version) disponível") { showSettings = true }
                             .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
@@ -125,48 +130,33 @@ struct CameraScreen: View {
                     }
                     if mode == .photo && stampEnabled && stampPosition != "top" { liveStamp }
                     if !camera.zoomOptions.isEmpty {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 0) {
                             ForEach(camera.zoomOptions, id: \.self) { factor in
                                 Button { camera.setZoom(factor) } label: {
-                                    Text(factor == 0.5 ? "0,5×" : "\(Int(factor))×").font(.caption.bold())
-                                        .frame(width: 44, height: 36)
-                                        .background(abs(camera.zoomFactor - factor) < 0.01 ? .white : .black.opacity(0.7), in: Capsule())
-                                        .foregroundStyle(abs(camera.zoomFactor - factor) < 0.01 ? .black : .white)
+                                    let selected = abs(camera.zoomFactor - factor) < 0.01
+                                    Text(factor == 0.5 ? "0,5" : "\(Int(factor))\(selected ? "×" : "")")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(selected ? Color.yellow : Color.white)
+                                        .frame(width: 48, height: 44)
+                                        .background(selected ? Color.black.opacity(0.58) : Color.clear, in: Circle())
                                 }.accessibilityLabel("Zoom \(factor == 0.5 ? "meio" : String(Int(factor))) vezes")
                             }
-                        }.padding(.bottom, 10)
+                        }.padding(.bottom, 8)
                     }
-                    Picker("Modo", selection: $mode) {
-                        ForEach(CaptureMode.allCases, id: \.self) { value in
-                            Text(value.rawValue).tag(value).disabled(value == .video && !camera.videoAvailable)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 260)
-                    .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching || countdown > 0)
-                    HStack(spacing: 0) {
-                            Button { showOriginals = true } label: {
-                                VStack(spacing: 2) {
-                                    Image(systemName: "photo.on.rectangle").font(.title2).frame(width: 44, height: 40)
-                                    Text("Capturas").font(.caption2)
-                                }
-                            }
-                            .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
-                            .accessibilityLabel("Abrir capturas")
-                            .frame(maxWidth: .infinity)
+                    HStack {
                         Menu {
                             Button("HAMOA") { profile = "HAMOA" }
                             Button("PIRESCO") { profile = "PIRESCO" }
                             Button("Pessoal") { profile = "PESSOAL" }
                         } label: {
-                            VStack(spacing: 2) {
-                                Image(systemName: "square.on.square").font(.title2).frame(width: 44, height: 40)
-                                Text("Perfil").font(.caption2)
-                            }
+                            Image(systemName: "square.on.square").font(.title2)
+                                .frame(width: 54, height: 54)
+                                .background(.black.opacity(0.5), in: Circle())
+                                .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Escolher perfil do carimbo")
-                        .frame(maxWidth: .infinity)
+                        Spacer(minLength: 0)
                         Button {
                             if mode == .video {
                                 if camera.isRecording { camera.stopRecording() } else { camera.startRecording(saveToPhotos: saveToPhotos) }
@@ -176,38 +166,67 @@ struct CameraScreen: View {
                         } label: {
                             Circle().fill(mode == .video ? .red : .white).padding(camera.isRecording ? 18 : 7)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
-                                .frame(width: min(82, geometry.size.width * 0.22), height: min(82, geometry.size.width * 0.22))
+                                .frame(width: min(94, geometry.size.width * 0.25), height: min(94, geometry.size.width * 0.25))
                         }
                         .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isFinishingRecording)
                         .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
+                        Spacer(minLength: 0)
                         Button {
                             mapLocation = makeSnapshot(at: Date()).location
                             showMap = true
                         } label: {
-                            VStack(spacing: 2) {
-                                Image(systemName: "map.fill").font(.title2).frame(width: 44, height: 40)
-                                Text("Mapa").font(.caption2)
-                            }
+                            Image(systemName: "map").font(.title2)
+                                .frame(width: 54, height: 54)
+                                .background(.black.opacity(0.5), in: Circle())
+                                .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Abrir mapa")
-                        .frame(maxWidth: .infinity)
-                            Button { camera.flipCamera() } label: {
-                                VStack(spacing: 2) {
-                                    Image(systemName: "camera.rotate").font(.title2).frame(width: 44, height: 40)
-                                    Text("Inverter").font(.caption2)
+                    }.padding(.horizontal, max(28, geometry.size.width * 0.08)).padding(.bottom, 16)
+                    HStack(spacing: 10) {
+                        Button { showOriginals = true } label: {
+                            Group {
+                                if let galleryThumbnail {
+                                    Image(uiImage: galleryThumbnail).resizable().scaledToFill()
+                                } else {
+                                    Image(systemName: "photo.on.rectangle").font(.title2)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .background(.white.opacity(0.16))
                                 }
-                            }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording || countdown > 0)
-                                .accessibilityLabel("Trocar câmera")
-                                .frame(maxWidth: .infinity)
-                    }.padding(.vertical, 18)
+                            }.frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 11))
+                        }
+                        .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
+                        .accessibilityLabel("Abrir capturas")
+                        Spacer(minLength: 0)
+                        HStack(spacing: 0) {
+                            ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
+                                Button { mode = value } label: {
+                                    Text(value.rawValue).font(.subheadline.weight(.medium))
+                                        .foregroundStyle(mode == value ? Color.yellow : Color.white)
+                                        .frame(maxWidth: .infinity).frame(height: 42)
+                                        .background(mode == value ? Color.white.opacity(0.12) : Color.clear, in: Capsule())
+                                }
+                                .disabled((value == .video && !camera.videoAvailable) || camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching || countdown > 0)
+                                .accessibilityAddTraits(mode == value ? .isSelected : [])
+                            }
+                        }.padding(3).background(.white.opacity(0.10), in: Capsule()).frame(maxWidth: 220)
+                        Spacer(minLength: 0)
+                        Button { camera.flipCamera() } label: {
+                            Image(systemName: "camera.rotate").font(.title2).frame(width: 52, height: 52)
+                                .background(.white.opacity(0.10), in: Circle())
+                        }
+                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording || countdown > 0)
+                        .accessibilityLabel("Trocar câmera")
+                    }
+                    .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 12)
+                    .background(Color.black)
                 }.foregroundStyle(.white)
             }
         }
         .statusBarHidden()
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
-        .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
+        .onAppear { refreshGalleryThumbnail(); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }
@@ -219,7 +238,8 @@ struct CameraScreen: View {
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in refreshAddress() }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
-        .onChange(of: showOriginals) { _, _ in refreshAddress() }
+        .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
+        .onChange(of: camera.isCapturing) { _, capturing in if !capturing { refreshGalleryThumbnail() } }
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
         .onChange(of: profile) { _, _ in refreshLogo(); publishCaptureContext() }
@@ -485,6 +505,24 @@ struct CameraScreen: View {
         case "PIRESCO": return $pirescoNote
         case "PESSOAL": return $pessoalNote
         default: return $hamoaNote
+        }
+    }
+
+    private func refreshGalleryThumbnail() {
+        Task {
+            let image = await Task.detached(priority: .utility) { () -> UIImage? in
+                guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false),
+                      let files = try? FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("Processed", isDirectory: true), includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]),
+                      let newest = files.max(by: { left, right in
+                          let lhs = (try? left.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                          let rhs = (try? right.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                          return lhs < rhs
+                      }),
+                      let source = CGImageSourceCreateWithURL(newest as CFURL, nil),
+                      let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 160] as CFDictionary) else { return nil }
+                return UIImage(cgImage: thumb)
+            }.value
+            galleryThumbnail = image
         }
     }
 

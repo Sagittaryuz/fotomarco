@@ -1,7 +1,7 @@
 name: Validate native iOS draft
 on:
   push:
-    branches: [feat/native-ios, feat/native-camera-control, feat/native-direct-updates, feat/native-icons]
+    branches: [feat/native-ios, feat/native-camera-control, feat/native-direct-updates, feat/native-icons, feat/native-camera-redesign]
     paths: ['native-ios/**', '.github/workflows/native-ios.yml']
   workflow_dispatch:
 permissions:
@@ -23,7 +23,7 @@ jobs:
         working-directory: native-ios
         run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
       - name: Configure Google iOS sign-in
-        if: github.ref_name == 'feat/native-direct-updates' || github.ref_name == 'feat/native-icons'
+        if: github.ref_name == 'feat/native-direct-updates' || (github.ref_name == 'feat/native-icons' || github.ref_name == 'feat/native-camera-redesign')
         env:
           MOMENTRA_GOOGLE_IOS_CLIENT_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
           MOMENTRA_GOOGLE_IOS_REVERSED_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_REVERSED_ID }}
@@ -33,7 +33,7 @@ jobs:
           APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
           test -f "$APP/Info.plist"
           test -f "$APP/Momentra"
-          if [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ] || [ "$GITHUB_REF_NAME" = "feat/native-direct-updates" ] || [ "$GITHUB_REF_NAME" = "feat/native-icons" ]; then
+          if [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ] || [ "$GITHUB_REF_NAME" = "feat/native-direct-updates" ] || [ "$GITHUB_REF_NAME" = "feat/native-icons" ] || [ "$GITHUB_REF_NAME" = "feat/native-camera-redesign" ]; then
             CAPTURE="$APP/Extensions/MomentraCaptureExtension.appex"
             CONTROL="$APP/PlugIns/MomentraCameraControl.appex"
             test -f "$CAPTURE/MomentraCaptureExtension"
@@ -43,7 +43,7 @@ jobs:
             test "$(/usr/libexec/PlistBuddy -c 'Print :EXAppExtensionAttributes:EXExtensionPointIdentifier' "$CAPTURE/Info.plist")" = 'com.apple.securecapture'
             test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$CONTROL/Info.plist")" = 'com.apple.widgetkit-extension'
           fi
-          if [ "$GITHUB_REF_NAME" = "feat/native-icons" ]; then
+          if [ "$GITHUB_REF_NAME" = "feat/native-icons" ] || [ "$GITHUB_REF_NAME" = "feat/native-camera-redesign" ]; then
             for n in 1 2 3 4 5 6 7 8; do
               /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:MomentraIcon$n" "$APP/Info.plist" >/dev/null
             done
@@ -55,7 +55,7 @@ jobs:
           lipo -archs "$APP/Momentra"
           shasum -a 256 "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
       - name: Preserve unsigned candidate for signing
-        if: github.ref_name == 'feat/native-camera-control' || github.ref_name == 'feat/native-direct-updates' || github.ref_name == 'feat/native-icons'
+        if: github.ref_name == 'feat/native-camera-control' || github.ref_name == 'feat/native-direct-updates' || (github.ref_name == 'feat/native-icons' || github.ref_name == 'feat/native-camera-redesign')
         uses: actions/upload-artifact@v4
         with:
           name: momentra-unsigned-camera-control-candidate
