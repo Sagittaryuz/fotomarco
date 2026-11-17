@@ -20,6 +20,7 @@ struct CameraScreen: View {
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @AppStorage("native.stamp.size") private var stampSize = "regular"
     @AppStorage("native.stamp.position") private var stampPosition = "bottom"
+    @AppStorage("native.stamp.horizontal") private var stampHorizontal = "auto"
     @AppStorage("native.stamp.dateFormat") private var dateFormat = "numeric"
     @AppStorage("native.stamp.font") private var stampFont = "system"
     @AppStorage("native.logo.corner") private var logoCorner = "auto"
@@ -305,6 +306,12 @@ struct CameraScreen: View {
                         Text("Embaixo").tag("bottom")
                         Text("Em cima").tag("top")
                     }.disabled(!stampEnabled)
+                    Picker("Alinhamento do carimbo", selection: $stampHorizontal) {
+                        Text("Largura total").tag("auto")
+                        Text("Esquerda").tag("left")
+                        Text("Direita").tag("right")
+                    }.disabled(!stampEnabled)
+                    Text("A posição exata na foto pode diferir da prévia.").font(.footnote).foregroundStyle(.secondary)
                     Picker("Data e hora", selection: $dateFormat) {
                         Text("Numérica").tag("numeric")
                         Text("Por extenso").tag("long")
@@ -408,7 +415,7 @@ struct CameraScreen: View {
                         let data = try file.read(upToCount: 65_537) ?? Data()
                         let transfer = try SettingsTransfer.decode(data)
                         apply(transfer)
-                        importMessage = "Ajustes compatíveis importados. A posição lateral do texto ainda não é aplicada; os logotipos devem ser importados separadamente."
+                        importMessage = "Ajustes compatíveis importados. Os logotipos devem ser importados separadamente; confira as posições na foto."
                     } catch {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
@@ -467,8 +474,12 @@ struct CameraScreen: View {
     }
 
     private var liveStamp: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            LiveStampView(snapshot: makeSnapshot(at: timeline.date))
+        HStack(spacing: 0) {
+            if stampHorizontal == "right" { Spacer(minLength: 0) }
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                LiveStampView(snapshot: makeSnapshot(at: timeline.date))
+            }.frame(maxWidth: stampHorizontal == "auto" ? .infinity : 280)
+            if stampHorizontal == "left" { Spacer(minLength: 0) }
         }.padding(.horizontal, 16)
             .padding(.top, stampPosition == "top" ? 12 : 0)
             .padding(.bottom, stampPosition == "top" ? 0 : 12)
@@ -482,7 +493,7 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {
@@ -513,6 +524,10 @@ struct CameraScreen: View {
         saveToPhotos = s.allowGallery
         if let size = s.size { stampSize = size }
         if let position = s.position { stampPosition = position }
+        if let corner = s.timestampCorner {
+            stampPosition = corner.hasPrefix("top-") ? "top" : "bottom"
+            stampHorizontal = corner.hasSuffix("-left") ? "left" : "right"
+        }
         if let format = s.timestampFormat { dateFormat = format }
         if let font = s.timestampFont { stampFont = font }
         if let scale = s.mapScale { mapScale = scale }

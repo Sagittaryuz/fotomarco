@@ -15,6 +15,7 @@ struct StampSnapshot {
     let logoCorner: String
     let compact: Bool
     let position: String
+    let horizontal: String
     let longDate: Bool
     let fontStyle: String
     let mapScale: String
@@ -24,7 +25,7 @@ struct StampSnapshot {
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -39,6 +40,7 @@ struct StampSnapshot {
         self.logoCorner = ["auto", "top-left", "top-right", "bottom-left", "bottom-right"].contains(logoCorner) ? logoCorner : "auto"
         self.compact = compact
         self.position = position == "top" ? "top" : "bottom"
+        self.horizontal = ["auto", "left", "right"].contains(horizontal) ? horizontal : "auto"
         self.longDate = longDate
         self.fontStyle = ["system", "serif", "mono"].contains(fontStyle) ? fontStyle : "system"
         self.mapScale = ["small", "medium", "large"].contains(mapScale) ? mapScale : "medium"
@@ -116,6 +118,15 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func stampBox(imageSize: CGSize, height: CGFloat, margin: CGFloat, horizontal: String, position: String) -> CGRect? {
+        guard imageSize.width > margin * 2, imageSize.height > margin * 2,
+              height > 0, height <= imageSize.height - margin * 2 else { return nil }
+        let width = horizontal == "auto" ? imageSize.width - margin * 2 : min(imageSize.width * 0.75, imageSize.width - margin * 2)
+        let x = horizontal == "right" ? imageSize.width - margin - width : margin
+        let y = position == "top" ? margin : imageSize.height - margin - height
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
     static func logoRect(imageSize: CGSize, logoSize: CGSize, stamp: CGRect, margin: CGFloat, corner: String, stampPosition: String, additional: [CGRect] = []) -> CGRect? {
         guard imageSize.width > 0, imageSize.height > 0, logoSize.width > 0, logoSize.height > 0, margin >= 0 else { return nil }
         let useLeft = corner.hasSuffix("-left")
@@ -184,7 +195,9 @@ enum StampRenderer {
             let separateMap = map != nil && snapshot.mapCorner != "auto"
             let inlineMapSide = separateMap ? 0 : mapSide
             let mapGap = inlineMapSide == 0 ? 0 : margin
-            let textWidth = size.width - margin * 4 - inlineMapSide - mapGap
+            guard let horizontalBox = stampBox(imageSize: size, height: 1, margin: margin,
+                                                horizontal: snapshot.horizontal, position: snapshot.position) else { fits = false; return }
+            let textWidth = horizontalBox.width - margin * 2 - inlineMapSide - mapGap
             let logoSize: CGSize?
             if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
                 let maxSide = unit * 0.15
@@ -197,8 +210,8 @@ enum StampRenderer {
                                        initialSize: fontSize, style: snapshot.fontStyle, paragraph: paragraph) else { fits = false; return }
             let attrs: [NSAttributedString.Key: Any] = [.font: layout.font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
             let height = max(layout.height, inlineMapSide) + margin * 2
-            let boxY = snapshot.position == "top" ? margin : size.height - margin - height
-            let box = CGRect(x: margin, y: boxY, width: size.width - margin * 2, height: height)
+            guard let box = stampBox(imageSize: size, height: height, margin: margin,
+                                     horizontal: snapshot.horizontal, position: snapshot.position) else { fits = false; return }
             context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.65).cgColor)
             context.cgContext.fill(box)
             var separateMapRect: CGRect?
