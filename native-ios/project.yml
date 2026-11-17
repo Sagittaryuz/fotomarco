@@ -32,6 +32,7 @@ targets:
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS.'
         INFOPLIST_KEY_NSMotionUsageDescription: 'O sensor de pressão é usado no carimbo quando você ativa essa opção.'
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: 'Permite salvar fotos e vídeos na biblioteca.'
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 'Permite visualizar as fotos escolhidas e criar cópias com carimbo.'
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: 'UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'

@@ -34,9 +34,45 @@ struct OriginalsView: View {
     @State private var isSaving = false
     @State private var photoForGoogle: URL?
     @State private var showPhotoConsent = false
+    @State private var gallerySection = 0
 
     var body: some View {
         NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Galeria", selection: $gallerySection) {
+                    Text("Capturas").tag(0)
+                    Text("Celular").tag(1)
+                    Text("Nuvem").tag(2)
+                }.pickerStyle(.segmented).padding()
+                if gallerySection == 0 {
+                    captures
+                } else if gallerySection == 1 {
+                    DevicePhotoGallery()
+                } else {
+                    ContentUnavailableView("Google Fotos", systemImage: "cloud", description: Text("A galeria na nuvem ainda está em preparação. Suas fotos no celular permanecem disponíveis."))
+                }
+            }
+            .navigationTitle("Galeria")
+            .toolbar { Button("Concluído") { dismiss() } }
+            .onAppear { reload() }
+            .onChange(of: gallerySection) { _, section in if section == 0 { reload() } }
+            .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
+                Button("Confirmo uso pessoal e envio") {
+                    if let url = photoForGoogle { googlePhotos.sendProcessedPhoto(url) }
+                    photoForGoogle = nil
+                }
+                Button("Cancelar", role: .cancel) { photoForGoogle = nil }
+            }
+            .onChange(of: googlePhotos.message) { _, value in
+                if let value { message = value; googlePhotos.message = nil }
+            }
+            .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+                Button("OK") { message = nil }
+            } message: { Text(message ?? "") }
+        }
+    }
+
+    private var captures: some View {
             List {
                 Section {
                     Text("Fotos processadas, originais e vídeos guardados neste aplicativo. Compartilhe ou salve no Fotos antes de desinstalá-lo.")
@@ -68,23 +104,6 @@ struct OriginalsView: View {
                     }
                 }
             }
-            .navigationTitle("Capturas")
-            .toolbar { Button("Concluído") { dismiss() } }
-            .onAppear { reload() }
-            .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
-                Button("Confirmo uso pessoal e envio") {
-                    if let url = photoForGoogle { googlePhotos.sendProcessedPhoto(url) }
-                    photoForGoogle = nil
-                }
-                Button("Cancelar", role: .cancel) { photoForGoogle = nil }
-            }
-            .onChange(of: googlePhotos.message) { _, value in
-                if let value { message = value; googlePhotos.message = nil }
-            }
-            .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-                Button("OK") { message = nil }
-            } message: { Text(message ?? "") }
-        }
     }
 
     private func reload() {
