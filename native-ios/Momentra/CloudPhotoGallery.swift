@@ -3,7 +3,7 @@ import ImageIO
 
 struct CloudPhotoGallery: View {
     @ObservedObject var googlePhotos: GooglePhotosManager
-    @StateObject private var picker = GooglePickerFlow()
+    @ObservedObject var picker: GooglePickerFlow
     @State private var showPickerConsent = false
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 3)]
 
@@ -64,7 +64,6 @@ struct CloudPhotoGallery: View {
                     Button("OK") { picker.message = nil }
                 } message: { Text(picker.message ?? "") }
                 .sheet(item: $picker.picked) { item in PickedCloudPhotoView(item: item) }
-                .onDisappear { picker.cancel() }
             }
         }
     }

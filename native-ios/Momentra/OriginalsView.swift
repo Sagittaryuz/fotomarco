@@ -35,6 +35,7 @@ struct OriginalsView: View {
     @State private var photoForGoogle: URL?
     @State private var showPhotoConsent = false
     @State private var gallerySection = 0
+    @StateObject private var picker = GooglePickerFlow()
 
     var body: some View {
         NavigationStack {
@@ -49,13 +50,17 @@ struct OriginalsView: View {
                 } else if gallerySection == 1 {
                     DevicePhotoGallery()
                 } else {
-                    CloudPhotoGallery(googlePhotos: googlePhotos)
+                    CloudPhotoGallery(googlePhotos: googlePhotos, picker: picker)
                 }
             }
             .navigationTitle("Galeria")
-            .toolbar { Button("Concluído") { dismiss() } }
+            .toolbar { Button("Concluído") { picker.cancel(); dismiss() } }
+            .interactiveDismissDisabled(picker.busy || picker.waitingForSelection)
             .onAppear { reload() }
-            .onChange(of: gallerySection) { _, section in if section == 0 { reload() } }
+            .onChange(of: gallerySection) { previous, section in
+                if previous == 2 && section != 2 { picker.cancel() }
+                if section == 0 { reload() }
+            }
             .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
                 Button("Confirmo uso pessoal e envio") {
                     if let url = photoForGoogle { googlePhotos.sendProcessedPhoto(url) }
