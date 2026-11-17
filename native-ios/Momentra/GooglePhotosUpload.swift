@@ -1,8 +1,7 @@
 import Foundation
 import CryptoKit
 
-// This transport is not connected to a login or UI yet. Callers must obtain the
-// user's personal-use and per-photo consent before invoking it.
+// Callers must obtain the user's personal-use and per-photo consent before upload.
 protocol PersonalPhotoTransport {
     func uploadBytes(_ jpeg: Data) async throws -> String
     func createItem(uploadToken: String, filename: String) async throws -> String
@@ -83,6 +82,16 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
         }) else { throw URLError(.badURL) }
         let data = try await request(path: "/mediaItems/" + id, method: "GET", limit: 32768)
         return try JSONDecoder().decode(MediaItem.self, from: data).id == id
+    }
+
+    func listAppPhotos(pageToken: String? = nil) async throws -> CloudPhotoPage {
+        guard (pageToken?.utf8.count ?? 0) <= 2048 else { throw URLError(.badURL) }
+        var query = URLComponents()
+        query.queryItems = [URLQueryItem(name: "pageSize", value: "50")]
+        if let pageToken { query.queryItems?.append(URLQueryItem(name: "pageToken", value: pageToken)) }
+        guard let encoded = query.percentEncodedQuery else { throw URLError(.badURL) }
+        let bytes = try await request(path: "/mediaItems?" + encoded, method: "GET", limit: 512 * 1024)
+        return try CloudPhotoPage.parse(bytes)
     }
 
     private struct MediaItem: Decodable { let id: String }
