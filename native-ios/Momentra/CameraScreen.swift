@@ -11,6 +11,7 @@ struct CameraScreen: View {
     @StateObject private var pressure = PressureService()
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
+    @StateObject private var googlePhotos = GooglePhotosManager()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
@@ -40,6 +41,7 @@ struct CameraScreen: View {
     @State private var showSettingsImport = false
     @State private var showLogoImport = false
     @State private var showForecastTerms = false
+    @State private var showGoogleConsent = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
@@ -218,7 +220,7 @@ struct CameraScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showOriginals) { OriginalsView() }
+        .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {
@@ -318,6 +320,20 @@ struct CameraScreen: View {
                         if let status = weather.status { Text(status).font(.footnote) }
                         Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
                     }
+                    Section("Google Fotos pessoal") {
+                        if googlePhotos.configured {
+                            if googlePhotos.connected {
+                                Button("Desconectar conta") { googlePhotos.signOut() }.disabled(googlePhotos.busy)
+                            } else {
+                                Button("Conectar Google Fotos") { showGoogleConsent = true }.disabled(googlePhotos.busy)
+                            }
+                            Text("O envio é manual e exclusivo para fotos pessoais. Conectar não envia fotos.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        } else {
+                            Text("A conexão nativa ainda não está configurada.").font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if let message = googlePhotos.message { Text(message).font(.footnote) }
+                    }
                     Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -325,6 +341,13 @@ struct CameraScreen: View {
                 .toolbar { Button("Concluído") { showSettings = false } }
                 .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
                     Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
+                    Button("Cancelar", role: .cancel) {}
+                }
+                .confirmationDialog("Somente fotos pessoais. O Google pedirá permissão para adicionar fotos e ler itens criados pelo Momentra. Nenhuma foto será enviada ao conectar.", isPresented: $showGoogleConsent, titleVisibility: .visible) {
+                    Button("Declaro uso pessoal e conecto") {
+                        if let controller = Self.presentingController() { googlePhotos.connect(presenting: controller) }
+                        else { googlePhotos.message = "Não foi possível abrir o login. Tente novamente." }
+                    }
                     Button("Cancelar", role: .cancel) {}
                 }
                 .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
@@ -423,6 +446,13 @@ struct CameraScreen: View {
         }.padding(.horizontal, 16)
             .padding(.top, stampPosition == "top" ? 12 : 0)
             .padding(.bottom, stampPosition == "top" ? 0 : 12)
+    }
+
+    private static func presentingController() -> UIViewController? {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first { $0.activationState == .foregroundActive }
+        var controller = scene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        while let presented = controller?.presentedViewController { controller = presented }
+        return controller
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {

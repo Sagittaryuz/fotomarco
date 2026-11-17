@@ -27,10 +27,13 @@ private enum OriginalStore {
 }
 
 struct OriginalsView: View {
+    @ObservedObject var googlePhotos: GooglePhotosManager
     @Environment(\.dismiss) private var dismiss
     @State private var files: [OriginalFile] = []
     @State private var message: String?
     @State private var isSaving = false
+    @State private var photoForGoogle: URL?
+    @State private var showPhotoConsent = false
 
     var body: some View {
         NavigationStack {
@@ -55,6 +58,10 @@ struct OriginalsView: View {
                             ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
                             Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
                                 .disabled(isSaving)
+                            if googlePhotos.configured && item.isProcessed {
+                                Button { photoForGoogle = item.url; showPhotoConsent = true } label: { Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up") }
+                                    .disabled(googlePhotos.busy)
+                            }
                         } label: {
                             Image(systemName: "ellipsis.circle").font(.title2).frame(width: 44, height: 44)
                         }.accessibilityLabel("Opções da captura")
@@ -64,6 +71,16 @@ struct OriginalsView: View {
             .navigationTitle("Capturas")
             .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { reload() }
+            .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
+                Button("Confirmo uso pessoal e envio") {
+                    if let url = photoForGoogle { googlePhotos.sendProcessedPhoto(url) }
+                    photoForGoogle = nil
+                }
+                Button("Cancelar", role: .cancel) { photoForGoogle = nil }
+            }
+            .onChange(of: googlePhotos.message) { _, value in
+                if let value { message = value; googlePhotos.message = nil }
+            }
             .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }
             } message: { Text(message ?? "") }
