@@ -11,6 +11,7 @@ struct CameraScreen: View {
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @AppStorage("native.address.enabled") private var addressEnabled = false
     @State private var showSettings = false
+    @State private var showOriginals = false
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
     @State private var countdown = 0
@@ -90,7 +91,18 @@ struct CameraScreen: View {
                     .frame(maxWidth: 260)
                     .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching || countdown > 0)
                     HStack {
-                        Spacer().frame(maxWidth: .infinity)
+                        HStack {
+                            Spacer()
+                            Button { showOriginals = true } label: {
+                                VStack(spacing: 2) {
+                                    Image(systemName: "photo.on.rectangle").font(.title2).frame(width: 44, height: 40)
+                                    Text("Originais").font(.caption2)
+                                }
+                            }
+                            .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
+                            .accessibilityLabel("Abrir originais")
+                            Spacer()
+                        }.frame(maxWidth: .infinity)
                         Button {
                             if mode == .video {
                                 if camera.isRecording { camera.stopRecording() } else { camera.startRecording() }
@@ -124,6 +136,7 @@ struct CameraScreen: View {
             else { cancelCountdown(); camera.stop(); location.setEnabled(false) }
         }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
+        .sheet(isPresented: $showOriginals) { OriginalsView() }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 Form {
