@@ -8,6 +8,19 @@ final class GooglePhotosManager: ObservableObject {
     @Published var message: String?
     private let auth = NativeGoogleAuth()
 
+    init() {
+        guard NativeGoogleAuth.configured, GIDSignIn.sharedInstance.currentUser == nil,
+              GIDSignIn.sharedInstance.hasPreviousSignIn() else { return }
+        busy = true
+        GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] _, _ in
+            Task { @MainActor in
+                // A failed restore leaves the local camera and photos available.
+                self?.busy = false
+                self?.objectWillChange.send()
+            }
+        }
+    }
+
     var configured: Bool { NativeGoogleAuth.configured }
     var connected: Bool {
         guard let user = GIDSignIn.sharedInstance.currentUser, user.userID != nil,

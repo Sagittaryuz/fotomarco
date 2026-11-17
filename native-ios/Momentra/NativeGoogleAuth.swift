@@ -2,7 +2,7 @@ import Foundation
 import GoogleSignIn
 import UIKit
 
-// No sign-in occurs at launch. This component is not yet connected to the UI.
+// Photo-library scopes are requested separately from the basic identity sign-in.
 @MainActor
 final class NativeGoogleAuth {
     static let scopes = [
