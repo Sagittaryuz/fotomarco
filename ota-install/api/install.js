@@ -22,10 +22,16 @@ module.exports = async function handler(req, res) {
   if (!/^[a-z0-9.-]+\.vercel\.app$/i.test(host)) return res.status(400).send('Endereço inválido.');
   const endpoint = `https://${host}/api/install`;
   const token = encodeURIComponent(req.query.token);
+  const version = process.env.RELEASE_VERSION || '0.1.5';
+  if (!/^\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(version)) return res.status(503).send('Versão indisponível.');
+  if (req.query.stage === 'metadata') {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.send(JSON.stringify({version}));
+  }
   if (req.query.stage === 'manifest') {
     const ipa = escapeXml(`${endpoint}?stage=package&token=${token}`);
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    return res.send(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>br.com.momentra.camera</string><key>bundle-version</key><string>0.1.5</string><key>kind</key><string>software</string><key>title</key><string>Momentra</string></dict></dict></array></dict></plist>`);
+    return res.send(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>br.com.momentra.camera</string><key>bundle-version</key><string>${version}</string><key>kind</key><string>software</string><key>title</key><string>Momentra</string></dict></dict></array></dict></plist>`);
   }
   if (req.query.stage === 'package') {
     const remote = process.env.SIGNED_IPA_URL;
@@ -42,5 +48,5 @@ module.exports = async function handler(req, res) {
   const manifest = `${endpoint}?stage=manifest&token=${token}`;
   const install = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifest)}`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Momentra</title><body style="font:18px system-ui;background:#111;color:white;padding:24px"><h1>Momentra 0.1.5</h1><p>Instale sobre a versão existente para manter seus dados.</p><a style="display:inline-block;background:#fff;color:#111;padding:16px;border-radius:12px;text-decoration:none" href="${escapeXml(install)}">Instalar atualização</a></body></html>`);
+  return res.send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Momentra</title><body style="font:18px system-ui;background:#111;color:white;padding:24px"><h1>Momentra ${version}</h1><p>Instale sobre a versão existente para manter seus dados.</p><a style="display:inline-block;background:#fff;color:#111;padding:16px;border-radius:12px;text-decoration:none" href="${escapeXml(install)}">Instalar atualização</a></body></html>`);
 };
