@@ -46,9 +46,15 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
             request.setValue("image/jpeg", forHTTPHeaderField: "X-Goog-Upload-Content-Type")
         }
         request.httpBody = body
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), data.count <= limit else {
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode),
+              response.expectedContentLength <= Int64(limit) else {
             throw URLError(.badServerResponse)
+        }
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < limit else { throw URLError(.dataLengthExceedsMaximum) }
+            data.append(byte)
         }
         return data
     }
@@ -109,17 +115,20 @@ private struct PersonalUploadReceipt: Codable {
 actor PersonalPhotoUploader {
     private let directory: URL
     private let transport: PersonalPhotoTransport
+    private let accountIsCurrent: (String) async -> Bool
     private var inflight = Set<String>()
 
-    init(directory: URL, transport: PersonalPhotoTransport) {
+    init(directory: URL, transport: PersonalPhotoTransport, accountIsCurrent: @escaping (String) async -> Bool) {
         self.directory = directory
         self.transport = transport
+        self.accountIsCurrent = accountIsCurrent
     }
 
     func upload(jpeg: Data, captureID: UUID, owner: String, personalConsent: Bool) async -> PersonalUploadOutcome {
         guard personalConsent, !owner.isEmpty, owner.utf8.count <= 512,
               jpeg.count >= 4, jpeg.count <= 20 * 1024 * 1024,
               jpeg.prefix(3).elementsEqual([0xff, 0xd8, 0xff]) else { return .failed }
+        guard await accountIsCurrent(owner) else { return .failed }
         let hash = SHA256.hash(data: Data(owner.utf8)).map { String(format: "%02x", $0) }.joined()
         let fileHash = SHA256.hash(data: jpeg).map { String(format: "%02x", $0) }.joined()
         let key = hash + "-" + captureID.uuidString
@@ -133,10 +142,11 @@ actor PersonalPhotoUploader {
                   receipt.version == 1, receipt.ownerHash == hash, receipt.captureID == captureID,
                   receipt.fileHash == fileHash else { return .uncertain }
             guard receipt.state == "known", let id = receipt.mediaID, Self.validID(id) else { return .uncertain }
-            return await verify(id)
+            return await verify(id, owner: owner)
         }
         let token: String
         do { token = try await transport.uploadBytes(jpeg) } catch { return .failed }
+        guard await accountIsCurrent(owner) else { return .failed }
         guard !token.isEmpty, token.utf8.count <= 8192,
               token.utf8.allSatisfy({ $0 >= 33 && $0 <= 126 }) else { return .failed }
         do {
@@ -145,6 +155,7 @@ actor PersonalPhotoUploader {
             let creating = PersonalUploadReceipt(version: 1, ownerHash: hash, captureID: captureID, fileHash: fileHash, state: "creating", mediaID: nil)
             try JSONEncoder().encode(creating).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch { return .failed }
+        guard await accountIsCurrent(owner) else { return .uncertain }
         let id: String
         do { id = try await transport.createItem(uploadToken: token, filename: captureID.uuidString + ".jpg") }
         catch { return .uncertain }
@@ -153,11 +164,16 @@ actor PersonalPhotoUploader {
             let known = PersonalUploadReceipt(version: 1, ownerHash: hash, captureID: captureID, fileHash: fileHash, state: "known", mediaID: id)
             try JSONEncoder().encode(known).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch { return .uncertain }
-        return await verify(id)
+        return await verify(id, owner: owner)
     }
 
-    private func verify(_ id: String) async -> PersonalUploadOutcome {
-        do { return try await transport.verifyItem(id: id) ? .verified(id) : .verificationPending(id) }
+    private func verify(_ id: String, owner: String) async -> PersonalUploadOutcome {
+        guard await accountIsCurrent(owner) else { return .verificationPending(id) }
+        do {
+            let verified = try await transport.verifyItem(id: id)
+            guard await accountIsCurrent(owner) else { return .verificationPending(id) }
+            return verified ? .verified(id) : .verificationPending(id)
+        }
         catch { return .verificationPending(id) }
     }
 
