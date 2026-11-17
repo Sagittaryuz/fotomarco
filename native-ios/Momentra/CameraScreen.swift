@@ -105,6 +105,12 @@ struct CameraScreen: View {
                                 }
                         }.accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }.padding(.horizontal, 18)
+                    if let version = updates.availableVersion {
+                        Button("Atualização \(version) disponível") { showSettings = true }
+                            .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(.black.opacity(0.75), in: Capsule())
+                            .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
+                    }
                     if mode == .photo && stampEnabled && stampPosition == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
@@ -198,7 +204,7 @@ struct CameraScreen: View {
         .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled) }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); Task { await updates.check() } }
             else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
         }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
@@ -248,7 +254,7 @@ struct CameraScreen: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                         Button(updates.checking ? "Verificando…" : "Verificar atualizações") {
-                            Task { await updates.check() }
+                            Task { await updates.check(force: true) }
                         }.disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
                         Text("A consulta ao GitHub envia o IP da conexão para verificar versões publicadas.")

@@ -25,6 +25,13 @@ struct UpdateRelease: Decodable {
     }
 }
 
+enum UpdateCheckPolicy {
+    static func shouldCheck(lastAttempt: Date?, now: Date, force: Bool) -> Bool {
+        guard !force, let lastAttempt else { return true }
+        return now < lastAttempt || now.timeIntervalSince(lastAttempt) >= 3600
+    }
+}
+
 @MainActor
 final class UpdateService: ObservableObject {
     static let releasesURL = URL(string: "https://github.com/Sagittaryuz/momentra/releases")!
@@ -32,9 +39,12 @@ final class UpdateService: ObservableObject {
     @Published private(set) var availableVersion: String?
     @Published private(set) var status: String?
     @Published private(set) var checking = false
+    private var lastAutomaticAttempt: Date?
 
-    func check() async {
-        guard !checking else { return }
+    func check(force: Bool = false) async {
+        let now = Date()
+        guard !checking, UpdateCheckPolicy.shouldCheck(lastAttempt: lastAutomaticAttempt, now: now, force: force) else { return }
+        if !force { lastAutomaticAttempt = now }
         checking = true
         defer { checking = false }
         guard let currentString = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
