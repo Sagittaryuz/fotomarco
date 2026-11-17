@@ -329,7 +329,13 @@ struct CameraScreen: View {
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { showMap = false } } }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .sheet(isPresented: $showSettings) { settingsSheet }
+        .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
+            Button("OK") { camera.clearError() }
+        } message: { Text(camera.errorMessage ?? "") }
+    }
+
+    private var settingsSheet: some View {
             NavigationStack {
                 Form {
                     Section("Atualizações") {
@@ -531,10 +537,6 @@ struct CameraScreen: View {
                     Button("OK") { importMessage = nil }
                 } message: { Text(importMessage ?? "") }
             }
-        }
-        .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
-            Button("OK") { camera.clearError() }
-        } message: { Text(camera.errorMessage ?? "") }
     }
 
     private func cancelCountdown() {
