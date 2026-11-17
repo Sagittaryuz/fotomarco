@@ -1,0 +1,22 @@
+name: Validate native iOS draft
+on:
+  push:
+    branches: [feat/native-ios]
+    paths: ['native-ios/**', '.github/workflows/native-ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulator-build:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: native-ios
+        run: xcodegen generate
+      - name: Compile for iOS Simulator
+        working-directory: native-ios
+        run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
