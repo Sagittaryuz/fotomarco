@@ -172,15 +172,7 @@ private struct DevicePhotoDetail: View {
         saving = true
         Task {
             let success = await Task.detached(priority: .userInitiated) { () -> Bool in
-                guard let result = ExistingPhotoStamp.render(data, lines: lines) else { return false }
-                do {
-                    let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                    let directory = root.appendingPathComponent("Processed", isDirectory: true)
-                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                    let url = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension("jpg")
-                    try result.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-                    return true
-                } catch { return false }
+                ExistingPhotoStamp.saveCopy(data, lines: lines)
             }.value
             saving = false
             message = success ? "Cópia criada em Capturas. O original foi preservado." : "Não foi possível criar a cópia. O original foi preservado."
@@ -189,6 +181,18 @@ private struct DevicePhotoDetail: View {
 }
 
 enum ExistingPhotoStamp {
+    static func saveCopy(_ data: Data, lines: [String]) -> Bool {
+        guard let result = render(data, lines: lines) else { return false }
+        do {
+            let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            let directory = root.appendingPathComponent("Processed", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension("jpg")
+            try result.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            return true
+        } catch { return false }
+    }
+
     static func lines(date: Date?, location: CLLocation?, originalDateText: String? = nil, timeZone: TimeZone = .current) -> [String] {
         var result: [String] = []
         if let originalDateText {

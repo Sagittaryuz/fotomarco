@@ -3,6 +3,8 @@ import ImageIO
 
 struct CloudPhotoGallery: View {
     @ObservedObject var googlePhotos: GooglePhotosManager
+    @StateObject private var picker = GooglePickerFlow()
+    @State private var showPickerConsent = false
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 3)]
 
     var body: some View {
@@ -14,6 +16,16 @@ struct CloudPhotoGallery: View {
             } else {
                 ScrollView {
                     VStack(spacing: 12) {
+                        if picker.waitingForSelection {
+                            Text("Depois de escolher a foto no Google Fotos, volte para cá.")
+                                .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+                            Button("Já selecionei") { picker.retrieve() }.buttonStyle(.borderedProminent).disabled(picker.busy)
+                            Button("Cancelar seleção") { picker.cancel() }.disabled(picker.busy)
+                        } else {
+                            Button("Escolher outra foto do Google Fotos") { showPickerConsent = true }
+                                .buttonStyle(.bordered).disabled(picker.busy || googlePhotos.busy)
+                        }
+                        if picker.busy { ProgressView("Preparando seleção…").padding() }
                         Text("Aqui aparecem fotos pessoais criadas pelo Momentra no Google Fotos. Outras fotos da sua conta não aparecem nesta lista.")
                             .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                         if googlePhotos.busy { ProgressView().padding() }
@@ -44,6 +56,15 @@ struct CloudPhotoGallery: View {
                 .task(id: googlePhotos.connected) {
                     if !googlePhotos.cloudLoaded && !googlePhotos.busy { googlePhotos.loadCloudPhotos() }
                 }
+                .confirmationDialog("Escolha uma foto pessoal no Google Fotos. O Google solicitará permissão para acessar somente as fotos selecionadas. Nenhuma foto será enviada automaticamente.", isPresented: $showPickerConsent, titleVisibility: .visible) {
+                    Button("Escolher foto pessoal") { picker.start() }
+                    Button("Cancelar", role: .cancel) {}
+                }
+                .alert("Google Fotos", isPresented: Binding(get: { picker.message != nil }, set: { if !$0 { picker.message = nil } })) {
+                    Button("OK") { picker.message = nil }
+                } message: { Text(picker.message ?? "") }
+                .sheet(item: $picker.picked) { item in PickedCloudPhotoView(item: item) }
+                .onDisappear { if picker.waitingForSelection { picker.cancel() } }
             }
         }
     }
