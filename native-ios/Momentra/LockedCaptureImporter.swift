@@ -40,8 +40,21 @@ enum LockedCaptureImporter {
                   let data = try? Data(contentsOf: source), data.count == size else { continue }
             let target = destination.appendingPathComponent(source.lastPathComponent)
             guard !fm.fileExists(atPath: target.path) else { continue }
-            // Never delete the original session on failure or after copying.
-            try? data.write(to: target, options: [.withoutOverwriting, .completeFileProtectionUntilFirstUserAuthentication])
+            writeIfAbsent(data, to: target)
+        }
+    }
+
+    private static func writeIfAbsent(_ data: Data, to target: URL) {
+        let fm = FileManager.default
+        let staging = target.deletingLastPathComponent().appendingPathComponent(".momentra-import-" + UUID().uuidString)
+        do {
+            try data.write(to: staging, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            defer { try? fm.removeItem(at: staging) }
+            // A hard link in the same directory publishes complete bytes atomically
+            // and fails if a target already exists; the session source is untouched.
+            try fm.linkItem(at: staging, to: target)
+        } catch {
+            try? fm.removeItem(at: staging)
         }
     }
 }
