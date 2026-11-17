@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct CameraScreen: View {
     @StateObject private var camera = CameraService()
@@ -13,7 +14,16 @@ struct CameraScreen: View {
                 Color.black.ignoresSafeArea()
                 VStack(spacing: 0) {
                     HStack {
-                        Text("MOMENTRA").font(.caption.bold()).tracking(2)
+                        Menu {
+                            Button("Desligado") { camera.flashMode = .off }
+                            Button("Automático") { camera.flashMode = .auto }
+                            Button("Ligado") { camera.flashMode = .on }
+                        } label: {
+                            Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
+                                .font(.title2).frame(width: 44, height: 44)
+                        }
+                        .disabled(!camera.hasFlash || camera.isCapturing || camera.isSwitching)
+                        .accessibilityLabel("Flash")
                         Spacer()
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape.fill").font(.title2)
@@ -29,14 +39,24 @@ struct CameraScreen: View {
                     Text("FOTO").font(.caption.bold()).tracking(1.5)
                         .padding(.vertical, 10).padding(.horizontal, 32)
                         .background(.white, in: Capsule()).foregroundStyle(.black)
-                    Button { camera.capture() } label: {
-                        Circle().fill(.white).padding(7)
-                            .overlay(Circle().stroke(.white, lineWidth: 3))
-                            .frame(width: min(82, geometry.size.width * 0.22), height: min(82, geometry.size.width * 0.22))
-                    }
-                    .disabled(!camera.ready || camera.isCapturing)
-                    .accessibilityLabel("Fotografar")
-                    .padding(.vertical, 18)
+                    HStack {
+                        Spacer().frame(maxWidth: .infinity)
+                        Button { camera.capture() } label: {
+                            Circle().fill(.white).padding(7)
+                                .overlay(Circle().stroke(.white, lineWidth: 3))
+                                .frame(width: min(82, geometry.size.width * 0.22), height: min(82, geometry.size.width * 0.22))
+                        }
+                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching)
+                        .accessibilityLabel("Fotografar")
+                        HStack {
+                            Spacer()
+                            Button { camera.flipCamera() } label: {
+                                Image(systemName: "camera.rotate").font(.title2).frame(width: 44, height: 44)
+                            }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching)
+                                .accessibilityLabel("Trocar câmera")
+                            Spacer()
+                        }.frame(maxWidth: .infinity)
+                    }.padding(.vertical, 18)
                 }.foregroundStyle(.white)
             }
         }
