@@ -305,6 +305,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let snapshot = self.pendingStamp
             let aspect = self.pendingAspect
             let saveToPhotos = self.pendingPhotoSaveToPhotos
+            let captureID = UUID()
             self.pendingStamp = nil
             do {
                 let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -313,7 +314,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 let source = CGImageSourceCreateWithData(data as CFData, nil)
                 let type = source.flatMap { CGImageSourceGetType($0) }.map { $0 as String }.flatMap { UTType($0) }
                 let suffix = type?.preferredFilenameExtension ?? "image"
-                try data.write(to: originals.appendingPathComponent(UUID().uuidString + "." + suffix), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                try data.write(to: originals.appendingPathComponent(captureID.uuidString + "." + suffix), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             } catch {
                 self.report("Não foi possível preservar a foto original. Libere espaço e tente novamente.")
                 DispatchQueue.main.async { self.isCapturing = false }
@@ -325,7 +326,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     DispatchQueue.main.async { self.isCapturing = false }
                     return
                 }
-                self.savePhoto(rendered, saveToPhotos: saveToPhotos)
+                self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos)
                 return
             }
             StampMap.load(snapshot: snapshot, queue: self.queue) { map in
@@ -341,14 +342,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                         DispatchQueue.main.async { self.isCapturing = false }
                         return
                     }
-                    self.savePhoto(rendered, saveToPhotos: saveToPhotos)
+                    self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos)
                 }
             }
         }
     }
 
-    private func savePhoto(_ data: Data, saveToPhotos: Bool) {
-        do { _ = try ProcessedFileStore.save(data) }
+    private func savePhoto(_ data: Data, captureID: UUID, saveToPhotos: Bool) {
+        do { _ = try ProcessedFileStore.save(data, captureID: captureID) }
         catch {
             report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
             DispatchQueue.main.async { self.isCapturing = false }

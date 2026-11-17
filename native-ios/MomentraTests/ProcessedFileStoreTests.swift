@@ -14,4 +14,15 @@ final class ProcessedFileStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: secondURL), second)
         XCTAssertThrowsError(try ProcessedFileStore.save(Data(), root: root))
     }
+
+    func testCaptureIdentifierIsPreservedAndCannotOverwrite() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID()
+        let first = Data([1, 2, 3])
+        let url = try ProcessedFileStore.save(first, captureID: id, root: root)
+        XCTAssertEqual(url.deletingPathExtension().lastPathComponent, id.uuidString)
+        XCTAssertThrowsError(try ProcessedFileStore.save(Data([9]), captureID: id, root: root))
+        XCTAssertEqual(try Data(contentsOf: url), first)
+    }
 }
