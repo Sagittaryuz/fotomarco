@@ -35,7 +35,9 @@ final class ExistingPhotoStampTests: XCTestCase {
     }
 
     func testProducesCopyWithoutCroppingAndDoesNotStampWhenNoData() throws {
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 200)).image { context in
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 200), format: format).image { context in
             UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 400, height: 200))
         }
         let original = try XCTUnwrap(image.jpegData(compressionQuality: 1))
