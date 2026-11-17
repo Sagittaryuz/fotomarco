@@ -9,7 +9,11 @@ final class GooglePhotosManager: ObservableObject {
     private let auth = NativeGoogleAuth()
 
     var configured: Bool { NativeGoogleAuth.configured }
-    var connected: Bool { GIDSignIn.sharedInstance.currentUser?.userID != nil }
+    var connected: Bool {
+        guard let user = GIDSignIn.sharedInstance.currentUser, user.userID != nil,
+              let granted = user.grantedScopes else { return false }
+        return NativeGoogleAuth.scopes.allSatisfy(granted.contains)
+    }
 
     func connect(presenting: UIViewController) {
         guard configured, !busy else { return }
