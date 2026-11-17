@@ -21,6 +21,10 @@ targets:
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
+      - target: MomentraCaptureExtension
+        embed: true
+      - target: MomentraCameraControl
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera
@@ -36,6 +40,40 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: 'UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'
+  MomentraCaptureExtension:
+    type: extensionkit-extension
+    platform: iOS
+    deploymentTarget: '18.0'
+    sources:
+      - MomentraCaptureExtension
+      - path: Momentra/MomentraCaptureIntent.swift
+    info:
+      path: MomentraCaptureExtension/Info.plist
+      properties:
+        EXAppExtensionAttributes:
+          EXExtensionPointIdentifier: com.apple.securecapture
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera.capture
+        PRODUCT_NAME: MomentraCaptureExtension
+        SKIP_INSTALL: YES
+  MomentraCameraControl:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: '18.0'
+    sources:
+      - MomentraCameraControl
+      - path: Momentra/MomentraCaptureIntent.swift
+    info:
+      path: MomentraCameraControl/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera.control
+        PRODUCT_NAME: MomentraCameraControl
+        SKIP_INSTALL: YES
   MomentraTests:
     type: bundle.unit-test
     platform: iOS
