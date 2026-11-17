@@ -11,6 +11,13 @@ struct CameraScreen: View {
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @AppStorage("native.address.enabled") private var addressEnabled = false
     @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
+    @AppStorage("native.profile") private var profile = "HAMOA"
+    @AppStorage("native.profile.hamoa.title") private var hamoaTitle = "HAMOA"
+    @AppStorage("native.profile.hamoa.note") private var hamoaNote = ""
+    @AppStorage("native.profile.piresco.title") private var pirescoTitle = "PIRESCO ENGENHARIA"
+    @AppStorage("native.profile.piresco.note") private var pirescoNote = ""
+    @AppStorage("native.profile.pessoal.title") private var pessoalTitle = "MOMENTRA"
+    @AppStorage("native.profile.pessoal.note") private var pessoalNote = ""
     @State private var showSettings = false
     @State private var showOriginals = false
     @State private var mode: CaptureMode = .photo
@@ -74,7 +81,7 @@ struct CameraScreen: View {
                     }
                     if mode == .photo && stampEnabled {
                         TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                            let snapshot = StampSnapshot(capturedAt: timeline.date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading)
+                            let snapshot = makeSnapshot(at: timeline.date)
                             LiveStampView(snapshot: snapshot)
                         }
                         .padding(.horizontal, 16)
@@ -150,6 +157,17 @@ struct CameraScreen: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 Form {
+                    Section("Perfil do carimbo") {
+                        Picker("Perfil", selection: $profile) {
+                            Text("HAMOA").tag("HAMOA")
+                            Text("PIRESCO").tag("PIRESCO")
+                            Text("Pessoal").tag("PESSOAL")
+                        }
+                        TextField("Título", text: activeTitle)
+                        TextField("Observação", text: activeNote)
+                        Text("As preferências do Scripting não são importadas automaticamente.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
                     Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
@@ -191,8 +209,28 @@ struct CameraScreen: View {
     }
 
     private func capturePhoto() {
-        let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading) : nil
+        let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard)
+    }
+
+    private var activeTitle: Binding<String> {
+        switch profile {
+        case "PIRESCO": return $pirescoTitle
+        case "PESSOAL": return $pessoalTitle
+        default: return $hamoaTitle
+        }
+    }
+
+    private var activeNote: Binding<String> {
+        switch profile {
+        case "PIRESCO": return $pirescoNote
+        case "PESSOAL": return $pessoalNote
+        default: return $hamoaNote
+        }
+    }
+
+    private func makeSnapshot(at date: Date) -> StampSnapshot {
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, location: location.location, heading: location.heading)
     }
 }
 

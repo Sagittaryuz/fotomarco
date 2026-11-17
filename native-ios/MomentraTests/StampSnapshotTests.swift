@@ -31,4 +31,11 @@ final class StampSnapshotTests: XCTestCase {
         XCTAssertTrue(fresh.lines.contains { $0.contains("Precisão: ±8 m") })
         XCTAssertTrue(fresh.lines.contains { $0.contains("Altitude:") })
     }
+
+    func testProfileTextIsBoundedAndSingleLine() {
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, title: String(repeating: "A", count: 45), note: "nota\nseguinte", location: nil, heading: nil)
+        XCTAssertEqual(snapshot.title.count, 40)
+        XCTAssertEqual(snapshot.note, "nota seguinte")
+        XCTAssertEqual(snapshot.lines.first, snapshot.title)
+    }
 }

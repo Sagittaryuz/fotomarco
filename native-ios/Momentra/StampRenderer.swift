@@ -9,14 +9,22 @@ struct StampSnapshot {
     let gpsEnabled: Bool
     let mapEnabled: Bool
     let addressEnabled: Bool
+    let title: String
+    let note: String
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
         self.addressEnabled = gpsEnabled && addressEnabled
+        func clean(_ text: String, limit: Int) -> String {
+            let singleLine = text.components(separatedBy: .newlines).joined(separator: " ").replacingOccurrences(of: "\t", with: " ")
+            return String(singleLine.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
+        }
+        self.title = clean(title, limit: 40)
+        self.note = clean(note, limit: 96)
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
            location.horizontalAccuracy >= 0, location.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(location.timestamp) <= 60 {
@@ -44,6 +52,8 @@ struct StampSnapshot {
             let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
             if degrees >= 0 { result.append(String(format: "Direção: %.0f°", degrees)) }
         }
+        if !note.isEmpty { result.insert(note, at: 0) }
+        if !title.isEmpty { result.insert(title, at: 0) }
         return result
     }
 }

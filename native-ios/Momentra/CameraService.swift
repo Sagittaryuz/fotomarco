@@ -281,9 +281,12 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 return
             }
             guard let snapshot else {
-                let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil)
-                if rendered == nil { self.report("Não foi possível ajustar a proporção; a foto original será salva.") }
-                self.savePhoto(rendered ?? data)
+                guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil) else {
+                    self.report("Não foi possível ajustar a proporção. O original está disponível em Originais.")
+                    DispatchQueue.main.async { self.isCapturing = false }
+                    return
+                }
+                self.savePhoto(rendered)
                 return
             }
             StampMap.load(snapshot: snapshot, queue: self.queue) { map in
@@ -294,9 +297,12 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     if snapshot.addressEnabled && snapshot.location != nil && address == nil {
                         self.report("Endereço indisponível. A foto será salva com as demais informações.")
                     }
-                    let rendered = StampRenderer.render(data, aspect: aspect, snapshot: snapshot, map: map, address: address)
-                    if rendered == nil { self.report("Não foi possível aplicar o carimbo; a foto original será salva.") }
-                    self.savePhoto(rendered ?? data)
+                    guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: snapshot, map: map, address: address) else {
+                        self.report("Não foi possível compor a foto. O original está disponível em Originais.")
+                        DispatchQueue.main.async { self.isCapturing = false }
+                        return
+                    }
+                    self.savePhoto(rendered)
                 }
             }
         }
@@ -305,14 +311,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private func savePhoto(_ data: Data) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
-                self.report("Permita salvar fotos nos Ajustes do iPhone.")
+                self.report("Permita salvar fotos nos Ajustes do iPhone. O original está disponível em Originais.")
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
             }
             PHPhotoLibrary.shared().performChanges({
                 PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
             }) { success, _ in
-                if !success { self.report("Não foi possível salvar a foto.") }
+                if !success { self.report("Não foi possível salvar no Fotos. O original está disponível em Originais.") }
                 DispatchQueue.main.async { self.isCapturing = false }
             }
         }
