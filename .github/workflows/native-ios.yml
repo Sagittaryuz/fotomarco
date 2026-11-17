@@ -22,6 +22,12 @@ jobs:
       - name: Compile unsigned app for iPhone
         working-directory: native-ios
         run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
+      - name: Configure Google iOS sign-in
+        if: github.ref_name == 'feat/native-direct-updates'
+        env:
+          MOMENTRA_GOOGLE_IOS_CLIENT_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
+          MOMENTRA_GOOGLE_IOS_REVERSED_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_REVERSED_ID }}
+        run: python3 native-ios/scripts/configure-google.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
       - name: Check unsigned IPA structure
         run: |
           APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
