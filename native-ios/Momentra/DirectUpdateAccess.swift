@@ -17,9 +17,23 @@ final class DirectUpdateAccess: ObservableObject {
         guard url.scheme == "momentra", url.host == "updates", url.path == "/activate",
               let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
               parts.queryItems?.count == 1, let item = parts.queryItems?.first, item.name == "token",
-              let token = item.value, token.count == 64,
-              token.unicodeScalars.allSatisfy({ (48...57).contains($0.value) || (97...102).contains($0.value) }) else { return nil }
+              let token = item.value, validToken(token) else { return nil }
         return token
+    }
+
+    private static func validToken(_ token: String) -> Bool {
+        token.count == 64 && token.unicodeScalars.allSatisfy { (48...57).contains($0.value) || (97...102).contains($0.value) }
+    }
+
+    static func manifestURL(_ raw: String) -> URL? {
+        guard let parts = URLComponents(string: raw), parts.scheme == "https",
+              parts.host == "momentra-instalacao.vercel.app", parts.port == nil,
+              parts.user == nil, parts.password == nil, parts.fragment == nil,
+              parts.path == "/api/install", let items = parts.queryItems, items.count == 2,
+              items.contains(where: { $0.name == "stage" && $0.value == "manifest" }),
+              let ticket = items.first(where: { $0.name == "ticket" })?.value,
+              ticket.range(of: #"^[0-9]{13}\.[0-9a-f]{32}\.[0-9a-f]{64}$"#, options: .regularExpression) != nil else { return nil }
+        return parts.url
     }
 
     private static func endpoint(token: String, stage: String) -> URL? {
@@ -29,7 +43,7 @@ final class DirectUpdateAccess: ObservableObject {
     }
 
     func activate(_ url: URL) async {
-        guard let token = Self.token(from: url), let metadata = Self.endpoint(token: token, stage: "metadata"), !busy else {
+        guard let token = Self.token(from: url), let metadata = Self.endpoint(token: token, stage: "activate"), !busy else {
             message = "Não foi possível ativar as atualizações diretas."; return
         }
         busy = true; defer { busy = false }
@@ -39,24 +53,28 @@ final class DirectUpdateAccess: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200,
                   let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let version = object["version"] as? String, UpdateVersion(version) != nil,
-                  Self.storeToken(token) else { throw URLError(.badServerResponse) }
+                  let deviceToken = object["deviceToken"] as? String, Self.validToken(deviceToken),
+                  Self.storeToken(deviceToken) else { throw URLError(.badServerResponse) }
             ready = true
             message = "Atualizações diretas ativadas neste iPhone."
         } catch { message = "Não foi possível ativar as atualizações diretas. Abra o link de instalação mais recente e tente novamente." }
     }
 
     func install(expectedVersion: String) async {
-        guard !busy, let token = Self.readToken(), let metadata = Self.endpoint(token: token, stage: "metadata"),
-              let manifest = Self.endpoint(token: token, stage: "manifest") else {
+        guard !busy, let token = Self.readToken(),
+              let issueURL = URL(string: "https://momentra-instalacao.vercel.app/api/install?stage=issue") else {
             message = "Ative as atualizações diretas pelo link pessoal de instalação."; return
         }
         busy = true; defer { busy = false }
         do {
-            let (data, response) = try await URLSession.shared.data(from: metadata)
-            guard (response as? HTTPURLResponse)?.statusCode == 200,
+            var request = URLRequest(url: issueURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 4096,
                   let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  object["version"] as? String == expectedVersion else { throw URLError(.badServerResponse) }
+                  object["version"] as? String == expectedVersion,
+                  let raw = object["manifest"] as? String,
+                  let manifest = Self.manifestURL(raw) else { throw URLError(.badServerResponse) }
             guard let encoded = manifest.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
                   let url = URL(string: "itms-services://?action=download-manifest&url=" + encoded) else { throw URLError(.badURL) }
             let opened = await UIApplication.shared.open(url)
