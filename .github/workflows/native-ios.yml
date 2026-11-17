@@ -62,6 +62,19 @@ jobs:
           path: ${{ runner.temp }}/Momentra-unsigned-draft.ipa
           if-no-files-found: error
           retention-days: 3
+      - name: Prepare temporary IPA for direct signing
+        if: github.ref_name == 'feat/native-address-zoom'
+        run: touch "$RUNNER_TEMP/Momentra-signing-marker.txt"
+      - name: Preserve IPA contents for direct signing
+        if: github.ref_name == 'feat/native-address-zoom'
+        uses: actions/upload-artifact@v4
+        with:
+          name: momentra-signulous-ipa
+          path: |
+            ${{ runner.temp }}/Payload/**
+            ${{ runner.temp }}/Momentra-signing-marker.txt
+          if-no-files-found: error
+          retention-days: 1
   simulator-build:
     runs-on: macos-latest
     timeout-minutes: 20
