@@ -33,6 +33,19 @@ jobs:
           unzip -t "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
           lipo -archs "$APP/Momentra"
           shasum -a 256 "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
+      - name: Encrypt draft for temporary transfer
+        run: |
+          openssl smime -encrypt -binary -aes256 -outform DER \
+            -in "$RUNNER_TEMP/Momentra-unsigned-draft.ipa" \
+            -out "$RUNNER_TEMP/Momentra-unsigned-draft.ipa.p7m" \
+            native-ios/build-transfer-cert.pem
+      - name: Upload encrypted draft
+        uses: actions/upload-artifact@v4
+        with:
+          name: momentra-encrypted-unsigned-draft
+          path: ${{ runner.temp }}/Momentra-unsigned-draft.ipa.p7m
+          retention-days: 1
+          if-no-files-found: error
   simulator-build:
     runs-on: macos-latest
     timeout-minutes: 20
