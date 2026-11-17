@@ -10,6 +10,9 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
     private var scale: ZoomScale?
     private var destination: URL?
     private var stampContext: MomentraCaptureContext?
+    private var capturedAt = Date()
+    private var captureRotation: CGFloat = 0
+    @Published var activeDevice: AVCaptureDevice?
     @Published var zoomOptions: [CGFloat] = []
     @Published var ready = false
     @Published var capturing = false
@@ -44,7 +47,12 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
                 self.session.addOutput(self.output)
                 self.session.commitConfiguration()
                 self.device = device
-                let wide: CGFloat = device.virtualDeviceSwitchOverVideoZoomFactors.first.map { CGFloat(truncating: $0) } ?? 1
+                let switches = device.virtualDeviceSwitchOverVideoZoomFactors
+                let wideIndex = device.constituentDevices.firstIndex { $0.deviceType == .builtInWideAngleCamera }
+                let wide: CGFloat
+                if let index = wideIndex, index > 0, switches.indices.contains(index - 1) {
+                    wide = CGFloat(truncating: switches[index - 1])
+                } else { wide = 1 }
                 self.scale = ZoomScale(wideFactor: wide, minimum: device.minAvailableVideoZoomFactor, maximum: device.maxAvailableVideoZoomFactor)
                 if let factor = self.scale?.deviceFactor(for: 1), (try? device.lockForConfiguration()) != nil {
                     device.videoZoomFactor = factor
@@ -52,11 +60,20 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
                 }
             }
             self.session.startRunning()
-            DispatchQueue.main.async { self.zoomOptions = self.scale?.options ?? []; self.ready = self.session.isRunning }
+            DispatchQueue.main.async {
+                self.activeDevice = self.device
+                self.zoomOptions = self.scale?.options ?? []
+                self.ready = self.session.isRunning
+            }
         }
     }
 
-    func stop() { queue.async { if self.session.isRunning { self.session.stopRunning() } } }
+    func stop() {
+        ready = false
+        queue.async { if self.session.isRunning { self.session.stopRunning() } }
+    }
+
+    func updateCaptureRotation(_ angle: CGFloat) { queue.async { self.captureRotation = angle } }
 
     func setZoom(_ value: CGFloat) {
         queue.async {
@@ -69,9 +86,14 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
     func capture(directory: URL, context: MomentraCaptureContext?) {
         guard ready, !capturing else { return }
         capturing = true
+        let requestedAt = Date()
         queue.async {
             self.destination = directory
             self.stampContext = context
+            self.capturedAt = requestedAt
+            if let connection = self.output.connection(with: .video), connection.isVideoRotationAngleSupported(self.captureRotation) {
+                connection.videoRotationAngle = self.captureRotation
+            }
             let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
             self.output.capturePhoto(with: settings, delegate: self)
         }
@@ -86,7 +108,7 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         do { try jpeg.write(to: directory.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic) }
         catch { DispatchQueue.main.async { self.error = "Não foi possível guardar a foto." }; return }
         guard let context = stampContext, context.stampEnabled else { return }
-        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: context.gpsEnabled, title: context.title,
+        let snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: context.title,
             note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
             longDate: context.longDate, fontStyle: context.fontStyle, location: nil, heading: nil)
         let aspect = PhotoAspect(rawValue: context.aspect) ?? .standard
@@ -103,16 +125,53 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
 
 struct LockedCameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    let device: AVCaptureDevice?
+    let onCaptureRotation: (CGFloat) -> Void
     func makeUIView(context: Context) -> LockedPreviewView {
         let view = LockedPreviewView()
         view.preview.session = session
         view.preview.videoGravity = .resizeAspectFill
+        view.update(device: device, onCaptureRotation: onCaptureRotation)
         return view
     }
-    func updateUIView(_ view: LockedPreviewView, context: Context) {}
+    func updateUIView(_ view: LockedPreviewView, context: Context) {
+        view.update(device: device, onCaptureRotation: onCaptureRotation)
+    }
 }
 
 final class LockedPreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var preview: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+    private weak var currentDevice: AVCaptureDevice?
+    private var coordinator: AVCaptureDevice.RotationCoordinator?
+    private var previewObservation: NSKeyValueObservation?
+    private var captureObservation: NSKeyValueObservation?
+    private var previewRotation: CGFloat = 0
+    private var onCaptureRotation: ((CGFloat) -> Void)?
+
+    func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void) {
+        self.onCaptureRotation = onCaptureRotation
+        guard currentDevice !== device else { applyRotation(); return }
+        currentDevice = device
+        previewObservation = nil
+        captureObservation = nil
+        coordinator = nil
+        guard let device else { return }
+        let rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: preview)
+        coordinator = rotation
+        previewObservation = rotation.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] rotation, _ in
+            self?.previewRotation = rotation.videoRotationAngleForHorizonLevelPreview
+            self?.applyRotation()
+        }
+        captureObservation = rotation.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.initial, .new]) { [weak self] rotation, _ in
+            self?.onCaptureRotation?(rotation.videoRotationAngleForHorizonLevelCapture)
+        }
+    }
+
+    override func layoutSubviews() { super.layoutSubviews(); applyRotation() }
+
+    private func applyRotation() {
+        guard let connection = preview.connection, connection.isVideoRotationAngleSupported(previewRotation) else { return }
+        connection.videoRotationAngle = previewRotation
+    }
 }

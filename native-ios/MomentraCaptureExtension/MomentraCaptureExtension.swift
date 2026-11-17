@@ -21,7 +21,7 @@ private struct LockedCameraScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            LockedCameraPreview(session: camera.session).ignoresSafeArea()
+            LockedCameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation).ignoresSafeArea()
             VStack {
                 HStack {
                     Text("Momentra").font(.headline)
