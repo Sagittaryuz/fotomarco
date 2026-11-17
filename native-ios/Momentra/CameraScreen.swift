@@ -61,12 +61,10 @@ struct CameraScreen: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let selectedAspect = mode == .video ? PhotoAspect.wide : (PhotoAspect(rawValue: photoAspect) ?? .standard)
-            let previewSize = selectedAspect.fittedSize(in: geometry.size) ?? .zero
             ZStack {
                 Color.black.ignoresSafeArea()
                 CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
-                    .frame(width: previewSize.width, height: previewSize.height)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
                 VStack(spacing: 0) {
                     Text("Momentra.").font(.headline).padding(.top, 4).padding(.bottom, 4)
