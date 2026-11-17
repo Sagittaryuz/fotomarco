@@ -43,6 +43,7 @@ module.exports = async function handler(req, res) {
   }
   const manifest = `${endpoint}?stage=manifest&token=${token}`;
   const install = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifest)}`;
+  const activate = `momentra://updates/activate?token=${token}`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Momentra</title><body style="font:18px system-ui;background:#111;color:white;padding:24px"><h1>Momentra ${version}</h1><p>Instale sobre a versÃ£o existente para manter seus dados.</p><a style="display:inline-block;background:#fff;color:#111;padding:16px;border-radius:12px;text-decoration:none" href="${escapeXml(install)}">Instalar atualizaÃ§Ã£o</a></body></html>`);
+  return res.send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Momentra</title><body style="font:18px system-ui;background:#111;color:white;padding:24px"><h1>Momentra ${version}</h1><p>Instale sobre a versÃ£o existente para manter seus dados.</p><a style="display:inline-block;background:#fff;color:#111;padding:16px;border-radius:12px;text-decoration:none" href="${escapeXml(install)}">Instalar atualizaÃ§Ã£o</a><p>Depois de instalar e abrir o Momentra, volte aqui para ativar as próximas atualizações dentro do aplicativo.</p><a style="display:inline-block;background:#333;color:white;padding:16px;border-radius:12px;text-decoration:none" href="${escapeXml(activate)}">Ativar atualização direta</a></body></html>`);
 };

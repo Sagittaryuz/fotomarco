@@ -18,6 +18,8 @@ test('metadata and manifest require a valid, unexpired access code', async () =>
   const metadata = await request({stage: 'metadata', token: process.env.INSTALL_TOKEN});
   assert.equal(metadata.code, 200);
   assert.deepEqual(JSON.parse(metadata.body), {version: '0.1.6'});
+  const landing = await request({token: process.env.INSTALL_TOKEN});
+  assert.match(landing.body, /momentra:\/\/updates\/activate\?token=/);
   const manifest = await request({stage: 'manifest', token: process.env.INSTALL_TOKEN});
   assert.match(manifest.body, /<string>0\.1\.6<\/string>/);
   assert.match(manifest.body, /stage=package&amp;token=/);
