@@ -3,6 +3,17 @@ import UIKit
 @testable import Momentra
 
 final class StampPositionRenderTests: XCTestCase {
+    func testLongStampShrinksInsteadOfBeingClipped() throws {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        let text = String(repeating: "Endereço com informações completas de localização e data. ", count: 8) as NSString
+        let layout = try XCTUnwrap(StampRenderer.fitText(text, width: 150, maxHeight: 200, initialSize: 24, style: "system", paragraph: paragraph))
+        XCTAssertLessThan(layout.font.pointSize, 24)
+        XCTAssertLessThanOrEqual(layout.height, 200)
+        XCTAssertNil(StampRenderer.fitText(String(repeating: "dados ", count: 10_000) as NSString,
+            width: 20, maxHeight: 10, initialSize: 12, style: "system", paragraph: paragraph))
+    }
+
     func testRenderedStampMovesBetweenTopAndBottom() throws {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1

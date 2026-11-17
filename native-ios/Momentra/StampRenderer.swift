@@ -112,6 +112,26 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func fitText(_ text: NSString, width: CGFloat, maxHeight: CGFloat, initialSize: CGFloat,
+                        style: String, paragraph: NSParagraphStyle) -> (font: UIFont, height: CGFloat)? {
+        guard width > 0, maxHeight > 0, initialSize.isFinite else { return nil }
+        var fontSize = initialSize
+        while fontSize >= 4 {
+            let system = UIFont.systemFont(ofSize: fontSize, weight: .medium)
+            let font: UIFont
+            if style == "mono" { font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .medium) }
+            else if style == "serif", let descriptor = system.fontDescriptor.withDesign(.serif) { font = UIFont(descriptor: descriptor, size: fontSize) }
+            else { font = system }
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
+            let measured = text.boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes, context: nil)
+            let height = ceil(measured.height) + 2
+            if height <= maxHeight { return (font, height) }
+            fontSize = floor(fontSize * 0.9)
+        }
+        return nil
+    }
+
     static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil) -> Data? {
         guard let image = UIImage(data: data) else { return nil }
         let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
@@ -121,32 +141,25 @@ enum StampRenderer {
         format.scale = 1
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        var fits = true
         let result = renderer.image { context in
             image.draw(in: CGRect(x: -crop.minX, y: -crop.minY, width: sourceSize.width, height: sourceSize.height))
             guard let snapshot else { return }
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
             let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027))
-            let systemFont = UIFont.systemFont(ofSize: fontSize, weight: .medium)
-            let font: UIFont
-            if snapshot.fontStyle == "mono" {
-                font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
-            } else if snapshot.fontStyle == "serif", let descriptor = systemFont.fontDescriptor.withDesign(.serif) {
-                font = UIFont(descriptor: descriptor, size: fontSize)
-            } else {
-                font = systemFont
-            }
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byWordWrapping
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
             let lines = (address.map { [$0] } ?? []) + snapshot.lines
             let text = lines.joined(separator: "\n") as NSString
             let mapFraction: CGFloat = snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20
             let mapSide = map == nil ? 0 : unit * mapFraction
             let mapGap = map == nil ? 0 : margin
             let textWidth = size.width - margin * 4 - mapSide - mapGap
-            let measured = text.boundingRect(with: CGSize(width: textWidth, height: size.height * 0.6), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil)
-            let height = max(ceil(measured.height), mapSide) + margin * 2
+            guard let layout = fitText(text, width: textWidth, maxHeight: size.height - margin * 4,
+                                       initialSize: fontSize, style: snapshot.fontStyle, paragraph: paragraph) else { fits = false; return }
+            let attrs: [NSAttributedString.Key: Any] = [.font: layout.font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
+            let height = max(layout.height, mapSide) + margin * 2
             let boxY = snapshot.position == "top" ? margin : size.height - margin - height
             let box = CGRect(x: margin, y: boxY, width: size.width - margin * 2, height: height)
             context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.65).cgColor)
@@ -173,7 +186,7 @@ enum StampRenderer {
                 logo.draw(in: logoRect)
             }
         }
-        guard let outputImage = result.cgImage,
+        guard fits, let outputImage = result.cgImage,
               let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let original = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
         let output = NSMutableData()
