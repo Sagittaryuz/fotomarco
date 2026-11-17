@@ -1,0 +1,26 @@
+name: Momentra
+options:
+  bundleIdPrefix: br.com.momentra
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1'
+targets:
+  Momentra:
+    type: application
+    platform: iOS
+    sources: [Momentra]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera
+        PRODUCT_NAME: Momentra
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: 'A câmera é necessária para fotografar e gravar vídeos.'
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: 'O microfone é necessário para gravar áudio nos vídeos.'
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS.'
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: 'Permite salvar fotos e vídeos na biblioteca.'
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: 'UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'

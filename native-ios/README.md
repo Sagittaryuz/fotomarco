@@ -1,0 +1,9 @@
+# Momentra nativo — desenvolvimento
+
+Este diretório é uma migração em andamento para SwiftUI. O projeto Scripting permanece separado e não é substituído automaticamente. A versão nativa ainda não está pronta para uso, compilação distribuível ou instalação.
+
+## Construção planejada
+
+Em um Mac com Xcode e XcodeGen: `cd native-ios`, `xcodegen generate`, abra `Momentra.xcodeproj` e configure assinatura conforme a equipe/certificado autorizado. O identificador `br.com.momentra.camera` é provisório e precisa ser validado no processo de assinatura. Gerar um IPA e assiná-lo no Signulous são etapas distintas; nenhum certificado ou credencial deve ser salvo no repositório.
+
+As preferências do Scripting ficam na área privada de outro aplicativo e não podem ser presumidas acessíveis pelo app nativo. A migração de dados e a compatibilidade da assinatura precisam ser implementadas e testadas. A localização é opcional e não deve ser inventada. Nenhuma integração em nuvem, envio de fotos ou leitura real do iPhone foi validada nesta migração.
