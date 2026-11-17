@@ -20,7 +20,7 @@ final class PhotoAspectTests: XCTestCase {
 
     func testRejectsInvalidDimensions() {
         XCTAssertNil(PhotoAspect.standard.crop(in: .zero))
-        XCTAssertNil(PhotoAspect.wide.crop(in: CGSize(width: .infinity, height: 100)))
+        XCTAssertNil(PhotoAspect.wide.crop(in: CGSize(width: CGFloat.infinity, height: 100)))
     }
 
     func testRenderedPhotoUsesRequestedDimensions() throws {
