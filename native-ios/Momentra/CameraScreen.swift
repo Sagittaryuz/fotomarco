@@ -12,6 +12,9 @@ struct CameraScreen: View {
     @AppStorage("native.address.enabled") private var addressEnabled = false
     @State private var showSettings = false
     @State private var mode: CaptureMode = .photo
+    @State private var timerSeconds = 0
+    @State private var countdown = 0
+    @State private var countdownTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -32,15 +35,32 @@ struct CameraScreen: View {
                             Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
                                 .font(.title2).frame(width: 44, height: 44)
                         }
-                        .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching)
+                        .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching || countdown > 0)
                         .accessibilityLabel("Flash")
                         Spacer()
+                        Menu {
+                            Button("Desligado") { timerSeconds = 0 }
+                            Button("3 segundos") { timerSeconds = 3 }
+                            Button("10 segundos") { timerSeconds = 10 }
+                        } label: {
+                            VStack(spacing: 0) {
+                                Image(systemName: "timer").font(.title2)
+                                if timerSeconds > 0 { Text("\(timerSeconds)s").font(.caption2) }
+                            }.frame(width: 44, height: 44)
+                        }
+                        .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
+                        .accessibilityLabel("Temporizador")
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape.fill").font(.title2)
                                 .frame(width: 44, height: 44)
-                        }.accessibilityLabel("Configurações").disabled(camera.isRecording || camera.isFinishingRecording)
+                        }.accessibilityLabel("Configurações").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }.padding(.horizontal, 18)
                     Spacer(minLength: 8)
+                    if countdown > 0 {
+                        Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
+                            .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
+                        Spacer(minLength: 8)
+                    }
                     if mode == .photo && stampEnabled {
                         TimelineView(.periodic(from: .now, by: 1)) { timeline in
                             let snapshot = StampSnapshot(capturedAt: timeline.date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading)
@@ -56,15 +76,14 @@ struct CameraScreen: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 260)
-                    .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching)
+                    .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching || countdown > 0)
                     HStack {
                         Spacer().frame(maxWidth: .infinity)
                         Button {
                             if mode == .video {
                                 if camera.isRecording { camera.stopRecording() } else { camera.startRecording() }
                             } else {
-                                let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading) : nil
-                                camera.capture(snapshot: snapshot)
+                                if countdown > 0 { cancelCountdown() } else { schedulePhoto() }
                             }
                         } label: {
                             Circle().fill(mode == .video ? .red : .white).padding(camera.isRecording ? 18 : 7)
@@ -72,12 +91,12 @@ struct CameraScreen: View {
                                 .frame(width: min(82, geometry.size.width * 0.22), height: min(82, geometry.size.width * 0.22))
                         }
                         .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isFinishingRecording)
-                        .accessibilityLabel(mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
+                        .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
                         HStack {
                             Spacer()
                             Button { camera.flipCamera() } label: {
                                 Image(systemName: "camera.rotate").font(.title2).frame(width: 44, height: 44)
-                            }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording)
+                            }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording || countdown > 0)
                                 .accessibilityLabel("Trocar câmera")
                             Spacer()
                         }.frame(maxWidth: .infinity)
@@ -87,10 +106,10 @@ struct CameraScreen: View {
         }
         .statusBarHidden()
         .onAppear { camera.start(); location.setEnabled(gpsEnabled) }
-        .onDisappear { camera.stop(); location.setEnabled(false) }
+        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled) }
-            else { camera.stop(); location.setEnabled(false) }
+            else { cancelCountdown(); camera.stop(); location.setEnabled(false) }
         }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
         .sheet(isPresented: $showSettings) {
@@ -112,6 +131,33 @@ struct CameraScreen: View {
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
+    }
+
+    private func cancelCountdown() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        countdown = 0
+    }
+
+    private func schedulePhoto() {
+        guard camera.ready, !camera.isCapturing, !camera.isSwitching else { return }
+        if timerSeconds == 0 { capturePhoto(); return }
+        countdown = timerSeconds
+        countdownTask = Task { @MainActor in
+            while countdown > 0 {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                guard !Task.isCancelled else { return }
+                countdown -= 1
+            }
+            countdownTask = nil
+            guard scenePhase == .active else { return }
+            capturePhoto()
+        }
+    }
+
+    private func capturePhoto() {
+        let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, location: location.location, heading: location.heading) : nil
+        camera.capture(snapshot: snapshot)
     }
 }
 
