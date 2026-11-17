@@ -28,6 +28,8 @@ struct CameraScreen: View {
     @AppStorage("native.profile.pessoal.logo") private var pessoalLogo = ""
     @State private var showSettings = false
     @State private var showOriginals = false
+    @State private var showMap = false
+    @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
     @State private var showLogoImport = false
     @State private var showForecastTerms = false
@@ -123,9 +125,7 @@ struct CameraScreen: View {
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 260)
                     .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching || countdown > 0)
-                    HStack {
-                        HStack {
-                            Spacer()
+                    HStack(spacing: 0) {
                             Button { showOriginals = true } label: {
                                 VStack(spacing: 2) {
                                     Image(systemName: "photo.on.rectangle").font(.title2).frame(width: 44, height: 40)
@@ -134,8 +134,20 @@ struct CameraScreen: View {
                             }
                             .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                             .accessibilityLabel("Abrir capturas")
-                            Spacer()
-                        }.frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity)
+                        Menu {
+                            Button("HAMOA") { profile = "HAMOA" }
+                            Button("PIRESCO") { profile = "PIRESCO" }
+                            Button("Pessoal") { profile = "PESSOAL" }
+                        } label: {
+                            VStack(spacing: 2) {
+                                Image(systemName: "square.on.square").font(.title2).frame(width: 44, height: 40)
+                                Text("Perfil").font(.caption2)
+                            }
+                        }
+                        .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
+                        .accessibilityLabel("Escolher perfil do carimbo")
+                        .frame(maxWidth: .infinity)
                         Button {
                             if mode == .video {
                                 if camera.isRecording { camera.stopRecording() } else { camera.startRecording() }
@@ -149,14 +161,26 @@ struct CameraScreen: View {
                         }
                         .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isFinishingRecording)
                         .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
-                        HStack {
-                            Spacer()
+                        Button {
+                            mapLocation = makeSnapshot(at: Date()).location
+                            showMap = true
+                        } label: {
+                            VStack(spacing: 2) {
+                                Image(systemName: "map.fill").font(.title2).frame(width: 44, height: 40)
+                                Text("Mapa").font(.caption2)
+                            }
+                        }
+                        .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
+                        .accessibilityLabel("Abrir mapa")
+                        .frame(maxWidth: .infinity)
                             Button { camera.flipCamera() } label: {
-                                Image(systemName: "camera.rotate").font(.title2).frame(width: 44, height: 44)
+                                VStack(spacing: 2) {
+                                    Image(systemName: "camera.rotate").font(.title2).frame(width: 44, height: 40)
+                                    Text("Inverter").font(.caption2)
+                                }
                             }.disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording || countdown > 0)
                                 .accessibilityLabel("Trocar câmera")
-                            Spacer()
-                        }.frame(maxWidth: .infinity)
+                                .frame(maxWidth: .infinity)
                     }.padding(.vertical, 18)
                 }.foregroundStyle(.white)
             }
@@ -188,6 +212,22 @@ struct CameraScreen: View {
             }
         }
         .sheet(isPresented: $showOriginals) { OriginalsView() }
+        .sheet(isPresented: $showMap) {
+            NavigationStack {
+                Group {
+                    if let coordinate = mapLocation?.coordinate {
+                        Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))) {
+                            Marker("Localização", coordinate: coordinate)
+                        }
+                    } else {
+                        ContentUnavailableView("Localização indisponível", systemImage: "location.slash", description: Text("Ative o GPS nas configurações e aguarde uma localização recente."))
+                    }
+                }
+                .navigationTitle("Mapa")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { showMap = false } } }
+            }
+        }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 Form {
