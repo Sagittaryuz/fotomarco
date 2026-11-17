@@ -207,8 +207,8 @@ enum StampRenderer {
     }
 
     static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
-        guard let original = UIImage(data: data) else { return nil }
-        let image = style.apply(to: original)
+        guard let sourceImage = UIImage(data: data) else { return nil }
+        let image = style.apply(to: sourceImage)
         let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard let crop = aspect.crop(in: sourceSize) else { return nil }
         let size = crop.size
