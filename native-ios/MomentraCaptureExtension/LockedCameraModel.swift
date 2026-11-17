@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreLocation
 import SwiftUI
 import UIKit
 
@@ -10,6 +11,8 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
     private var scale: ZoomScale?
     private var destination: URL?
     private var stampContext: MomentraCaptureContext?
+    private var capturedLocation: CLLocation?
+    private var capturedHeading: CLHeading?
     private var capturedAt = Date()
     private var captureRotation: CGFloat = 0
     @Published var activeDevice: AVCaptureDevice?
@@ -83,13 +86,15 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         }
     }
 
-    func capture(directory: URL, context: MomentraCaptureContext?) {
+    func capture(directory: URL, context: MomentraCaptureContext?, location: CLLocation?, heading: CLHeading?) {
         guard ready, !capturing else { return }
         capturing = true
         let requestedAt = Date()
         queue.async {
             self.destination = directory
             self.stampContext = context
+            self.capturedLocation = location
+            self.capturedHeading = heading
             self.capturedAt = requestedAt
             if let connection = self.output.connection(with: .video), connection.isVideoRotationAngleSupported(self.captureRotation) {
                 connection.videoRotationAngle = self.captureRotation
@@ -110,7 +115,7 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         guard let context = stampContext, context.stampEnabled else { return }
         let snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: context.title,
             note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
-            longDate: context.longDate, fontStyle: context.fontStyle, location: nil, heading: nil)
+            longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading)
         let aspect = PhotoAspect(rawValue: context.aspect) ?? .standard
         guard let stamped = StampRenderer.render(jpeg, aspect: aspect, snapshot: snapshot) else {
             DispatchQueue.main.async { self.error = "A foto original foi salva, mas não foi possível aplicar o carimbo." }; return

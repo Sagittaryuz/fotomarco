@@ -15,6 +15,7 @@ struct MomentraCaptureExtension: LockedCameraCaptureExtension {
 
 private struct LockedCameraScreen: View {
     @StateObject private var camera = LockedCameraModel()
+    @State private var location = LockedLocation()
     @State private var context: MomentraCaptureContext?
     let directory: URL
 
@@ -35,7 +36,12 @@ private struct LockedCameraScreen: View {
                             if !context.title.isEmpty { Text(context.title).bold() }
                             if !context.note.isEmpty { Text(context.note) }
                             Text(timeline.date, format: .dateTime.day().month().year().hour().minute().second())
-                            Text(context.gpsEnabled ? "Localização indisponível nesta captura" : "Localização desativada")
+                            if context.gpsEnabled, let fix = location.location,
+                               abs(fix.timestamp.timeIntervalSince(timeline.date)) <= 60 {
+                                Text(String(format: "Lat: %.6f  Lon: %.6f", fix.coordinate.latitude, fix.coordinate.longitude))
+                            } else {
+                                Text(context.gpsEnabled ? "Localização indisponível nesta captura" : "Localização desativada")
+                            }
                         }
                         .font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10).background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
@@ -47,22 +53,27 @@ private struct LockedCameraScreen: View {
                             .padding(10).background(.black.opacity(0.7), in: Capsule())
                     }
                 }.padding(.vertical, 12)
-                Button { camera.capture(directory: directory, context: context) } label: {
+                Button { takePhoto() } label: {
                     Circle().fill(.white).frame(width: 76, height: 76)
                         .padding(5).overlay(Circle().stroke(.white, lineWidth: 3))
                 }.disabled(camera.capturing || !camera.ready).padding(.bottom, 24)
             }.foregroundStyle(.white)
         }
         .onCameraCaptureEvent { event in
-            if event.phase == .ended { camera.capture(directory: directory, context: context) }
+            if event.phase == .ended { takePhoto() }
         }
         .task {
             context = try? await MomentraCaptureIntent.appContext
+            location.startIfAuthorized(context?.gpsEnabled == true)
             camera.start()
         }
-        .onDisappear { camera.stop() }
+        .onDisappear { camera.stop(); location.stop() }
         .alert("Momentra", isPresented: Binding(get: { camera.error != nil }, set: { if !$0 { camera.error = nil } })) {
             Button("OK", role: .cancel) { camera.error = nil }
         } message: { Text(camera.error ?? "") }
+    }
+
+    private func takePhoto() {
+        camera.capture(directory: directory, context: context, location: location.location, heading: location.heading)
     }
 }

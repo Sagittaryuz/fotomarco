@@ -54,6 +54,7 @@ targets:
     info:
       path: MomentraCaptureExtension/Info.plist
       properties:
+        NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS.'
         EXAppExtensionAttributes:
           EXExtensionPointIdentifier: com.apple.securecapture
     settings:
