@@ -62,6 +62,10 @@ test('device can issue fresh scoped tickets after bootstrap expires', async () =
   assert.match(manifest.body, /stage=package&amp;ticket=/);
   assert.equal((await request({stage: 'package', ticket})).code, 302);
   assert.equal((await request({stage: 'metadata', ticket})).code, 404);
+  const crypto = require('node:crypto');
+  const oldPayload = String(Date.now() - 1000) + '.' + 'a'.repeat(32);
+  const oldSig = crypto.createHmac('sha256', process.env.DEVICE_UPDATE_TOKEN).update(oldPayload).digest('hex');
+  assert.equal((await request({stage: 'manifest', ticket: oldPayload + '.' + oldSig})).code, 404);
   assert.equal((await request({stage: 'manifest', ticket: ticket.slice(0,-1)+'z'})).code, 404);
   process.env.DEVICE_UPDATE_TOKEN = 'e'.repeat(64);
   assert.equal((await request({stage: 'manifest', ticket})).code, 404);
