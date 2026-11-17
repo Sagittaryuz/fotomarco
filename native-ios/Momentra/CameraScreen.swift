@@ -17,6 +17,8 @@ struct CameraScreen: View {
     @AppStorage("native.address.enabled") private var addressEnabled = false
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
+    @AppStorage("native.stamp.size") private var stampSize = "regular"
+    @AppStorage("native.stamp.dateFormat") private var dateFormat = "numeric"
     @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
     @AppStorage("native.profile") private var profile = "HAMOA"
     @AppStorage("native.profile.hamoa.title") private var hamoaTitle = "HAMOA"
@@ -279,6 +281,14 @@ struct CameraScreen: View {
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
+                    Picker("Tamanho do carimbo", selection: $stampSize) {
+                        Text("Normal").tag("regular")
+                        Text("Compacto").tag("compact")
+                    }.disabled(!stampEnabled)
+                    Picker("Data e hora", selection: $dateFormat) {
+                        Text("Numérica").tag("numeric")
+                        Text("Por extenso").tag("long")
+                    }.disabled(!stampEnabled)
                     Toggle("Salvar cópia no Fotos", isOn: $saveToPhotos)
                     Text("As capturas continuam guardadas no aplicativo. Use Capturas para compartilhá-las ou salvá-las no Fotos manualmente.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -397,7 +407,7 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, compact: stampSize == "compact", longDate: dateFormat == "long", pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {
@@ -426,6 +436,8 @@ struct CameraScreen: View {
         pessoalTitle = personal.title; pessoalNote = personal.note
         profile = s.profile; stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
         saveToPhotos = s.allowGallery
+        if let size = s.size { stampSize = size }
+        if let format = s.timestampFormat { dateFormat = format }
         photoAspect = s.aspectRatio
     }
 }
@@ -449,7 +461,7 @@ private struct LiveStampView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(snapshot.lines, id: \.self) { line in
-                    Text(line).font(.caption.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+                    Text(line).font((snapshot.compact ? Font.caption2 : Font.caption).weight(.medium)).fixedSize(horizontal: false, vertical: true)
                 }
                 if snapshot.addressEnabled && snapshot.location != nil {
                     Text("Endereço após a captura").font(.caption2).foregroundStyle(.white.opacity(0.8))

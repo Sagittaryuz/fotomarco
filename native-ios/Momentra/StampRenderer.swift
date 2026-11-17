@@ -12,12 +12,14 @@ struct StampSnapshot {
     let title: String
     let note: String
     let logo: UIImage?
+    let compact: Bool
+    let longDate: Bool
     let pressure: PressureSample?
     let forecast: Forecast?
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, longDate: Bool = false, pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -29,6 +31,8 @@ struct StampSnapshot {
         self.title = clean(title, limit: 40)
         self.note = clean(note, limit: 96)
         self.logo = logo
+        self.compact = compact
+        self.longDate = longDate
         self.pressure = pressure.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
         let validLocation: CLLocation?
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
@@ -47,7 +51,7 @@ struct StampSnapshot {
     var lines: [String] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "pt_BR")
-        formatter.dateFormat = "dd/MM/yyyy HH:mm:ss 'GMT'XXXXX"
+        formatter.dateFormat = longDate ? "d 'de' MMMM 'de' yyyy 'às' HH'h'mm'min'ss's' 'GMT'XXXXX" : "dd/MM/yyyy HH:mm:ss 'GMT'XXXXX"
         var result = [formatter.string(from: capturedAt)]
         if let location {
             result.insert(String(format: "Lat: %.6f  Lon: %.6f", location.coordinate.latitude, location.coordinate.longitude), at: 0)
@@ -116,7 +120,7 @@ enum StampRenderer {
             guard let snapshot else { return }
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
-            let font = UIFont.systemFont(ofSize: max(12, unit * 0.027), weight: .medium)
+            let font = UIFont.systemFont(ofSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027)), weight: .medium)
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byWordWrapping
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
