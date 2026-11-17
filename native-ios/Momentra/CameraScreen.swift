@@ -258,6 +258,7 @@ struct CameraScreen: View {
             NavigationStack {
                 Form {
                     Section("Atualizações") {
+                        LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
                             Link("Abrir instruções da atualização", destination: UpdateService.releasesURL)
@@ -557,7 +558,7 @@ private struct LiveStampView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if snapshot.mapEnabled, let coordinate = snapshot.location?.coordinate {
-                Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350)), interactionModes: []) {
+                Map(position: .constant(.region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))), interactionModes: []) {
                     Annotation("Localização", coordinate: coordinate) {
                         Circle().fill(.blue).frame(width: 13, height: 13).overlay(Circle().stroke(.white, lineWidth: 2))
                     }
