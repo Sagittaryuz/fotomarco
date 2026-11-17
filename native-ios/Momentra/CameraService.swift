@@ -282,7 +282,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             }
             guard let snapshot else {
                 guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil) else {
-                    self.report("Não foi possível ajustar a proporção. O original está disponível em Originais.")
+                    self.report("Não foi possível ajustar a proporção. O original está disponível em Capturas.")
                     DispatchQueue.main.async { self.isCapturing = false }
                     return
                 }
@@ -298,7 +298,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                         self.report("Endereço indisponível. A foto será salva com as demais informações.")
                     }
                     guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: snapshot, map: map, address: address) else {
-                        self.report("Não foi possível compor a foto. O original está disponível em Originais.")
+                        self.report("Não foi possível compor a foto. O original está disponível em Capturas.")
                         DispatchQueue.main.async { self.isCapturing = false }
                         return
                     }
@@ -309,16 +309,22 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     private func savePhoto(_ data: Data) {
+        do { _ = try ProcessedFileStore.save(data) }
+        catch {
+            report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
+            DispatchQueue.main.async { self.isCapturing = false }
+            return
+        }
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
-                self.report("Permita salvar fotos nos Ajustes do iPhone. O original está disponível em Originais.")
+                self.report("Permita salvar fotos nos Ajustes do iPhone. A foto processada e o original estão em Capturas.")
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
             }
             PHPhotoLibrary.shared().performChanges({
                 PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
             }) { success, _ in
-                if !success { self.report("Não foi possível salvar no Fotos. O original está disponível em Originais.") }
+                if !success { self.report("Não foi possível salvar no Fotos. A foto processada e o original estão em Capturas.") }
                 DispatchQueue.main.async { self.isCapturing = false }
             }
         }

@@ -5,6 +5,7 @@ import ImageIO
 private struct OriginalFile: Identifiable {
     let url: URL
     let isVideo: Bool
+    let isProcessed: Bool
     let date: Date
     var id: URL { url }
 }
@@ -13,13 +14,13 @@ private enum OriginalStore {
     static func files() throws -> [OriginalFile] {
         let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
-        return try [("Originals", false), ("Videos", true)].flatMap { folder, isVideo -> [OriginalFile] in
+        return try [("Originals", false, false), ("Processed", false, true), ("Videos", true, false)].flatMap { folder, isVideo, isProcessed -> [OriginalFile] in
             let directory = root.appendingPathComponent(folder, isDirectory: true)
             guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
             return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]).compactMap { url in
                 let info = try url.resourceValues(forKeys: Set(keys))
                 guard info.isRegularFile == true else { return nil }
-                return OriginalFile(url: url, isVideo: isVideo, date: info.contentModificationDate ?? .distantPast)
+                return OriginalFile(url: url, isVideo: isVideo, isProcessed: isProcessed, date: info.contentModificationDate ?? .distantPast)
             }
         }.sorted { $0.date > $1.date }
     }
@@ -35,17 +36,17 @@ struct OriginalsView: View {
         NavigationStack {
             List {
                 Section {
-                    Text("Cópias originais guardadas neste aplicativo. Compartilhe ou salve no Fotos antes de desinstalá-lo.")
+                    Text("Fotos processadas, originais e vídeos guardados neste aplicativo. Compartilhe ou salve no Fotos antes de desinstalá-lo.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if files.isEmpty {
-                    Text("Nenhum original disponível.").foregroundStyle(.secondary)
+                    Text("Nenhuma captura disponível.").foregroundStyle(.secondary)
                 }
                 ForEach(files) { item in
                     HStack(spacing: 12) {
                         Thumbnail(url: item.url, isVideo: item.isVideo)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(item.isVideo ? "Vídeo original" : "Foto original").font(.headline)
+                            Text(item.isVideo ? "Vídeo original" : item.isProcessed ? "Foto processada" : "Foto original").font(.headline)
                             Text(item.date, format: .dateTime.day().month().year().hour().minute())
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -56,11 +57,11 @@ struct OriginalsView: View {
                                 .disabled(isSaving)
                         } label: {
                             Image(systemName: "ellipsis.circle").font(.title2).frame(width: 44, height: 44)
-                        }.accessibilityLabel("Opções do original")
+                        }.accessibilityLabel("Opções da captura")
                     }
                 }
             }
-            .navigationTitle("Originais")
+            .navigationTitle("Capturas")
             .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { reload() }
             .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
@@ -71,7 +72,7 @@ struct OriginalsView: View {
 
     private func reload() {
         do { files = try OriginalStore.files() }
-        catch { message = "Não foi possível abrir os originais guardados." }
+        catch { message = "Não foi possível abrir as capturas guardadas." }
     }
 
     private func save(_ item: OriginalFile) {
@@ -87,7 +88,7 @@ struct OriginalsView: View {
             }) { success, _ in
                 DispatchQueue.main.async {
                     isSaving = false
-                    message = success ? "Original salvo no Fotos." : "Não foi possível salvar. O original continua no aplicativo."
+                    message = success ? "Arquivo salvo no Fotos." : "Não foi possível salvar. O arquivo continua no aplicativo."
                 }
             }
         }

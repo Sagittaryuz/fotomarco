@@ -127,11 +127,11 @@ struct CameraScreen: View {
                             Button { showOriginals = true } label: {
                                 VStack(spacing: 2) {
                                     Image(systemName: "photo.on.rectangle").font(.title2).frame(width: 44, height: 40)
-                                    Text("Originais").font(.caption2)
+                                    Text("Capturas").font(.caption2)
                                 }
                             }
                             .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
-                            .accessibilityLabel("Abrir originais")
+                            .accessibilityLabel("Abrir capturas")
                             Spacer()
                         }.frame(maxWidth: .infinity)
                         Button {
