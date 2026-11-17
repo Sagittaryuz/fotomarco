@@ -50,6 +50,7 @@ targets:
       - path: Momentra/StampRenderer.swift
       - path: Momentra/PressureService.swift
       - path: Momentra/ForecastModel.swift
+      - path: Momentra/ZoomScale.swift
     info:
       path: MomentraCaptureExtension/Info.plist
       properties:
