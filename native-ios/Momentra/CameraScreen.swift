@@ -22,7 +22,7 @@ struct CameraScreen: View {
         GeometryReader { geometry in
             ZStack {
                 Color.black.ignoresSafeArea()
-                CameraPreview(session: camera.session)
+                CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
                     .ignoresSafeArea()

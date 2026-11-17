@@ -16,6 +16,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var startingRecording = false
     private var stopRequested = false
     private var pendingStamp: StampSnapshot?
+    private var captureRotation: CGFloat = 0
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
     @Published private(set) var isCapturing = false
@@ -26,6 +27,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     @Published private(set) var zoomOptions: [CGFloat] = []
     @Published private(set) var zoomFactor: CGFloat = 1
     @Published private(set) var hasFlash = false
+    @Published private(set) var activeDevice: AVCaptureDevice?
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
 
     func start() {
@@ -62,7 +64,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         if supportsVideo { session.addOutput(movieOutput) }
         input = candidate
         configured = true
-        DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo }
+        DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo; self.activeDevice = device }
         publishZoom(for: device)
     }
 
@@ -89,6 +91,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             }
             let settings = AVCapturePhotoSettings()
             self.pendingStamp = snapshot
+            self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
                 settings.flashMode = selectedFlash
@@ -115,7 +118,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.session.addInput(replacement)
                 self.input = replacement
                 self.session.commitConfiguration()
-                DispatchQueue.main.async { self.hasFlash = device.hasFlash }
+                DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.activeDevice = device }
                 self.publishZoom(for: device)
             } else {
                 if self.session.canAddInput(previous) { self.session.addInput(previous) }
@@ -125,12 +128,21 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     self.session.removeOutput(self.photoOutput)
                     if self.session.outputs.contains(self.movieOutput) { self.session.removeOutput(self.movieOutput) }
                     if let microphone = self.microphoneInput { self.session.removeInput(microphone); self.microphoneInput = nil }
-                    DispatchQueue.main.async { self.ready = false }
+                    DispatchQueue.main.async { self.ready = false; self.activeDevice = nil }
                 }
                 self.session.commitConfiguration()
                 self.report("Não foi possível trocar de câmera.")
             }
         }
+    }
+
+    func updateCaptureRotation(_ angle: CGFloat) {
+        queue.async { self.captureRotation = angle }
+    }
+
+    private func applyCaptureRotation(to connection: AVCaptureConnection?) {
+        guard let connection, connection.isVideoRotationAngleSupported(captureRotation) else { return }
+        connection.videoRotationAngle = captureRotation
     }
 
     private func publishZoom(for device: AVCaptureDevice) {
@@ -187,6 +199,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     let file = directory.appendingPathComponent(UUID().uuidString + ".mov")
                     self.stopRequested = false
                     self.startingRecording = true
+                    self.applyCaptureRotation(to: self.movieOutput.connection(with: .video))
                     self.movieOutput.startRecording(to: file, recordingDelegate: self)
                     DispatchQueue.main.async { self.isFinishingRecording = false; self.isRecording = true }
                 } catch {
@@ -315,16 +328,58 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
 
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    let device: AVCaptureDevice?
+    let onCaptureRotation: (CGFloat) -> Void
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
+        view.update(device: device, onCaptureRotation: onCaptureRotation)
         return view
     }
-    func updateUIView(_ view: PreviewView, context: Context) { view.previewLayer.session = session }
+    func updateUIView(_ view: PreviewView, context: Context) {
+        view.previewLayer.session = session
+        view.update(device: device, onCaptureRotation: onCaptureRotation)
+    }
 }
 
 final class PreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+    private weak var currentDevice: AVCaptureDevice?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var previewObservation: NSKeyValueObservation?
+    private var captureObservation: NSKeyValueObservation?
+    private var currentPreviewRotation: CGFloat = 0
+    private var onCaptureRotation: ((CGFloat) -> Void)?
+
+    func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void) {
+        self.onCaptureRotation = onCaptureRotation
+        guard currentDevice !== device else { applyPreviewRotation(); return }
+        currentDevice = device
+        previewObservation = nil
+        captureObservation = nil
+        rotationCoordinator = nil
+        guard let device else { return }
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+        rotationCoordinator = coordinator
+        previewObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] coordinator, _ in
+            self?.currentPreviewRotation = coordinator.videoRotationAngleForHorizonLevelPreview
+            self?.applyPreviewRotation()
+        }
+        captureObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.initial, .new]) { [weak self] coordinator, _ in
+            self?.onCaptureRotation?(coordinator.videoRotationAngleForHorizonLevelCapture)
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        applyPreviewRotation()
+    }
+
+    private func applyPreviewRotation() {
+        guard let connection = previewLayer.connection,
+              connection.isVideoRotationAngleSupported(currentPreviewRotation) else { return }
+        connection.videoRotationAngle = currentPreviewRotation
+    }
 }
