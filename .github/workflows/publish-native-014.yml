@@ -1,0 +1,25 @@
+name: Publish Momentra 0.1.4
+on:
+  push:
+    branches: [feat/native-ios]
+    paths: ['native-ios/releases/v0.1.4.md']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish approved release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view native-ios-v0.1.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; leaving it unchanged.'
+          else
+            gh release create native-ios-v0.1.4 --repo "$GITHUB_REPOSITORY" \
+              --target 9faa225754006524517475fdd92306a11945a8b9 \
+              --title 'Momentra 0.1.4' --notes-file native-ios/releases/v0.1.4.md
+          fi
