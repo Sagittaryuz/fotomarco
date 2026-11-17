@@ -32,10 +32,12 @@ final class SettingsTransferTests: XCTestCase {
     func testValidatesOptionalDisplayPreferencesAndAcceptsOlderExports() throws {
         let old = try SettingsTransfer.decode(payload())
         XCTAssertNil(old.settings.size)
-        let selected = try SettingsTransfer.decode(payload(extra: ["size": "compact", "timestampFormat": "long"]))
+        let selected = try SettingsTransfer.decode(payload(extra: ["size": "compact", "timestampFormat": "long", "mapScale": "large"]))
         XCTAssertEqual(selected.settings.size, "compact")
         XCTAssertEqual(selected.settings.timestampFormat, "long")
+        XCTAssertEqual(selected.settings.mapScale, "large")
         XCTAssertThrowsError(try SettingsTransfer.decode(payload(extra: ["size": "invalid"])))
         XCTAssertThrowsError(try SettingsTransfer.decode(payload(extra: ["timestampFormat": "invalid"])))
+        XCTAssertThrowsError(try SettingsTransfer.decode(payload(extra: ["mapScale": "invalid"])))
     }
 }

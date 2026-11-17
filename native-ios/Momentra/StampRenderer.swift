@@ -14,12 +14,13 @@ struct StampSnapshot {
     let logo: UIImage?
     let compact: Bool
     let longDate: Bool
+    let mapScale: String
     let pressure: PressureSample?
     let forecast: Forecast?
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, longDate: Bool = false, pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, longDate: Bool = false, mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -33,6 +34,7 @@ struct StampSnapshot {
         self.logo = logo
         self.compact = compact
         self.longDate = longDate
+        self.mapScale = ["small", "medium", "large"].contains(mapScale) ? mapScale : "medium"
         self.pressure = pressure.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
         let validLocation: CLLocation?
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
@@ -126,7 +128,8 @@ enum StampRenderer {
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
             let lines = (address.map { [$0] } ?? []) + snapshot.lines
             let text = lines.joined(separator: "\n") as NSString
-            let mapSide = map == nil ? 0 : unit * 0.20
+            let mapFraction: CGFloat = snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20
+            let mapSide = map == nil ? 0 : unit * mapFraction
             let mapGap = map == nil ? 0 : margin
             let textWidth = size.width - margin * 4 - mapSide - mapGap
             let measured = text.boundingRect(with: CGSize(width: textWidth, height: size.height * 0.6), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil)
