@@ -275,6 +275,9 @@ struct CameraScreen: View {
                         Text("A consulta ao GitHub envia o IP da conexão para verificar versões publicadas.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
+                    Section("Aparência") {
+                        NavigationLink("Ícone do aplicativo") { AppIconPicker() }
+                    }
                     Section("Perfil do carimbo") {
                         Picker("Perfil", selection: $profile) {
                             Text("HAMOA").tag("HAMOA")

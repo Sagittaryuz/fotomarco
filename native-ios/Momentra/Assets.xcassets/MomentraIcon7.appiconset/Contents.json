@@ -1,0 +1,26 @@
+{
+  "images": [
+    {
+      "platform": "ios",
+      "idiom": "universal",
+      "filename": "Light.png",
+      "size": "1024x1024"
+    },
+    {
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "platform": "ios",
+      "idiom": "universal",
+      "filename": "Dark.png",
+      "size": "1024x1024"
+    }
+  ],
+  "info": {
+    "version": 1,
+    "author": "xcode"
+  }
+}
