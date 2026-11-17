@@ -23,8 +23,9 @@ enum LockedCaptureImporter {
         await Task.detached(priority: .utility) {
             let fm = FileManager.default
             guard let root = try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return }
-            let destination = root.appendingPathComponent("Originals", isDirectory: true)
-            copyFiles(from: directory, to: destination)
+            copyFiles(from: directory, to: root.appendingPathComponent("Originals", isDirectory: true))
+            copyFiles(from: directory.appendingPathComponent("Processed", isDirectory: true),
+                      to: root.appendingPathComponent("Processed", isDirectory: true))
         }.value
     }
 

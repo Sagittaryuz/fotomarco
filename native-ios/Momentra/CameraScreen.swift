@@ -205,7 +205,7 @@ struct CameraScreen: View {
         }
         .statusBarHidden()
         .task { await updates.check() }
-        .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress() }
+        .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }
@@ -220,7 +220,8 @@ struct CameraScreen: View {
         .onChange(of: showOriginals) { _, _ in refreshAddress() }
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
-        .onChange(of: profile) { _, _ in refreshLogo() }
+        .onChange(of: profile) { _, _ in refreshLogo(); publishCaptureContext() }
+        .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
             let targetProfile = profile
@@ -503,6 +504,15 @@ struct CameraScreen: View {
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
         StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, cachedAddress: addressPreview.current(for: location.location, at: date), title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+    }
+
+    private func publishCaptureContext() {
+        guard #available(iOS 18.0, *) else { return }
+        let context = MomentraCaptureContext(stampEnabled: stampEnabled, gpsEnabled: gpsEnabled,
+            title: String(activeTitle.wrappedValue.prefix(40)), note: String(activeNote.wrappedValue.prefix(96)),
+            compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal,
+            longDate: dateFormat == "long", fontStyle: stampFont, aspect: photoAspect)
+        Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 
     private var canPreviewAddress: Bool {

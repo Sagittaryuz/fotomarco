@@ -47,6 +47,9 @@ targets:
     sources:
       - MomentraCaptureExtension
       - path: Momentra/MomentraCaptureIntent.swift
+      - path: Momentra/StampRenderer.swift
+      - path: Momentra/PressureService.swift
+      - path: Momentra/ForecastModel.swift
     info:
       path: MomentraCaptureExtension/Info.plist
       properties:

@@ -6,9 +6,12 @@ import UniformTypeIdentifiers
 
 @main
 struct MomentraCaptureExtension: LockedCameraCaptureExtension {
+    @State private var captureContext: MomentraCaptureContext?
     var body: some LockedCameraCaptureExtensionScene {
         LockedCameraCaptureUIScene { session in
-            LockedCaptureView(session: session).ignoresSafeArea()
+            LockedCaptureView(session: session, captureContext: captureContext)
+                .ignoresSafeArea()
+                .task { captureContext = try? await MomentraCaptureIntent.appContext }
         }
     }
 }
@@ -17,8 +20,9 @@ struct MomentraCaptureExtension: LockedCameraCaptureExtension {
 /// until the containing app imports them; this is not the final Momentra UI.
 private struct LockedCaptureView: UIViewControllerRepresentable {
     let session: LockedCameraCaptureSession
+    let captureContext: MomentraCaptureContext?
 
-    func makeCoordinator() -> Coordinator { Coordinator(directory: session.sessionContentURL) }
+    func makeCoordinator() -> Coordinator { Coordinator(directory: session.sessionContentURL, captureContext: captureContext) }
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -29,20 +33,42 @@ private struct LockedCaptureView: UIViewControllerRepresentable {
         return picker
     }
 
-    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {
+        context.coordinator.captureContext = captureContext
+    }
 
     final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let directory: URL
-        init(directory: URL) { self.directory = directory }
+        var captureContext: MomentraCaptureContext?
+        init(directory: URL, captureContext: MomentraCaptureContext?) {
+            self.directory = directory
+            self.captureContext = captureContext
+        }
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             guard let image = info[.originalImage] as? UIImage, let jpeg = image.jpegData(compressionQuality: 0.95) else {
                 showError(picker); return
             }
-            do {
-                let target = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension("jpg")
-                try jpeg.write(to: target, options: .atomic)
-            } catch { showError(picker) }
+            let id = UUID().uuidString
+            let capturedAt = Date()
+            let settings = captureContext
+            do { try jpeg.write(to: directory.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic) }
+            catch { showError(picker); return }
+            guard let settings, settings.stampEnabled else { return }
+            let directory = directory
+            Task.detached(priority: .userInitiated) {
+                let snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: settings.gpsEnabled,
+                    title: settings.title, note: settings.note, compact: settings.compact,
+                    position: settings.position, horizontal: settings.horizontal, longDate: settings.longDate,
+                    fontStyle: settings.fontStyle, location: nil, heading: nil)
+                let aspect = PhotoAspect(rawValue: settings.aspect) ?? .standard
+                guard let stamped = StampRenderer.render(jpeg, aspect: aspect, snapshot: snapshot) else { return }
+                let processed = directory.appendingPathComponent("Processed", isDirectory: true)
+                do {
+                    try FileManager.default.createDirectory(at: processed, withIntermediateDirectories: true)
+                    try stamped.write(to: processed.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic)
+                } catch { return }
+            }
         }
 
         private func showError(_ picker: UIImagePickerController) {
