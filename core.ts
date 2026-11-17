@@ -28,7 +28,7 @@ export function cleanText(value: unknown, length = 96): string {
 }
 export function nativeSettingsTransfer(s: Settings) {
   const profiles = Object.fromEntries(PROFILE_IDS.map(id => [id, {title:s.profiles[id].title,note:s.profiles[id].note,hasLogo:!!s.profiles[id].logoPath}]))
-  return {format:"momentra-settings",version:1,settings:{profile:s.profile,stamp:s.stamp,gps:s.gps,map:s.map,aspectRatio:s.aspectRatio,storageMode:s.storageMode,allowGallery:s.allowGallery,size:s.size,timestampFormat:s.timestampFormat,mapScale:s.mapScale,profiles}}
+  return {format:"momentra-settings",version:1,settings:{profile:s.profile,stamp:s.stamp,gps:s.gps,map:s.map,aspectRatio:s.aspectRatio,storageMode:s.storageMode,allowGallery:s.allowGallery,size:s.size,timestampFormat:s.timestampFormat,timestampFont:s.timestampFont,mapScale:s.mapScale,profiles}}
 }
 export function normalizeSettings(raw: unknown): Settings {
   const d = defaults(); if (!raw || typeof raw !== "object") return d

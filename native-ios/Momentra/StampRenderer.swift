@@ -14,13 +14,14 @@ struct StampSnapshot {
     let logo: UIImage?
     let compact: Bool
     let longDate: Bool
+    let fontStyle: String
     let mapScale: String
     let pressure: PressureSample?
     let forecast: Forecast?
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, longDate: Bool = false, mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -34,6 +35,7 @@ struct StampSnapshot {
         self.logo = logo
         self.compact = compact
         self.longDate = longDate
+        self.fontStyle = ["system", "serif", "mono"].contains(fontStyle) ? fontStyle : "system"
         self.mapScale = ["small", "medium", "large"].contains(mapScale) ? mapScale : "medium"
         self.pressure = pressure.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
         let validLocation: CLLocation?
@@ -122,7 +124,16 @@ enum StampRenderer {
             guard let snapshot else { return }
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
-            let font = UIFont.systemFont(ofSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027)), weight: .medium)
+            let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027))
+            let systemFont = UIFont.systemFont(ofSize: fontSize, weight: .medium)
+            let font: UIFont
+            if snapshot.fontStyle == "mono" {
+                font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
+            } else if snapshot.fontStyle == "serif", let descriptor = systemFont.fontDescriptor.withDesign(.serif) {
+                font = UIFont(descriptor: descriptor, size: fontSize)
+            } else {
+                font = systemFont
+            }
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byWordWrapping
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
