@@ -29,6 +29,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     @Published private(set) var videoAvailable = false
     @Published private(set) var zoomOptions: [CGFloat] = []
     @Published private(set) var zoomFactor: CGFloat = 1
+    @Published private(set) var zoomRange: ClosedRange<CGFloat> = 1...1
     @Published private(set) var hasFlash = false
     @Published private(set) var activeDevice: AVCaptureDevice?
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
@@ -186,7 +187,9 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         let scale = zoomScale(for: device)
         let options = scale.options
         let current = device.videoZoomFactor / scale.wideFactor
-        DispatchQueue.main.async { self.zoomOptions = options; self.zoomFactor = current }
+        let minimum = scale.minimum / scale.wideFactor
+        let maximum = max(minimum, min(scale.maximum / scale.wideFactor, 40))
+        DispatchQueue.main.async { self.zoomOptions = options; self.zoomFactor = current; self.zoomRange = minimum...maximum }
     }
 
     func setZoom(_ factor: CGFloat) {

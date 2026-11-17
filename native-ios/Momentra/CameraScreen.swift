@@ -15,10 +15,13 @@ struct CameraScreen: View {
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
     @StateObject private var googlePhotos = GooglePhotosManager()
+    @AppStorage("native.camera.grid") private var showGrid = false
+    @AppStorage("native.camera.scanQR") private var scanQR = true
+    @AppStorage("native.camera.scanText") private var scanText = true
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
-    @AppStorage("native.address.enabled") private var addressEnabled = false
+    @AppStorage("native.address.enabled") private var addressEnabled = true
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @AppStorage("native.stamp.size") private var stampSize = "regular"
@@ -40,6 +43,7 @@ struct CameraScreen: View {
     @AppStorage("native.profile.hamoa.logo") private var hamoaLogo = ""
     @AppStorage("native.profile.piresco.logo") private var pirescoLogo = ""
     @AppStorage("native.profile.pessoal.logo") private var pessoalLogo = ""
+    @State private var showScanner = false
     @State private var showSettings = false
     @State private var showOriginals = false
     @State private var showMap = false
@@ -57,6 +61,7 @@ struct CameraScreen: View {
     @State private var logoLoading = false
     @State private var logo: UIImage?
     @State private var galleryThumbnail: UIImage?
+    @State private var showingZoomDial = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -66,8 +71,21 @@ struct CameraScreen: View {
                 CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
+                if showGrid {
+                    CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
+                }
                 VStack(spacing: 0) {
-                    Text("Momentra.").font(.headline).padding(.top, 4).padding(.bottom, 4)
+                    HStack {
+                        Spacer()
+                        Text("Momentra.").font(.headline)
+                        Spacer()
+                    }.overlay(alignment: .trailing) {
+                        if scanQR || scanText {
+                            Button { showScanner = true } label: { Image(systemName: "viewfinder").frame(width: 44, height: 44) }
+                                .accessibilityLabel("Ler QR code ou texto")
+                                .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
+                        }
+                    }.padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 4)
                     HStack {
                         Menu {
                             Button("Desligado") { camera.flashMode = .off }
@@ -126,11 +144,17 @@ struct CameraScreen: View {
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if mode == .photo && stampEnabled && stampPosition != "top" { liveStamp }
-                    if !camera.zoomOptions.isEmpty {
+                    if mode == .photo && stampEnabled && stampPosition != "top" && !showingZoomDial { liveStamp }
+                    if showingZoomDial {
+                        ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, dismiss: { withAnimation(.easeInOut(duration: 0.2)) { showingZoomDial = false } })
+                            .frame(height: 132).transition(.opacity.combined(with: .move(edge: .bottom)))
+                    } else if !camera.zoomOptions.isEmpty {
                         HStack(spacing: 0) {
                             ForEach(camera.zoomOptions, id: \.self) { factor in
-                                Button { camera.setZoom(factor) } label: {
+                                Button {
+                                    camera.setZoom(factor)
+                                    withAnimation(.easeInOut(duration: 0.2)) { showingZoomDial = true }
+                                } label: {
                                     let selected = abs(camera.zoomFactor - factor) < 0.01
                                     Text(factor == 0.5 ? "0,5" : "\(Int(factor))\(selected ? "×" : "")")
                                         .font(.subheadline.weight(.medium))
@@ -222,7 +246,7 @@ struct CameraScreen: View {
             }
         }
         .statusBarHidden()
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showScanner && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear { refreshGalleryThumbnail(); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
@@ -231,6 +255,9 @@ struct CameraScreen: View {
             else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
         .onReceive(location.$location) { fix in addressPreview.update(location: fix, enabled: canPreviewAddress) }
+        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
+            if canPreviewAddress { refreshAddress() }
+        }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
         .onChange(of: addressEnabled) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
@@ -258,6 +285,10 @@ struct CameraScreen: View {
                 }
             }
         }
+        .onChange(of: showScanner) { _, showing in
+            if showing { camera.stop() } else if scenePhase == .active { camera.start() }
+        }
+        .sheet(isPresented: $showScanner) { CameraScannerView(qrEnabled: scanQR, textEnabled: scanText) }
         .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
@@ -278,6 +309,15 @@ struct CameraScreen: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 Form {
+                    Section("Ajustes da câmera") {
+                        Toggle("Escanear QR Codes", isOn: $scanQR)
+                        Toggle("Mostrar Texto Detectado", isOn: $scanText)
+                        Text("Use o botão de leitura na câmera para escanear QR Codes ou selecionar texto.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Section("Composição") {
+                        Toggle("Grade", isOn: $showGrid)
+                    }
                     Section("Atualizações") {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                         if let version = updates.availableVersion {
@@ -568,7 +608,7 @@ struct CameraScreen: View {
     }
 
     private var canPreviewAddress: Bool {
-        scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && addressEnabled && !showSettings && !showOriginals && !showMap
+        scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && addressEnabled
     }
 
     private func refreshAddress() { addressPreview.update(location: location.location, enabled: canPreviewAddress) }
@@ -614,6 +654,21 @@ struct CameraScreen: View {
     }
 }
 
+private struct CameraGrid: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                for index in 1...2 {
+                    let x = geometry.size.width * CGFloat(index) / 3
+                    let y = geometry.size.height * CGFloat(index) / 3
+                    path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: geometry.size.height))
+                    path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: geometry.size.width, y: y))
+                }
+            }.stroke(.white.opacity(0.5), lineWidth: 0.5)
+        }
+    }
+}
+
 private struct CameraHardwareCaptureModifier: ViewModifier {
     let enabled: Bool
     let action: () -> Void
@@ -654,7 +709,7 @@ private struct LiveStampView: View {
                         .fontDesign(snapshot.fontStyle == "mono" ? .monospaced : snapshot.fontStyle == "serif" ? .serif : .default)
                 }
                 if snapshot.addressEnabled && snapshot.location != nil {
-                    Text(snapshot.cachedAddress ?? "Endereço após a captura").font(.caption2).foregroundStyle(.white.opacity(0.8))
+                    Text(snapshot.cachedAddress ?? "Buscando endereço…").font(.caption2).foregroundStyle(.white.opacity(0.8))
                 }
             }
             Spacer(minLength: 0)
