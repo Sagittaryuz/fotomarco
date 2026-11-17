@@ -60,6 +60,8 @@ final class PersonalPhotoUploadTests: XCTestCase {
         let id = UUID()
         let first = await uploader.upload(jpeg: jpeg, captureID: id, owner: "owner", personalConsent: true)
         XCTAssertEqual(first, .verificationPending("item_123"))
+        let changed = await uploader.upload(jpeg: Data([0xff, 0xd8, 0xff, 0x01]), captureID: id, owner: "owner", personalConsent: true)
+        XCTAssertEqual(changed, .uncertain)
         await transport.setVerifySucceeds(true)
         let again = await uploader.upload(jpeg: jpeg, captureID: id, owner: "owner", personalConsent: true)
         XCTAssertEqual(again, .verified("item_123"))

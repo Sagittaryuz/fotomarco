@@ -99,6 +99,7 @@ private struct PersonalUploadReceipt: Codable {
     let version: Int
     let ownerHash: String
     let captureID: UUID
+    let fileHash: String
     let state: String
     let mediaID: String?
 }
@@ -120,6 +121,7 @@ actor PersonalPhotoUploader {
               jpeg.count >= 4, jpeg.count <= 20 * 1024 * 1024,
               jpeg.prefix(3).elementsEqual([0xff, 0xd8, 0xff]) else { return .failed }
         let hash = SHA256.hash(data: Data(owner.utf8)).map { String(format: "%02x", $0) }.joined()
+        let fileHash = SHA256.hash(data: jpeg).map { String(format: "%02x", $0) }.joined()
         let key = hash + "-" + captureID.uuidString
         guard inflight.insert(key).inserted else { return .uncertain }
         defer { inflight.remove(key) }
@@ -128,7 +130,8 @@ actor PersonalPhotoUploader {
         if FileManager.default.fileExists(atPath: file.path) {
             guard let data = try? Data(contentsOf: file), data.count <= 8192,
                   let receipt = try? decoder.decode(PersonalUploadReceipt.self, from: data),
-                  receipt.version == 1, receipt.ownerHash == hash, receipt.captureID == captureID else { return .uncertain }
+                  receipt.version == 1, receipt.ownerHash == hash, receipt.captureID == captureID,
+                  receipt.fileHash == fileHash else { return .uncertain }
             guard receipt.state == "known", let id = receipt.mediaID, Self.validID(id) else { return .uncertain }
             return await verify(id)
         }
@@ -139,7 +142,7 @@ actor PersonalPhotoUploader {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                 attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-            let creating = PersonalUploadReceipt(version: 1, ownerHash: hash, captureID: captureID, state: "creating", mediaID: nil)
+            let creating = PersonalUploadReceipt(version: 1, ownerHash: hash, captureID: captureID, fileHash: fileHash, state: "creating", mediaID: nil)
             try JSONEncoder().encode(creating).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch { return .failed }
         let id: String
@@ -147,7 +150,7 @@ actor PersonalPhotoUploader {
         catch { return .uncertain }
         guard Self.validID(id) else { return .uncertain }
         do {
-            let known = PersonalUploadReceipt(version: 1, ownerHash: hash, captureID: captureID, state: "known", mediaID: id)
+            let known = PersonalUploadReceipt(version: 1, ownerHash: hash, captureID: captureID, fileHash: fileHash, state: "known", mediaID: id)
             try JSONEncoder().encode(known).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch { return .uncertain }
         return await verify(id)
