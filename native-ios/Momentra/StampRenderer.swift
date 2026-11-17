@@ -183,6 +183,9 @@ enum StampRenderer {
         let result = renderer.image { context in
             image.draw(in: CGRect(x: -crop.minX, y: -crop.minY, width: sourceSize.width, height: sourceSize.height))
             guard let snapshot else { return }
+            // Do not rely solely on upstream callers to filter location-derived assets.
+            let map = snapshot.mapEnabled && snapshot.location != nil ? map : nil
+            let address = snapshot.addressEnabled && snapshot.location != nil ? address : nil
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
             let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027))
