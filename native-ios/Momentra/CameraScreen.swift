@@ -26,6 +26,7 @@ struct CameraScreen: View {
     @State private var showSettings = false
     @State private var showOriginals = false
     @State private var showSettingsImport = false
+    @State private var showLogoImport = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
@@ -196,6 +197,9 @@ struct CameraScreen: View {
                         PhotosPicker(selection: $selectedLogo, matching: .images) {
                             Label("Escolher logotipo", systemImage: "photo")
                         }.disabled(logoLoading)
+                        Button { showLogoImport = true } label: {
+                            Label("Escolher logotipo dos Arquivos", systemImage: "folder")
+                        }.disabled(logoLoading)
                         if !activeLogoName.isEmpty {
                             Button("Remover logotipo do perfil", role: .destructive) {
                                 setLogo("", for: profile)
@@ -203,7 +207,7 @@ struct CameraScreen: View {
                             }.disabled(logoLoading)
                         }
                         Button("Importar ajustes do Scripting") { showSettingsImport = true }
-                        Text("Exporte os ajustes no Momentra para Scripting. Logotipos e algumas opções ainda não são importados.")
+                        Text("Exporte os ajustes e cada logotipo no Momentra para Scripting. Algumas opções ainda não são importadas.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
@@ -217,6 +221,28 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
+                .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
+                    guard let url = try? result.get() else { return }
+                    let targetProfile = profile
+                    logoLoading = true
+                    Task { @MainActor in
+                        defer { logoLoading = false }
+                        do {
+                            let name = try await Task.detached(priority: .utility) {
+                                let scoped = url.startAccessingSecurityScopedResource()
+                                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                                let file = try FileHandle(forReadingFrom: url)
+                                defer { try? file.close() }
+                                let data = try file.read(upToCount: 20_000_001) ?? Data()
+                                return try ProfileLogoStore.save(data)
+                            }.value
+                            setLogo(name, for: targetProfile)
+                            if profile == targetProfile { refreshLogo() }
+                        } catch {
+                            importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o logotipo. A imagem anterior foi preservada."
+                        }
+                    }
+                }
                 .fileImporter(isPresented: $showSettingsImport, allowedContentTypes: [.json]) { result in
                     do {
                         let url = try result.get()
