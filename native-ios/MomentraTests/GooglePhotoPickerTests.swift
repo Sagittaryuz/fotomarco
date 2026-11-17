@@ -48,4 +48,33 @@ final class GooglePhotoPickerTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
     }
+
+    func testRetrievesOnlySelectedImageAndUsesAuthorizedDownload() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PickerURLProtocol.self]
+        let client = GooglePhotoPickerClient(token: "test-token", configuration: config)
+        PickerURLProtocol.responseBody = Data(#"{"mediaItems":[{"id":"photo1","type":"PHOTO","mediaFile":{"baseUrl":"https://lh3.googleusercontent.com/p/abc","mimeType":"image/jpeg"}}]}"#.utf8)
+        let selected = try await client.selected(id: "session_1")
+        let photo = try XCTUnwrap(selected)
+        let list = try XCTUnwrap(PickerURLProtocol.capturedRequest?.url)
+        XCTAssertEqual(list.host, "photospicker.googleapis.com")
+        XCTAssertEqual(URLComponents(url: list, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "sessionId" })?.value, "session_1")
+        PickerURLProtocol.responseBody = Data([0xff, 0xd8, 0xff, 0xd9])
+        let downloaded = try await client.download(photo)
+        XCTAssertEqual(downloaded, Data([0xff, 0xd8, 0xff, 0xd9]))
+        XCTAssertEqual(PickerURLProtocol.capturedRequest?.url?.host, "lh3.googleusercontent.com")
+        XCTAssertEqual(PickerURLProtocol.capturedRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+    }
+
+    func testSessionIDCannotAlterRequestPath() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PickerURLProtocol.self]
+        let client = GooglePhotoPickerClient(token: "test-token", configuration: config)
+        PickerURLProtocol.capturedRequest = nil
+        do {
+            _ = try await client.status(id: "../other")
+            XCTFail("Identificador de sessão inválido deve ser recusado")
+        } catch {}
+        XCTAssertNil(PickerURLProtocol.capturedRequest)
+    }
 }
