@@ -17,6 +17,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var stopRequested = false
     private var pendingStamp: StampSnapshot?
     private var pendingAspect: PhotoAspect = .standard
+    private var pendingPhotoSaveToPhotos = true
+    private var pendingVideoSaveToPhotos = true
     private var captureRotation: CGFloat = 0
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
@@ -81,7 +83,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         DispatchQueue.main.async { self.ready = false }
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool) {
         guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -93,6 +95,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let settings = AVCapturePhotoSettings()
             self.pendingStamp = snapshot
             self.pendingAspect = aspect
+            self.pendingPhotoSaveToPhotos = saveToPhotos
             self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
@@ -200,7 +203,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
     }
 
-    func startRecording() {
+    func startRecording(saveToPhotos: Bool) {
         guard ready, videoAvailable, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         // Lock immediately, including while the permission sheet is visible.
         isFinishingRecording = true
@@ -230,6 +233,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
                     let file = directory.appendingPathComponent(UUID().uuidString + ".mov")
                     self.stopRequested = false
+                    self.pendingVideoSaveToPhotos = saveToPhotos
                     self.startingRecording = true
                     self.applyCaptureRotation(to: self.movieOutput.connection(with: .video))
                     self.movieOutput.startRecording(to: file, recordingDelegate: self)
@@ -270,6 +274,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
                 return
             }
+            guard self.pendingVideoSaveToPhotos else {
+                DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+                return
+            }
             PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
                 guard status == .authorized || status == .limited else {
                     self.report("O vídeo permanece no aplicativo; permita o acesso ao Fotos para salvá-lo na biblioteca.")
@@ -296,6 +304,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         queue.async {
             let snapshot = self.pendingStamp
             let aspect = self.pendingAspect
+            let saveToPhotos = self.pendingPhotoSaveToPhotos
             self.pendingStamp = nil
             do {
                 let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -316,7 +325,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     DispatchQueue.main.async { self.isCapturing = false }
                     return
                 }
-                self.savePhoto(rendered)
+                self.savePhoto(rendered, saveToPhotos: saveToPhotos)
                 return
             }
             StampMap.load(snapshot: snapshot, queue: self.queue) { map in
@@ -332,16 +341,20 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                         DispatchQueue.main.async { self.isCapturing = false }
                         return
                     }
-                    self.savePhoto(rendered)
+                    self.savePhoto(rendered, saveToPhotos: saveToPhotos)
                 }
             }
         }
     }
 
-    private func savePhoto(_ data: Data) {
+    private func savePhoto(_ data: Data, saveToPhotos: Bool) {
         do { _ = try ProcessedFileStore.save(data) }
         catch {
             report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
+            DispatchQueue.main.async { self.isCapturing = false }
+            return
+        }
+        guard saveToPhotos else {
             DispatchQueue.main.async { self.isCapturing = false }
             return
         }

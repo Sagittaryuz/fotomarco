@@ -18,8 +18,13 @@ final class SettingsTransferTests: XCTestCase {
 
     func testRejectsUnsupportedStorageAndInvalidFiles() throws {
         XCTAssertThrowsError(try SettingsTransfer.decode(payload(storage: "cloud")))
-        XCTAssertThrowsError(try SettingsTransfer.decode(payload(gallery: false)))
         XCTAssertThrowsError(try SettingsTransfer.decode(Data(repeating: 0, count: 65_537)))
         XCTAssertThrowsError(try SettingsTransfer.decode(Data("{}".utf8)))
+    }
+
+    func testPreservesLocalStorageWithoutGalleryCopy() throws {
+        let transfer = try SettingsTransfer.decode(payload(gallery: false))
+        XCTAssertEqual(transfer.settings.storageMode, "local")
+        XCTAssertFalse(transfer.settings.allowGallery)
     }
 }

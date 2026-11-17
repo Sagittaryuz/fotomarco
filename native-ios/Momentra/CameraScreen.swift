@@ -15,6 +15,7 @@ struct CameraScreen: View {
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @AppStorage("native.address.enabled") private var addressEnabled = false
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
+    @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @AppStorage("native.photo.aspect") private var photoAspect = PhotoAspect.standard.rawValue
     @AppStorage("native.profile") private var profile = "HAMOA"
     @AppStorage("native.profile.hamoa.title") private var hamoaTitle = "HAMOA"
@@ -150,7 +151,7 @@ struct CameraScreen: View {
                         .frame(maxWidth: .infinity)
                         Button {
                             if mode == .video {
-                                if camera.isRecording { camera.stopRecording() } else { camera.startRecording() }
+                                if camera.isRecording { camera.stopRecording() } else { camera.startRecording(saveToPhotos: saveToPhotos) }
                             } else {
                                 if countdown > 0 { cancelCountdown() } else { schedulePhoto() }
                             }
@@ -257,6 +258,9 @@ struct CameraScreen: View {
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
+                    Toggle("Salvar cópia no Fotos", isOn: $saveToPhotos)
+                    Text("As capturas continuam guardadas no aplicativo. Use Capturas para compartilhá-las ou salvá-las no Fotos manualmente.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
                     Toggle("Endereço no carimbo", isOn: $addressEnabled).disabled(!gpsEnabled || !stampEnabled)
                     Toggle("Pressão do sensor", isOn: $pressureEnabled).disabled(!pressure.available || !stampEnabled)
@@ -352,7 +356,7 @@ struct CameraScreen: View {
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
-        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard)
+        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos)
     }
 
     private var activeTitle: Binding<String> {
@@ -400,6 +404,7 @@ struct CameraScreen: View {
         pirescoTitle = p.title; pirescoNote = p.note
         pessoalTitle = personal.title; pessoalNote = personal.note
         profile = s.profile; stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
+        saveToPhotos = s.allowGallery
         photoAspect = s.aspectRatio
     }
 }

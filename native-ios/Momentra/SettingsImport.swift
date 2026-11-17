@@ -29,8 +29,8 @@ struct SettingsTransfer: Decodable {
               ids.contains(s.profile), PhotoAspect(rawValue: s.aspectRatio) != nil,
               ids.allSatisfy({ s.profiles[$0] != nil }),
               s.profiles.values.allSatisfy({ $0.title.count <= 1000 && $0.note.count <= 1000 }) else { throw ImportError.invalid }
-        // The native draft currently always saves a processed photo locally and to Photos.
-        guard s.storageMode == "local", s.allowGallery else { throw ImportError.unsupportedStorage }
+        // Cloud-only storage must not silently change to local storage.
+        guard s.storageMode == "local" else { throw ImportError.unsupportedStorage }
         return transfer
     }
 
