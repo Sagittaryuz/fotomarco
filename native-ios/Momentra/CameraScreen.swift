@@ -5,6 +5,7 @@ import MapKit
 import UniformTypeIdentifiers
 import PhotosUI
 import ImageIO
+import GoogleSignIn
 
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
@@ -62,9 +63,12 @@ struct CameraScreen: View {
     @State private var logo: UIImage?
     @State private var galleryThumbnail: UIImage?
     @State private var showingZoomDial = false
+    @State private var quickRecording = false
+    @State private var quickReleasePending = false
+    @State private var suppressQuickPhoto = false
     @Environment(\.scenePhase) private var scenePhase
 
-    var body: some View {
+    private var cameraContent: some View {
         GeometryReader { geometry in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -180,6 +184,7 @@ struct CameraScreen: View {
                         .accessibilityLabel("Escolher perfil do carimbo")
                         Spacer(minLength: 0)
                         Button {
+                            guard !suppressQuickPhoto else { return }
                             if mode == .video {
                                 if camera.isRecording { camera.stopRecording() } else { camera.startRecording(saveToPhotos: saveToPhotos) }
                             } else {
@@ -192,6 +197,16 @@ struct CameraScreen: View {
                         }
                         .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isFinishingRecording)
                         .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
+                        .onLongPressGesture(minimumDuration: 0.5, maximumDistance: 40, perform: {
+                            guard mode == .photo, countdown == 0, camera.ready, camera.videoAvailable, !camera.isCapturing, !camera.isRecording else { return }
+                            suppressQuickPhoto = true; quickRecording = true; quickReleasePending = false
+                            camera.startRecording(saveToPhotos: saveToPhotos)
+                        }, onPressingChanged: { pressing in
+                            guard !pressing, quickRecording else { return }
+                            quickReleasePending = true
+                            if camera.isRecording { camera.stopRecording(); quickRecording = false }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { suppressQuickPhoto = false }
+                        })
                         Spacer(minLength: 0)
                         Button {
                             mapLocation = makeSnapshot(at: Date()).location
@@ -245,6 +260,10 @@ struct CameraScreen: View {
                 }.foregroundStyle(.white)
             }
         }
+    }
+
+    var body: some View {
+        cameraContent
         .statusBarHidden()
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showScanner && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
@@ -264,6 +283,9 @@ struct CameraScreen: View {
         .onChange(of: mode) { _, _ in refreshAddress() }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
+        .onChange(of: camera.isRecording) { _, recording in
+            if recording && quickRecording && quickReleasePending { camera.stopRecording(); quickRecording = false }
+        }
         .onChange(of: camera.isCapturing) { _, capturing in if !capturing { refreshGalleryThumbnail() } }
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
@@ -309,6 +331,24 @@ struct CameraScreen: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 Form {
+                    Section("Atualizações") {
+                        if let version = updates.availableVersion {
+                            Text("Nova versão disponível: \(version)").font(.headline)
+                            Link("Abrir instruções da atualização", destination: UpdateService.releasesURL)
+                        }
+                        Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
+                            Task { await updates.check(force: true) }
+                        }.disabled(updates.checking)
+                        if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
+                    }
+                    Section("Conta Google") {
+                        LabeledContent("Conta", value: GIDSignIn.sharedInstance.currentUser?.profile?.email ?? "Não conectada")
+                        if !googlePhotos.connected && googlePhotos.configured {
+                            GoogleWelcomeButton { showGoogleConsent = true }.frame(height: 48).disabled(googlePhotos.busy)
+                        } else if googlePhotos.connected {
+                            Text("Google Fotos conectado").foregroundStyle(.secondary)
+                        }
+                    }
                     Section("Ajustes da câmera") {
                         Toggle("Escanear QR Codes", isOn: $scanQR)
                         Toggle("Mostrar Texto Detectado", isOn: $scanText)
@@ -317,21 +357,6 @@ struct CameraScreen: View {
                     }
                     Section("Composição") {
                         Toggle("Grade", isOn: $showGrid)
-                    }
-                    Section("Atualizações") {
-                        LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
-                        if let version = updates.availableVersion {
-                            Text("Nova versão disponível: \(version)").font(.headline)
-                            Link("Abrir instruções da atualização", destination: UpdateService.releasesURL)
-                            Text("Baixe o IPA indicado e use o Signulous para assinar e instalar. A atualização não é instalada automaticamente.")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                        Button(updates.checking ? "Verificando…" : "Verificar atualizações") {
-                            Task { await updates.check(force: true) }
-                        }.disabled(updates.checking)
-                        if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
-                        Text("A consulta ao GitHub envia o IP da conexão para verificar versões publicadas.")
-                            .font(.footnote).foregroundStyle(.secondary)
                     }
                     Section("Aparência") {
                         NavigationLink("Ícone do aplicativo") { AppIconPicker() }
@@ -426,6 +451,10 @@ struct CameraScreen: View {
                         if let status = weather.status { Text(status).font(.footnote) }
                         Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
                     }
+                    Section("Armazenamento") {
+                        Text("As fotos ficam no dispositivo. O envio ao Google Fotos é feito manualmente pela galeria.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     Section("Google Fotos pessoal") {
                         if googlePhotos.configured {
                             if googlePhotos.connected {
@@ -442,6 +471,9 @@ struct CameraScreen: View {
                     }
                     Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)
+                    Section("Sobre") {
+                        LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
+                    }
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }

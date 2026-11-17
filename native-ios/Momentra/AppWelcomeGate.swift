@@ -130,7 +130,7 @@ struct AppWelcomeGate: View {
     }
 }
 
-private struct GoogleWelcomeButton: UIViewRepresentable {
+struct GoogleWelcomeButton: UIViewRepresentable {
     let action: () -> Void
     func makeCoordinator() -> Coordinator { Coordinator(action: action) }
     func makeUIView(context: Context) -> GIDSignInButton {
