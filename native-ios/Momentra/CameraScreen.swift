@@ -18,6 +18,7 @@ struct CameraScreen: View {
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @AppStorage("native.stamp.size") private var stampSize = "regular"
+    @AppStorage("native.stamp.position") private var stampPosition = "bottom"
     @AppStorage("native.stamp.dateFormat") private var dateFormat = "numeric"
     @AppStorage("native.stamp.font") private var stampFont = "system"
     @AppStorage("native.map.scale") private var mapScale = "medium"
@@ -102,20 +103,14 @@ struct CameraScreen: View {
                                 }
                         }.accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }.padding(.horizontal, 18)
+                    if mode == .photo && stampEnabled && stampPosition == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if mode == .photo && stampEnabled {
-                        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                            let snapshot = makeSnapshot(at: timeline.date)
-                            LiveStampView(snapshot: snapshot)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                    }
+                    if mode == .photo && stampEnabled && stampPosition != "top" { liveStamp }
                     if !camera.zoomOptions.isEmpty {
                         HStack(spacing: 8) {
                             ForEach(camera.zoomOptions, id: \.self) { factor in
@@ -287,6 +282,10 @@ struct CameraScreen: View {
                         Text("Normal").tag("regular")
                         Text("Compacto").tag("compact")
                     }.disabled(!stampEnabled)
+                    Picker("Posição do carimbo", selection: $stampPosition) {
+                        Text("Embaixo").tag("bottom")
+                        Text("Em cima").tag("top")
+                    }.disabled(!stampEnabled)
                     Picker("Data e hora", selection: $dateFormat) {
                         Text("Numérica").tag("numeric")
                         Text("Por extenso").tag("long")
@@ -418,8 +417,16 @@ struct CameraScreen: View {
         }
     }
 
+    private var liveStamp: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            LiveStampView(snapshot: makeSnapshot(at: timeline.date))
+        }.padding(.horizontal, 16)
+            .padding(.top, stampPosition == "top" ? 12 : 0)
+            .padding(.bottom, stampPosition == "top" ? 0 : 12)
+    }
+
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, compact: stampSize == "compact", longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, compact: stampSize == "compact", position: stampPosition, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {
@@ -449,6 +456,7 @@ struct CameraScreen: View {
         profile = s.profile; stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
         saveToPhotos = s.allowGallery
         if let size = s.size { stampSize = size }
+        if let position = s.position { stampPosition = position }
         if let format = s.timestampFormat { dateFormat = format }
         if let font = s.timestampFont { stampFont = font }
         if let scale = s.mapScale { mapScale = scale }

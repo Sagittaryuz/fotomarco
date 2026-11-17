@@ -13,6 +13,7 @@ struct StampSnapshot {
     let note: String
     let logo: UIImage?
     let compact: Bool
+    let position: String
     let longDate: Bool
     let fontStyle: String
     let mapScale: String
@@ -21,7 +22,7 @@ struct StampSnapshot {
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, compact: Bool = false, position: String = "bottom", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -34,6 +35,7 @@ struct StampSnapshot {
         self.note = clean(note, limit: 96)
         self.logo = logo
         self.compact = compact
+        self.position = position == "top" ? "top" : "bottom"
         self.longDate = longDate
         self.fontStyle = ["system", "serif", "mono"].contains(fontStyle) ? fontStyle : "system"
         self.mapScale = ["small", "medium", "large"].contains(mapScale) ? mapScale : "medium"
@@ -145,7 +147,8 @@ enum StampRenderer {
             let textWidth = size.width - margin * 4 - mapSide - mapGap
             let measured = text.boundingRect(with: CGSize(width: textWidth, height: size.height * 0.6), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil)
             let height = max(ceil(measured.height), mapSide) + margin * 2
-            let box = CGRect(x: margin, y: size.height - margin - height, width: size.width - margin * 2, height: height)
+            let boxY = snapshot.position == "top" ? margin : size.height - margin - height
+            let box = CGRect(x: margin, y: boxY, width: size.width - margin * 2, height: height)
             context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.65).cgColor)
             context.cgContext.fill(box)
             if let map {
@@ -165,7 +168,8 @@ enum StampRenderer {
                 let maxSide = unit * 0.15
                 let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
                 let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
-                let logoRect = CGRect(x: size.width - margin - logoSize.width, y: max(margin, box.minY - margin - logoSize.height), width: logoSize.width, height: logoSize.height)
+                let logoY = snapshot.position == "top" ? min(size.height - margin - logoSize.height, box.maxY + margin) : max(margin, box.minY - margin - logoSize.height)
+                let logoRect = CGRect(x: size.width - margin - logoSize.width, y: logoY, width: logoSize.width, height: logoSize.height)
                 logo.draw(in: logoRect)
             }
         }

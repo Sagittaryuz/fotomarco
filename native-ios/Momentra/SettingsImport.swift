@@ -15,6 +15,7 @@ struct SettingsTransfer: Decodable {
         let storageMode: String
         let allowGallery: Bool
         let size: String?
+        let position: String?
         let timestampFormat: String?
         let timestampFont: String?
         let mapScale: String?
@@ -32,6 +33,7 @@ struct SettingsTransfer: Decodable {
         guard transfer.format == "momentra-settings", transfer.version == 1,
               ids.contains(s.profile), PhotoAspect(rawValue: s.aspectRatio) != nil,
               s.size.map({ ["compact", "regular"].contains($0) }) ?? true,
+              s.position.map({ ["top", "bottom"].contains($0) }) ?? true,
               s.timestampFormat.map({ ["numeric", "long"].contains($0) }) ?? true,
               s.timestampFont.map({ ["system", "serif", "mono"].contains($0) }) ?? true,
               s.mapScale.map({ ["small", "medium", "large"].contains($0) }) ?? true,

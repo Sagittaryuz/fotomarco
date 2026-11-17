@@ -38,4 +38,11 @@ final class StampSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.note, "nota seguinte")
         XCTAssertEqual(snapshot.lines.first, snapshot.title)
     }
+
+    func testStampPositionHasSafeDefault() {
+        let top = StampSnapshot(capturedAt: Date(), gpsEnabled: false, position: "top", location: nil, heading: nil)
+        let invalid = StampSnapshot(capturedAt: Date(), gpsEnabled: false, position: "unexpected", location: nil, heading: nil)
+        XCTAssertEqual(top.position, "top")
+        XCTAssertEqual(invalid.position, "bottom")
+    }
 }
