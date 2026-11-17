@@ -198,18 +198,25 @@ struct CameraScreen: View {
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
                                 .frame(width: min(94, geometry.size.width * 0.25), height: min(94, geometry.size.width * 0.25))
                         }
-                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isFinishingRecording)
+                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || (camera.isFinishingRecording && !quickRecording))
                         .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
-                        .onLongPressGesture(minimumDuration: 0.5, maximumDistance: 40, perform: {
-                            guard mode == .photo, countdown == 0, camera.ready, camera.videoAvailable, !camera.isCapturing, !camera.isRecording else { return }
-                            suppressQuickPhoto = true; quickRecording = true; quickReleasePending = false
-                            camera.startRecording(saveToPhotos: saveToPhotos)
-                        }, onPressingChanged: { pressing in
-                            guard !pressing, quickRecording else { return }
-                            quickReleasePending = true
-                            if camera.isRecording { camera.stopRecording(); quickRecording = false }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { suppressQuickPhoto = false }
-                        })
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5, maximumDistance: 40)
+                                .sequenced(before: DragGesture(minimumDistance: 0))
+                                .onChanged { phase in
+                                    guard case .second(true, _) = phase, !quickRecording,
+                                          mode == .photo, countdown == 0, camera.ready, camera.videoAvailable,
+                                          !camera.isCapturing, !camera.isRecording, !camera.isFinishingRecording else { return }
+                                    suppressQuickPhoto = true; quickRecording = true; quickReleasePending = false
+                                    camera.startRecording(saveToPhotos: saveToPhotos)
+                                }
+                                .onEnded { _ in
+                                    guard quickRecording else { return }
+                                    quickReleasePending = true
+                                    if camera.isRecording { camera.stopRecording(); quickRecording = false }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { suppressQuickPhoto = false }
+                                }
+                        )
                         Spacer(minLength: 0)
                         Button {
                             mapLocation = makeSnapshot(at: Date()).location
