@@ -22,9 +22,8 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
     private let session: URLSession
     private let base = "https://photoslibrary.googleapis.com/v1"
 
-    init(token: String) {
+    init(token: String, configuration: URLSessionConfiguration = .ephemeral) {
         self.token = token
-        let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
         session = URLSession(configuration: configuration, delegate: NoPhotoRedirect(), delegateQueue: nil)
     }
