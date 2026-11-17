@@ -6,6 +6,10 @@ import UIKit
 final class GooglePhotosManager: ObservableObject {
     @Published private(set) var busy = false
     @Published var message: String?
+    @Published private(set) var cloudPhotos: [CloudPhoto] = []
+    @Published private(set) var cloudNextPage: String?
+    @Published private(set) var cloudLoaded = false
+    @Published private(set) var cloudError: String?
     private let auth = NativeGoogleAuth()
 
     init() {
@@ -40,8 +44,44 @@ final class GooglePhotosManager: ObservableObject {
     func signOut() {
         guard !busy else { return }
         auth.signOut()
+        cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false; cloudError = nil
         objectWillChange.send()
         message = "Conta desconectada do Momentra. Fotos e permissões na conta Google não foram apagadas."
+    }
+
+    func loadCloudPhotos(nextPage: Bool = false) {
+        guard configured, connected, !busy, let owner = GIDSignIn.sharedInstance.currentUser?.userID else { return }
+        if nextPage && cloudNextPage == nil { return }
+        let pageToken = nextPage ? cloudNextPage : nil
+        busy = true
+        cloudError = nil
+        Task {
+            defer { busy = false }
+            let token: String? = await withCheckedContinuation { continuation in
+                auth.freshToken(for: owner) { continuation.resume(returning: $0) }
+            }
+            guard let token, GIDSignIn.sharedInstance.currentUser?.userID == owner else {
+                cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false
+                cloudError = "A sessão expirou. Reconecte sua conta Google."
+                return
+            }
+            do {
+                let page = try await GooglePersonalPhotoTransport(token: token).listAppPhotos(pageToken: pageToken)
+                guard GIDSignIn.sharedInstance.currentUser?.userID == owner else {
+                    cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false
+                    cloudError = "A conta foi alterada. Atualize a galeria."
+                    return
+                }
+                var updated = nextPage ? cloudPhotos : []
+                var seen = Set(updated.map(\.id))
+                for item in page.photos where seen.insert(item.id).inserted { updated.append(item) }
+                cloudPhotos = updated
+                cloudNextPage = page.nextPageToken == pageToken ? nil : page.nextPageToken
+                cloudLoaded = true
+            } catch {
+                cloudError = "Não foi possível carregar as fotos. Verifique a conexão e tente novamente."
+            }
+        }
     }
 
     func sendProcessedPhoto(_ url: URL) {

@@ -43,4 +43,18 @@ final class GooglePhotosTransportTests: XCTestCase {
             XCTFail("A resposta acima do limite não deveria ser aceita")
         } catch {}
     }
+
+    func testListingEncodesPaginationAndUsesLibraryEndpoint() async throws {
+        PhotoURLProtocol.responseBody = Data(#"{"mediaItems":[],"nextPageToken":"next"}"#.utf8)
+        PhotoURLProtocol.capturedRequest = nil
+        let page = try await makeTransport().listAppPhotos(pageToken: "a+b&c")
+        XCTAssertEqual(page.nextPageToken, "next")
+        let request = try XCTUnwrap(PhotoURLProtocol.capturedRequest)
+        let url = try XCTUnwrap(request.url)
+        XCTAssertEqual(url.host, "photoslibrary.googleapis.com")
+        XCTAssertEqual(url.path, "/v1/mediaItems")
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(items.first(where: { $0.name == "pageToken" })?.value, "a+b&c")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+    }
 }

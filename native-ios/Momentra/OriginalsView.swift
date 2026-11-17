@@ -49,7 +49,7 @@ struct OriginalsView: View {
                 } else if gallerySection == 1 {
                     DevicePhotoGallery()
                 } else {
-                    ContentUnavailableView("Google Fotos", systemImage: "cloud", description: Text("A galeria na nuvem ainda está em preparação. Suas fotos no celular permanecem disponíveis."))
+                    CloudPhotoGallery(googlePhotos: googlePhotos)
                 }
             }
             .navigationTitle("Galeria")
