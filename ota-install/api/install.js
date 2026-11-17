@@ -36,14 +36,10 @@ module.exports = async function handler(req, res) {
   if (req.query.stage === 'package') {
     const remote = process.env.SIGNED_IPA_URL;
     if (!remote || !/^https:\/\/cdn\d+\.signulous\.com\/downloads\//.test(remote)) return res.status(503).send('Arquivo indisponível.');
-    try {
-      const response = await fetch(remote, {redirect:'error', signal:AbortSignal.timeout(20000)});
-      if (!response.ok) return res.status(502).send('Arquivo indisponível.');
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (!bytes.length || bytes.length > 4_000_000) return res.status(502).send('Arquivo inválido.');
-      res.setHeader('Content-Type', 'application/octet-stream');
-      return res.send(bytes);
-    } catch (_) { return res.status(502).send('Arquivo indisponível.'); }
+    // Vercel limits function response bodies; let iOS download the signed IPA
+    // directly from the signing service after validating this private link.
+    res.setHeader('Location', remote);
+    return res.status(302).send('');
   }
   const manifest = `${endpoint}?stage=manifest&token=${token}`;
   const install = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifest)}`;
