@@ -24,6 +24,7 @@ struct CameraScreen: View {
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
     @AppStorage("native.address.enabled") private var addressEnabled = true
+    @AppStorage("native.address.autoPreviewMigrated") private var addressPreviewMigrated = false
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @AppStorage("native.stamp.size") private var stampSize = "regular"
@@ -268,7 +269,7 @@ struct CameraScreen: View {
         .statusBarHidden()
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showScanner && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
-        .onAppear { refreshGalleryThumbnail(); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
+        .onAppear { if !addressPreviewMigrated { addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }

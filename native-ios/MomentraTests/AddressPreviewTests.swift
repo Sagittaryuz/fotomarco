@@ -45,8 +45,8 @@ final class AddressPreviewTests: XCTestCase {
     func testAutomaticLookupsRespectMinimumInterval() {
         let now = Date(timeIntervalSince1970: 100_000)
         XCTAssertTrue(AddressPreviewService.mayRequest(lastAttempt: nil, now: now))
-        XCTAssertFalse(AddressPreviewService.mayRequest(lastAttempt: now.addingTimeInterval(-59), now: now))
-        XCTAssertTrue(AddressPreviewService.mayRequest(lastAttempt: now.addingTimeInterval(-60), now: now))
+        XCTAssertFalse(AddressPreviewService.mayRequest(lastAttempt: now.addingTimeInterval(-14), now: now))
+        XCTAssertTrue(AddressPreviewService.mayRequest(lastAttempt: now.addingTimeInterval(-15), now: now))
         XCTAssertTrue(AddressPreviewService.mayRequest(lastAttempt: now.addingTimeInterval(10), now: now))
     }
 

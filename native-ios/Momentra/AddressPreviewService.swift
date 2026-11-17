@@ -77,7 +77,7 @@ final class AddressPreviewService: ObservableObject {
 
     static func mayRequest(lastAttempt: Date?, now: Date) -> Bool {
         guard let lastAttempt else { return true }
-        return now < lastAttempt || now.timeIntervalSince(lastAttempt) >= 60
+        return now < lastAttempt || now.timeIntervalSince(lastAttempt) >= 15
     }
 
     private static func valid(_ location: CLLocation, at now: Date) -> Bool {
