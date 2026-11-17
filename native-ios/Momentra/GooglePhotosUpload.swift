@@ -110,13 +110,28 @@ private struct PersonalUploadReceipt: Codable {
     let mediaID: String?
 }
 
+private final class PhotoUploadCoordination {
+    static let shared = PhotoUploadCoordination()
+    private let lock = NSLock()
+    private var active = Set<String>()
+
+    func begin(_ key: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return active.insert(key).inserted
+    }
+
+    func end(_ key: String) {
+        lock.lock(); defer { lock.unlock() }
+        active.remove(key)
+    }
+}
+
 // A receipt is persisted before item creation. A crash or ambiguous response
 // therefore never causes an automatic repeat upload or any local-file deletion.
 actor PersonalPhotoUploader {
     private let directory: URL
     private let transport: PersonalPhotoTransport
     private let accountIsCurrent: (String) async -> Bool
-    private var inflight = Set<String>()
 
     init(directory: URL, transport: PersonalPhotoTransport, accountIsCurrent: @escaping (String) async -> Bool) {
         self.directory = directory
@@ -132,9 +147,10 @@ actor PersonalPhotoUploader {
         let hash = SHA256.hash(data: Data(owner.utf8)).map { String(format: "%02x", $0) }.joined()
         let fileHash = SHA256.hash(data: jpeg).map { String(format: "%02x", $0) }.joined()
         let key = hash + "-" + captureID.uuidString
-        guard inflight.insert(key).inserted else { return .uncertain }
-        defer { inflight.remove(key) }
         let file = directory.appendingPathComponent(key + ".json")
+        let coordinationKey = file.standardizedFileURL.path
+        guard PhotoUploadCoordination.shared.begin(coordinationKey) else { return .uncertain }
+        defer { PhotoUploadCoordination.shared.end(coordinationKey) }
         let decoder = JSONDecoder()
         if FileManager.default.fileExists(atPath: file.path) {
             guard let data = try? Data(contentsOf: file), data.count <= 8192,

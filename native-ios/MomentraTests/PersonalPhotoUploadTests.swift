@@ -28,6 +28,16 @@ private actor AccountGuard {
     func isCurrent() -> Bool { current }
 }
 
+private actor UploadGate {
+    private var open = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if open { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+    func release() { open = true; continuations.forEach { $0.resume() }; continuations.removeAll() }
+}
+
 final class PersonalPhotoUploadTests: XCTestCase {
     private let jpeg = Data([0xff, 0xd8, 0xff, 0xd9])
 
@@ -72,6 +82,30 @@ final class PersonalPhotoUploadTests: XCTestCase {
         let counts = await transport.counts()
         XCTAssertEqual(counts.0, 1)
         XCTAssertEqual(counts.1, 0)
+    }
+
+    func testTwoUploaderInstancesDoNotUploadSameCaptureConcurrently() async {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transport = PhotoTransportStub()
+        let started = expectation(description: "first upload started")
+        let gate = UploadGate()
+        await transport.setAfterUpload { started.fulfill(); await gate.wait() }
+        let first = PersonalPhotoUploader(directory: root, transport: transport, accountIsCurrent: { _ in true })
+        let second = PersonalPhotoUploader(directory: root, transport: transport, accountIsCurrent: { _ in true })
+        let id = UUID()
+        let resultA = Task { await first.upload(jpeg: jpeg, captureID: id, owner: "owner", personalConsent: true) }
+        await fulfillment(of: [started], timeout: 5)
+        let safety = Task { try? await Task.sleep(nanoseconds: 2_000_000_000); await gate.release() }
+        let resultB = await second.upload(jpeg: jpeg, captureID: id, owner: "owner", personalConsent: true)
+        await gate.release()
+        safety.cancel()
+        let completed = await resultA.value
+        XCTAssertEqual(resultB, .uncertain)
+        XCTAssertEqual(completed, .verificationPending("item_123"))
+        let counts = await transport.counts()
+        XCTAssertEqual(counts.0, 1)
+        XCTAssertEqual(counts.1, 1)
     }
 
     func testKnownItemRetryOnlyVerifies() async {
