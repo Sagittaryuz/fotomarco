@@ -16,6 +16,7 @@ struct CameraScreen: View {
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
     @StateObject private var googlePhotos = GooglePhotosManager()
+    @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
     @AppStorage("native.camera.scanQR") private var scanQR = true
     @AppStorage("native.camera.scanText") private var scanText = true
@@ -350,6 +351,7 @@ struct CameraScreen: View {
                         }
                     }
                     Section("Ajustes da câmera") {
+                        NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
                         Toggle("Escanear QR Codes", isOn: $scanQR)
                         Toggle("Mostrar Texto Detectado", isOn: $scanText)
                         Text("Use o botão de leitura na câmera para escanear QR Codes ou selecionar texto.")
@@ -559,7 +561,7 @@ struct CameraScreen: View {
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
-        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos)
+        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos, style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural)
     }
 
     private var activeTitle: Binding<String> {

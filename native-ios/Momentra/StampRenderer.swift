@@ -2,7 +2,41 @@ import CoreLocation
 import UIKit
 import MapKit
 import ImageIO
+import CoreImage
 import UniformTypeIdentifiers
+
+enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
+    case natural = "Natural", brilliance = "Brilho", vivid = "Vibrante", soft = "Suave", dramatic = "Contraste", mono = "P&B", warm = "Quente"
+    var id: String { rawValue }
+    var filterName: String? {
+        switch self {
+        case .natural: return nil
+        case .brilliance: return "CIPhotoEffectInstant"
+        case .vivid: return "CIPhotoEffectChrome"
+        case .soft: return "CIPhotoEffectFade"
+        case .dramatic: return "CIPhotoEffectProcess"
+        case .mono: return "CIPhotoEffectNoir"
+        case .warm: return "CIPhotoEffectTransfer"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .natural: return "Mantém as cores originais da imagem."
+        case .brilliance: return "Ilumina e aquece suavemente a fotografia."
+        case .vivid: return "Realça as cores e o contraste."
+        case .soft: return "Suaviza o contraste e as cores."
+        case .dramatic: return "Destaca o contraste e as sombras."
+        case .mono: return "Cria uma fotografia em preto e branco."
+        case .warm: return "Acrescenta uma tonalidade quente."
+        }
+    }
+    func apply(to image: UIImage) -> UIImage {
+        guard let filterName, let filter = CIFilter(name: filterName), let input = CIImage(image: image) else { return image }
+        filter.setValue(input, forKey: kCIInputImageKey)
+        guard let output = filter.outputImage, let cg = CIContext(options: nil).createCGImage(output, from: input.extent) else { return image }
+        return UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
+    }
+}
 
 struct StampSnapshot {
     let capturedAt: Date
@@ -172,8 +206,9 @@ enum StampRenderer {
         return nil
     }
 
-    static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil) -> Data? {
-        guard let image = UIImage(data: data) else { return nil }
+    static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
+        guard let original = UIImage(data: data) else { return nil }
+        let image = style.apply(to: original)
         let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard let crop = aspect.crop(in: sourceSize) else { return nil }
         let size = crop.size

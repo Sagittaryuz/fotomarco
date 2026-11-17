@@ -18,6 +18,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var pendingStamp: StampSnapshot?
     private var pendingAspect: PhotoAspect = .standard
     private var pendingPhotoSaveToPhotos = true
+    private var pendingStyle: MomentraPhotoStyle = .natural
     private var pendingVideoSaveToPhotos = true
     private var captureRotation: CGFloat = 0
     @Published private(set) var errorMessage: String?
@@ -84,7 +85,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         DispatchQueue.main.async { self.ready = false }
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural) {
         guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -96,6 +97,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let settings = AVCapturePhotoSettings()
             self.pendingStamp = snapshot
             self.pendingAspect = aspect
+            self.pendingStyle = style
             self.pendingPhotoSaveToPhotos = saveToPhotos
             self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
             if self.input?.device.hasFlash == true,
@@ -307,6 +309,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         queue.async {
             let snapshot = self.pendingStamp
             let aspect = self.pendingAspect
+            let style = self.pendingStyle
             let saveToPhotos = self.pendingPhotoSaveToPhotos
             let captureID = UUID()
             self.pendingStamp = nil
@@ -324,7 +327,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 return
             }
             guard let snapshot else {
-                guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil) else {
+                guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil, style: style) else {
                     self.report("Não foi possível ajustar a proporção. O original está disponível em Capturas.")
                     DispatchQueue.main.async { self.isCapturing = false }
                     return
@@ -340,7 +343,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     if snapshot.addressEnabled && snapshot.location != nil && address == nil {
                         self.report("Endereço indisponível. A foto será salva com as demais informações.")
                     }
-                    guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: snapshot, map: map, address: address) else {
+                    guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: snapshot, map: map, address: address, style: style) else {
                         self.report("Não foi possível compor a foto. O original está disponível em Capturas.")
                         DispatchQueue.main.async { self.isCapturing = false }
                         return
