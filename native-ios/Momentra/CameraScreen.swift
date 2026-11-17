@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import AVKit
 import MapKit
 import UniformTypeIdentifiers
 import PhotosUI
@@ -204,6 +205,7 @@ struct CameraScreen: View {
             }
         }
         .statusBarHidden()
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
@@ -515,6 +517,17 @@ struct CameraScreen: View {
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 
+    private func handleHardwareCapture() {
+        guard camera.ready, !camera.isCapturing, !camera.isSwitching, !camera.isFinishingRecording else { return }
+        if mode == .video {
+            if camera.isRecording { camera.stopRecording() } else { camera.startRecording(saveToPhotos: saveToPhotos) }
+        } else if countdown > 0 {
+            cancelCountdown()
+        } else {
+            schedulePhoto()
+        }
+    }
+
     private var canPreviewAddress: Bool {
         scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && addressEnabled && !showSettings && !showOriginals && !showMap
     }
@@ -559,6 +572,22 @@ struct CameraScreen: View {
         if let corner = s.mapCorner { mapCorner = corner }
         if let corner = s.logoCorner { logoCorner = corner }
         photoAspect = s.aspectRatio
+    }
+}
+
+private struct CameraHardwareCaptureModifier: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onCameraCaptureEvent(isEnabled: enabled) { event in
+                if event.phase == .ended { action() }
+            }
+        } else {
+            content
+        }
     }
 }
 
