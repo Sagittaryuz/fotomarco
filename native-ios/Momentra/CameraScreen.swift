@@ -263,7 +263,7 @@ struct CameraScreen: View {
         }
     }
 
-    var body: some View {
+    private var observedCamera: some View {
         cameraContent
         .statusBarHidden()
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showScanner && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
@@ -278,6 +278,10 @@ struct CameraScreen: View {
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             if canPreviewAddress { refreshAddress() }
         }
+    }
+
+    private var trackedCamera: some View {
+        observedCamera
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
         .onChange(of: addressEnabled) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
@@ -308,6 +312,10 @@ struct CameraScreen: View {
                 }
             }
         }
+    }
+
+    var body: some View {
+        trackedCamera
         .onChange(of: showScanner) { _, showing in
             if showing { camera.stop() } else if scenePhase == .active { camera.start() }
         }
