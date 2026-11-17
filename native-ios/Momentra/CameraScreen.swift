@@ -9,6 +9,7 @@ struct CameraScreen: View {
     @StateObject private var camera = CameraService()
     @StateObject private var location = LocationService()
     @StateObject private var pressure = PressureService()
+    @StateObject private var weather = ForecastService()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
     @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @AppStorage("native.map.enabled") private var mapEnabled = false
@@ -29,6 +30,7 @@ struct CameraScreen: View {
     @State private var showOriginals = false
     @State private var showSettingsImport = false
     @State private var showLogoImport = false
+    @State private var showForecastTerms = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
@@ -161,10 +163,10 @@ struct CameraScreen: View {
         }
         .statusBarHidden()
         .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo() }
-        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false) }
+        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled) }
-            else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false) }
+            else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
         }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
@@ -221,11 +223,24 @@ struct CameraScreen: View {
                     if !pressure.available { Text("Sensor de pressão indisponível neste aparelho.").font(.footnote).foregroundStyle(.secondary) }
                     Text("Mapa e endereço usam serviços da Apple quando ativados e podem enviar a localização para obtê-los.")
                         .font(.footnote).foregroundStyle(.secondary)
+                    Section("Previsão meteorológica") {
+                        Link("Ler termos da MET Norway", destination: URL(string: "https://docs.api.met.no/doc/TermsOfService")!)
+                        Button("Consultar previsão") { showForecastTerms = true }
+                            .disabled(!gpsEnabled || weather.isLoading)
+                        Text("Consulta manual: envia sua localização aproximada e IP à MET Norway. Temperatura e umidade são previsões; pressão ao nível do mar não é a medida do sensor.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        if let status = weather.status { Text(status).font(.footnote) }
+                        Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
+                    }
                     Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
+                .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
+                    Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
+                    Button("Cancelar", role: .cancel) {}
+                }
                 .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
                     guard let url = try? result.get() else { return }
                     let targetProfile = profile
@@ -317,7 +332,7 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, pressure: pressureEnabled ? pressure.sample : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
 
     private var activeLogoName: String {

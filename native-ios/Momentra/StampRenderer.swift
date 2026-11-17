@@ -13,10 +13,11 @@ struct StampSnapshot {
     let note: String
     let logo: UIImage?
     let pressure: PressureSample?
+    let forecast: Forecast?
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, pressure: PressureSample? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -29,11 +30,14 @@ struct StampSnapshot {
         self.note = clean(note, limit: 96)
         self.logo = logo
         self.pressure = pressure.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
+        let validLocation: CLLocation?
         if gpsEnabled, let location, CLLocationCoordinate2DIsValid(location.coordinate),
            location.horizontalAccuracy >= 0, location.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(location.timestamp) <= 60 {
-            self.location = location
-        } else { self.location = nil }
+            validLocation = location
+        } else { validLocation = nil }
+        self.location = validLocation
+        self.forecast = validLocation == nil ? nil : forecast.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
         if gpsEnabled, let heading, heading.headingAccuracy >= 0, heading.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(heading.timestamp) <= 10 {
             self.heading = heading
@@ -57,6 +61,17 @@ struct StampSnapshot {
             if degrees >= 0 { result.append(String(format: "Direção: %.0f°", degrees)) }
         }
         if let pressure { result.append(String(format: "Pressão local: %.1f hPa", pressure.hectopascals)) }
+        if let forecast {
+            var values: [String] = []
+            if let temperature = forecast.temperatureC { values.append(String(format: "%.1f °C", temperature)) }
+            if let humidity = forecast.humidityPercent { values.append(String(format: "%.0f%%", humidity)) }
+            if let wind = forecast.windMetersPerSecond { values.append(String(format: "%.1f km/h", wind * 3.6)) }
+            if let pressure = forecast.seaLevelPressureHpa { values.append(String(format: "%.1f hPa (nível do mar)", pressure)) }
+            if !values.isEmpty {
+                result.append("Previsão válida em " + formatter.string(from: forecast.validAt) + ": " + values.joined(separator: " · "))
+                result.append("MET Norway · CC BY 4.0 · creativecommons.org/licenses/by/4.0/")
+            }
+        }
         if !note.isEmpty { result.insert(note, at: 0) }
         if !title.isEmpty { result.insert(title, at: 0) }
         return result
