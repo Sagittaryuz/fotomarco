@@ -8,6 +8,7 @@ struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
     @StateObject private var camera = CameraService()
     @StateObject private var location = LocationService()
+    @StateObject private var addressPreview = AddressPreviewService()
     @StateObject private var pressure = PressureService()
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
@@ -204,13 +205,20 @@ struct CameraScreen: View {
         }
         .statusBarHidden()
         .task { await updates.check() }
-        .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo() }
-        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
+        .onAppear { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress() }
+        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); Task { await updates.check() } }
-            else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel() }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }
+            else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
-        .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled) }
+        .onReceive(location.$location) { fix in addressPreview.update(location: fix, enabled: canPreviewAddress) }
+        .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
+        .onChange(of: addressEnabled) { _, _ in refreshAddress() }
+        .onChange(of: stampEnabled) { _, _ in refreshAddress() }
+        .onChange(of: mode) { _, _ in refreshAddress() }
+        .onChange(of: showSettings) { _, _ in refreshAddress() }
+        .onChange(of: showOriginals) { _, _ in refreshAddress() }
+        .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
         .onChange(of: profile) { _, _ in refreshLogo() }
         .onChange(of: selectedLogo) { _, item in
@@ -493,8 +501,14 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, cachedAddress: addressPreview.current(for: location.location, at: date), title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
     }
+
+    private var canPreviewAddress: Bool {
+        scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && addressEnabled && !showSettings && !showOriginals && !showMap
+    }
+
+    private func refreshAddress() { addressPreview.update(location: location.location, enabled: canPreviewAddress) }
 
     private var activeLogoName: String {
         switch profile {
@@ -561,7 +575,7 @@ private struct LiveStampView: View {
                         .fontDesign(snapshot.fontStyle == "mono" ? .monospaced : snapshot.fontStyle == "serif" ? .serif : .default)
                 }
                 if snapshot.addressEnabled && snapshot.location != nil {
-                    Text("Endereço após a captura").font(.caption2).foregroundStyle(.white.opacity(0.8))
+                    Text(snapshot.cachedAddress ?? "Endereço após a captura").font(.caption2).foregroundStyle(.white.opacity(0.8))
                 }
             }
             Spacer(minLength: 0)

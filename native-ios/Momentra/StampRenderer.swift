@@ -9,6 +9,7 @@ struct StampSnapshot {
     let gpsEnabled: Bool
     let mapEnabled: Bool
     let addressEnabled: Bool
+    let cachedAddress: String?
     let title: String
     let note: String
     let logo: UIImage?
@@ -25,7 +26,7 @@ struct StampSnapshot {
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, cachedAddress: String? = nil, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
         self.capturedAt = capturedAt
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
@@ -53,6 +54,7 @@ struct StampSnapshot {
             validLocation = location
         } else { validLocation = nil }
         self.location = validLocation
+        self.cachedAddress = self.addressEnabled && validLocation != nil ? cachedAddress.map { String($0.prefix(240)) } : nil
         self.forecast = validLocation == nil ? nil : forecast.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
         if gpsEnabled, let heading, heading.headingAccuracy >= 0, heading.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(heading.timestamp) <= 10 {
@@ -302,8 +304,16 @@ enum PhotoMetadata {
 }
 
 enum StampAddress {
+    static func format(_ placemark: CLPlacemark) -> String? {
+        let street = [placemark.thoroughfare, placemark.subThoroughfare].compactMap { $0 }.joined(separator: ", ")
+        let parts = [street, placemark.subLocality, placemark.locality, placemark.administrativeArea, placemark.postalCode, placemark.country]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : String(parts.joined(separator: ", ").prefix(240))
+    }
+
     static func load(snapshot: StampSnapshot, queue: DispatchQueue, completion: @escaping (String?) -> Void) {
         guard snapshot.addressEnabled, let location = snapshot.location else { completion(nil); return }
+        if let cached = snapshot.cachedAddress { completion(cached); return }
         let geocoder = CLGeocoder()
         var finished = false
         let finish: (String?) -> Void = { address in
@@ -312,12 +322,7 @@ enum StampAddress {
             completion(address)
         }
         geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "pt_BR")) { placemarks, _ in
-            let placemark = placemarks?.first
-            let street = [placemark?.thoroughfare, placemark?.subThoroughfare].compactMap { $0 }.joined(separator: ", ")
-            let parts = [street, placemark?.subLocality, placemark?.locality, placemark?.administrativeArea, placemark?.postalCode, placemark?.country]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            let address = parts.isEmpty ? nil : String(parts.joined(separator: ", ").prefix(240))
+            let address = placemarks?.first.flatMap(format)
             queue.async { finish(address) }
         }
         queue.asyncAfter(deadline: .now() + 8) {
