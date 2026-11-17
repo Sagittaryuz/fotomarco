@@ -24,3 +24,17 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: 'UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'
+  MomentraTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [MomentraTests]
+    dependencies:
+      - target: Momentra
+schemes:
+  Momentra:
+    build:
+      targets:
+        Momentra: all
+        MomentraTests: [test]
+    test:
+      targets: [MomentraTests]

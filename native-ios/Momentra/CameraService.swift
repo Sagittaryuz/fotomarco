@@ -1,6 +1,8 @@
 import AVFoundation
 import Photos
 import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
 
 final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate {
     let session = AVCaptureSession()
@@ -9,6 +11,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var input: AVCaptureDeviceInput?
     private var configured = false
     private var wantsSession = false
+    private var pendingStamp: StampSnapshot?
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
     @Published private(set) var isCapturing = false
@@ -59,7 +62,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         DispatchQueue.main.async { self.ready = false }
     }
 
-    func capture() {
+    func capture(snapshot: StampSnapshot?) {
         guard ready, !isCapturing, !isSwitching else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -69,6 +72,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 return
             }
             let settings = AVCapturePhotoSettings()
+            self.pendingStamp = snapshot
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
                 settings.flashMode = selectedFlash
@@ -112,10 +116,35 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         guard error == nil, let data = photo.fileDataRepresentation() else {
+            queue.async { self.pendingStamp = nil }
             report("Não foi possível capturar a foto.")
             DispatchQueue.main.async { self.isCapturing = false }
             return
         }
+        queue.async {
+            let snapshot = self.pendingStamp
+            self.pendingStamp = nil
+            do {
+                let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                let originals = base.appendingPathComponent("Originals", isDirectory: true)
+                try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+                let source = CGImageSourceCreateWithData(data as CFData, nil)
+                let type = source.flatMap { CGImageSourceGetType($0) }.map { $0 as String }.flatMap { UTType($0) }
+                let suffix = type?.preferredFilenameExtension ?? "image"
+                try data.write(to: originals.appendingPathComponent(UUID().uuidString + "." + suffix), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            } catch {
+                self.report("Não foi possível preservar a foto original. Libere espaço e tente novamente.")
+                DispatchQueue.main.async { self.isCapturing = false }
+                return
+            }
+            let rendered = snapshot.flatMap { StampRenderer.render(data, snapshot: $0) }
+            let imageData = rendered ?? data
+            if snapshot != nil && rendered == nil { self.report("Não foi possível aplicar o carimbo; a foto original será salva.") }
+            self.savePhoto(imageData)
+        }
+    }
+
+    private func savePhoto(_ data: Data) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
                 self.report("Permita salvar fotos nos Ajustes do iPhone.")

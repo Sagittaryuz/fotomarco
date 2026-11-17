@@ -5,6 +5,7 @@ struct CameraScreen: View {
     @StateObject private var camera = CameraService()
     @StateObject private var location = LocationService()
     @AppStorage("native.gps.enabled") private var gpsEnabled = false
+    @AppStorage("native.stamp.enabled") private var stampEnabled = true
     @State private var showSettings = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -41,7 +42,10 @@ struct CameraScreen: View {
                         .background(.white, in: Capsule()).foregroundStyle(.black)
                     HStack {
                         Spacer().frame(maxWidth: .infinity)
-                        Button { camera.capture() } label: {
+                        Button {
+                            let snapshot = stampEnabled ? StampSnapshot(capturedAt: Date(), gpsEnabled: gpsEnabled, location: location.location, heading: location.heading) : nil
+                            camera.capture(snapshot: snapshot)
+                        } label: {
                             Circle().fill(.white).padding(7)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
                                 .frame(width: min(82, geometry.size.width * 0.22), height: min(82, geometry.size.width * 0.22))
@@ -72,7 +76,8 @@ struct CameraScreen: View {
             NavigationStack {
                 Form {
                     Toggle("Localização", isOn: $gpsEnabled)
-                    Text("A versão nativa está em desenvolvimento; o carimbo ainda não é aplicado às fotos.")
+                    Toggle("Carimbo", isOn: $stampEnabled)
+                    Text("O carimbo nativo está em desenvolvimento: inclui data e dados disponíveis do GPS. Mapa, endereço e demais opções ainda não foram migrados.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .navigationTitle("Configurações")
