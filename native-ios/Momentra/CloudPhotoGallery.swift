@@ -64,7 +64,7 @@ struct CloudPhotoGallery: View {
                     Button("OK") { picker.message = nil }
                 } message: { Text(picker.message ?? "") }
                 .sheet(item: $picker.picked) { item in PickedCloudPhotoView(item: item) }
-                .onDisappear { if picker.waitingForSelection { picker.cancel() } }
+                .onDisappear { picker.cancel() }
             }
         }
     }
