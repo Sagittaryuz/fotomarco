@@ -61,6 +61,24 @@ final class StampProfilesStoreTests: XCTestCase {
         XCTAssertEqual(rect.maxY, 1480)
     }
 
+    func testCornerAnchorsStayFixedAsElementsGrowAndRemainInsideMargin() {
+        let bounds = CGSize(width: 1000, height: 1500)
+        let margin: CGFloat = 25
+        for x in [0.0, 1.0] {
+            for y in [0.0, 1.0] {
+                let point = StampPoint(x: x, y: y)
+                let small = StampRenderer.positionedRect(size: bounds, element: CGSize(width: 100, height: 100), centre: point, margin: margin)
+                let large = StampRenderer.positionedRect(size: bounds, element: CGSize(width: 3000, height: 3000), centre: point, margin: margin)
+                XCTAssertEqual(x == 0 ? small.minX : small.maxX, x == 0 ? large.minX : large.maxX, accuracy: 0.001)
+                XCTAssertEqual(y == 0 ? small.minY : small.maxY, y == 0 ? large.minY : large.maxY, accuracy: 0.001)
+                XCTAssertGreaterThanOrEqual(large.minX, margin)
+                XCTAssertGreaterThanOrEqual(large.minY, margin)
+                XCTAssertLessThanOrEqual(large.maxX, bounds.width - margin)
+                XCTAssertLessThanOrEqual(large.maxY, bounds.height - margin)
+            }
+        }
+    }
+
     func testMapStylePersistsAndOldLayoutsDefaultToMap() throws {
         let old = try JSONDecoder().decode(StampLayout.self, from: Data(#"{"mode":"separate"}"#.utf8))
         XCTAssertEqual(old.mapStyle, .map)

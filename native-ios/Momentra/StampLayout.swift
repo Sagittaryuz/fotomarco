@@ -1,6 +1,6 @@
 import Foundation
 
-/// Positions are normalized to the image and represent each element's centre.
+/// Positions identify an anchor on the image; elements grow inward from it.
 struct StampPoint: Codable, Equatable {
     var x: Double
     var y: Double

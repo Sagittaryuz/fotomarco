@@ -41,6 +41,36 @@ struct StampLayoutEditor: View {
         }
     }
 
+    private func cornerControl(_ point: Binding<StampPoint>) -> some View {
+        let corners: [(String, StampPoint, Alignment)] = [
+            ("Superior esquerdo", StampPoint(x: 0, y: 0), .topLeading),
+            ("Superior direito", StampPoint(x: 1, y: 0), .topTrailing),
+            ("Inferior esquerdo", StampPoint(x: 0, y: 1), .bottomLeading),
+            ("Inferior direito", StampPoint(x: 1, y: 1), .bottomTrailing)
+        ]
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Posição na foto").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                ForEach(0..<4, id: \.self) { index in
+                    let corner = corners[index]
+                    let selected = (point.wrappedValue.x >= 0.5) == (corner.1.x >= 0.5) &&
+                        (point.wrappedValue.y >= 0.5) == (corner.1.y >= 0.5)
+                    Button { point.wrappedValue = corner.1 } label: {
+                        RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.blue : Color.secondary, lineWidth: selected ? 2 : 1)
+                            .frame(width: 48, height: 58)
+                            .overlay(alignment: corner.2) {
+                                RoundedRectangle(cornerRadius: 2).fill(selected ? Color.blue : Color.secondary)
+                                    .frame(width: 15, height: 12).padding(5)
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 4).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).accessibilityLabel(corner.0)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -74,9 +104,41 @@ struct StampLayoutEditor: View {
                 }.pickerStyle(.segmented)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Toggle("Mapa", isOn: flag(\.showsMap))
-                    Toggle("Informações", isOn: flag(\.showsInformation))
-                    Toggle("Logotipo", isOn: flag(\.showsLogo))
+                    DisclosureGroup("Mapa") {
+                        Toggle("Mostrar mapa", isOn: flag(\.showsMap))
+                        if layout.wrappedValue.mode == .separate { cornerControl(layout.map) }
+                        Picker("Visualização do mapa", selection: layout.mapStyle) {
+                            Text("Mapa").tag(StampLayout.MapAppearance.map)
+                            Text("Satélite").tag(StampLayout.MapAppearance.satellite)
+                        }.pickerStyle(.segmented)
+                        sizeControl("Tamanho do mapa", value: layout.mapSize)
+                    }
+                    DisclosureGroup("Informações") {
+                        Toggle("Mostrar informações", isOn: flag(\.showsInformation))
+                        if layout.wrappedValue.mode == .separate { cornerControl(layout.information) }
+                        Picker("Fonte", selection: layout.fontStyle) {
+                            Text("Sistema").tag("system"); Text("Serifada").tag("serif"); Text("Monoespaçada").tag("mono")
+                        }
+                        Picker("Alinhamento dos textos", selection: layout.textAlignment) {
+                            Text("Automático").tag("auto"); Text("Esquerda").tag("left"); Text("Centro").tag("center"); Text("Direita").tag("right")
+                        }
+                        Picker("Data e hora", selection: layout.dateFormat) {
+                            Text("Numérica").tag("numeric"); Text("Por extenso").tag("long")
+                        }
+                        Toggle("Texto compacto", isOn: flag(\.compact))
+                        Toggle("Incluir endereço", isOn: flag(\.showsAddress))
+                        sizeControl("Tamanho das informações", value: layout.informationSize)
+                    }
+                    DisclosureGroup("Logotipo") {
+                        Toggle("Mostrar logotipo", isOn: flag(\.showsLogo))
+                        if layout.wrappedValue.mode == .separate { cornerControl(layout.logo) }
+                        sizeControl("Tamanho do logotipo", value: layout.logoSize)
+                        PhotosPicker(selection: $selectedLogo, matching: .images) {
+                            Label("Escolher logotipo", systemImage: "photo")
+                        }.disabled(logoLoading)
+                        Button(action: importLogo) { Label("Escolher logotipo dos Arquivos", systemImage: "folder") }
+                            .disabled(logoLoading)
+                    }
                 }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
                 if layout.wrappedValue.mode == .separate {
                     Text("Arraste os elementos sobre a foto para escolher onde aparecem.")
@@ -84,27 +146,7 @@ struct StampLayoutEditor: View {
                 }
 
 
-                Picker("Visualização do mapa", selection: layout.mapStyle) {
-                    Text("Mapa").tag(StampLayout.MapAppearance.map)
-                    Text("Satélite").tag(StampLayout.MapAppearance.satellite)
-                }.pickerStyle(.segmented)
-
                 Group {
-                    Picker("Fonte", selection: layout.fontStyle) {
-                        Text("Sistema").tag("system")
-                        Text("Serifada").tag("serif")
-                        Text("Monoespaçada").tag("mono")
-                    }
-                    Picker("Alinhamento dos textos", selection: layout.textAlignment) {
-                        Text("Automático").tag("auto")
-                        Text("Esquerda").tag("left")
-                        Text("Centro").tag("center")
-                        Text("Direita").tag("right")
-                    }
-                    Picker("Data e hora", selection: layout.dateFormat) {
-                        Text("Numérica").tag("numeric")
-                        Text("Por extenso").tag("long")
-                    }
                     if layout.wrappedValue.mode == .combined {
                         Picker("Posição do carimbo", selection: layout.position) {
                             Text("Embaixo").tag("bottom")
@@ -116,15 +158,10 @@ struct StampLayoutEditor: View {
                             Text("Direita").tag("right")
                         }
                     }
-                    Toggle("Texto compacto", isOn: flag(\.compact))
-                    Toggle("Incluir endereço", isOn: flag(\.showsAddress))
                 }
                 if layout.wrappedValue.mode == .combined {
                     sizeControl("Tamanho do carimbo", value: layout.combinedSize)
                 }
-                sizeControl("Tamanho do mapa", value: layout.mapSize)
-                sizeControl("Tamanho das informações", value: layout.informationSize)
-                sizeControl("Tamanho do logotipo", value: layout.logoSize)
 
                 Text("Pré-visualização").font(.headline)
                 StampLayoutPreview(layout: layout, logo: ProfileLogoStore.load(store.selected.logoName))
@@ -135,11 +172,6 @@ struct StampLayoutEditor: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 TextField("Observação na foto (opcional)", text: note, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
-                PhotosPicker(selection: $selectedLogo, matching: .images) {
-                    Label("Escolher logotipo", systemImage: "photo")
-                }.disabled(logoLoading)
-                Button(action: importLogo) { Label("Escolher logotipo dos Arquivos", systemImage: "folder") }
-                    .disabled(logoLoading)
                 if store.profiles.count > 1 {
                     Button("Apagar este perfil", role: .destructive) { confirmRemove = true }
                 }
@@ -169,9 +201,9 @@ private struct StampLayoutPreview: View {
     @Binding var layout: StampLayout
     let logo: UIImage?
 
-    private func point(_ keyPath: WritableKeyPath<StampLayout, StampPoint>, in size: CGSize) -> CGPoint {
-        let point = layout[keyPath: keyPath]
-        return CGPoint(x: CGFloat(point.x) * size.width, y: CGFloat(point.y) * size.height)
+    private func rect(_ keyPath: WritableKeyPath<StampLayout, StampPoint>, in size: CGSize, element: CGSize) -> CGRect {
+        StampRenderer.positionedRect(size: size, element: element, centre: layout[keyPath: keyPath],
+                                     margin: min(size.width, size.height) * 0.025)
     }
     private func gesture(_ keyPath: WritableKeyPath<StampLayout, StampPoint>, in size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("stampPreview"))
@@ -208,24 +240,39 @@ private struct StampLayoutPreview: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: combinedAlignment)
                 } else {
                     if layout.showsMap {
-                        previewMap.frame(width: min(size.width * 0.5, size.width * previewMapFraction * layout.mapSize),
-                                         height: min(size.width * 0.5, size.width * previewMapFraction * layout.mapSize))
-                            .contentShape(Rectangle()).position(point(\.map, in: size)).gesture(gesture(\.map, in: size))
+                        let margin = min(size.width, size.height) * 0.025
+                        let space = StampRenderer.availableSize(size: size, anchor: layout.map, margin: margin)
+                        let side = min(space.width, space.height, size.width * 0.5, size.width * previewMapFraction * layout.mapSize)
+                        let box = rect(\.map, in: size, element: CGSize(width: side, height: side))
+                        previewMap.frame(width: box.width, height: box.height)
+                            .contentShape(Rectangle()).position(x: box.midX, y: box.midY).gesture(gesture(\.map, in: size))
                     }
                     if layout.showsInformation {
-                        previewText.frame(width: min(size.width * 0.95, size.width * 0.60 * max(1, layout.informationSize)), alignment: layout.information.x >= 0.5 ? .trailing : .leading)
-                            .position(point(\.information, in: size)).gesture(gesture(\.information, in: size))
+                        let margin = min(size.width, size.height) * 0.025
+                        let space = StampRenderer.availableSize(size: size, anchor: layout.information, margin: margin)
+                        let width = min(space.width, size.width * 0.60 * max(1, layout.informationSize))
+                        let paragraph = NSMutableParagraphStyle()
+                        let measured = StampRenderer.fitText(previewString as NSString, width: width, maxHeight: space.height,
+                            initialSize: 10 * layout.informationSize, style: layout.fontStyle, paragraph: paragraph)
+                        let box = rect(\.information, in: size, element: CGSize(width: width, height: measured?.height ?? 0))
+                        previewText.frame(width: box.width, height: box.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
+                            .position(x: box.midX, y: box.midY).gesture(gesture(\.information, in: size))
                     }
                     if layout.showsLogo, let logo {
+                        let space = StampRenderer.availableSize(size: size, anchor: layout.logo, margin: min(size.width, size.height) * 0.025)
+                        let side = min(space.width, space.height, size.width * 0.35, size.width * 0.15 * layout.logoSize)
+                        let factor = min(side / max(1, logo.size.width), side / max(1, logo.size.height))
+                        let box = rect(\.logo, in: size, element: CGSize(width: logo.size.width * factor, height: logo.size.height * factor))
                         Image(uiImage: logo).resizable().scaledToFit()
-                            .frame(width: min(size.width * 0.35, size.width * 0.15 * layout.logoSize),
-                                   height: min(size.width * 0.35, size.width * 0.15 * layout.logoSize))
-                            .position(point(\.logo, in: size)).gesture(gesture(\.logo, in: size))
+                            .frame(width: box.width, height: box.height)
+                            .position(x: box.midX, y: box.midY).gesture(gesture(\.logo, in: size))
                     } else if layout.showsLogo {
+                        let space = StampRenderer.availableSize(size: size, anchor: layout.logo, margin: min(size.width, size.height) * 0.025)
+                        let side = min(space.width, space.height, size.width * 0.35, size.width * 0.15 * layout.logoSize)
+                        let box = rect(\.logo, in: size, element: CGSize(width: side, height: side))
                         Image(systemName: "photo").font(.title2).foregroundStyle(.white)
-                            .shadow(radius: 3).frame(width: min(size.width * 0.35, size.width * 0.15 * layout.logoSize),
-                                   height: min(size.width * 0.35, size.width * 0.15 * layout.logoSize))
-                            .position(point(\.logo, in: size)).gesture(gesture(\.logo, in: size))
+                            .shadow(radius: 3).frame(width: box.width, height: box.height)
+                            .position(x: box.midX, y: box.midY).gesture(gesture(\.logo, in: size))
                     }
                 }
             }.coordinateSpace(name: "stampPreview")
@@ -267,10 +314,14 @@ private struct StampLayoutPreview: View {
         }
     }
 
-    private var previewText: some View {
-        Text((layout.showsAddress ? "Endereço de exemplo\nJataí GO, Brasil\n" : "") +
+    private var previewString: String {
+        (layout.showsAddress ? "Endereço de exemplo\nJataí GO, Brasil\n" : "") +
              "Lat: -17,908894  Lon: -51,744607\n" +
-             (layout.dateFormat == "long" ? "17 de novembro de 2026, 08:50" : "17/11/2026 08:50"))
+             (layout.dateFormat == "long" ? "17 de novembro de 2026, 08:50" : "17/11/2026 08:50")
+    }
+
+    private var previewText: some View {
+        Text(previewString)
             .font(.system(size: 10 * layout.informationSize * (layout.mode == .combined ? layout.combinedSize : 1), weight: .medium))
             .fontDesign(layout.fontStyle == "mono" ? .monospaced : layout.fontStyle == "serif" ? .serif : .default)
             .foregroundStyle(.white)

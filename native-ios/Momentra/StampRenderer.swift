@@ -215,10 +215,20 @@ enum StampRenderer {
         return nil
     }
 
+    static func availableSize(size: CGSize, anchor: StampPoint, margin: CGFloat) -> CGSize {
+        let safeWidth = max(0, size.width - margin * 2), safeHeight = max(0, size.height - margin * 2)
+        let x = min(1, max(0, CGFloat(anchor.x))), y = min(1, max(0, CGFloat(anchor.y)))
+        return CGSize(width: safeWidth * (x < 0.5 ? 1 - x : x),
+                      height: safeHeight * (y < 0.5 ? 1 - y : y))
+    }
+
     static func positionedRect(size: CGSize, element: CGSize, centre: StampPoint, margin: CGFloat) -> CGRect {
-        let x = min(max(margin, CGFloat(centre.x) * size.width - element.width / 2), max(margin, size.width - margin - element.width))
-        let y = min(max(margin, CGFloat(centre.y) * size.height - element.height / 2), max(margin, size.height - margin - element.height))
-        return CGRect(origin: CGPoint(x: x, y: y), size: element)
+        let available = availableSize(size: size, anchor: centre, margin: margin)
+        let width = min(max(0, element.width), available.width), height = min(max(0, element.height), available.height)
+        let x = margin + min(1, max(0, CGFloat(centre.x))) * max(0, size.width - margin * 2)
+        let y = margin + min(1, max(0, CGFloat(centre.y))) * max(0, size.height - margin * 2)
+        return CGRect(x: centre.x < 0.5 ? x : x - width, y: centre.y < 0.5 ? y : y - height,
+                      width: width, height: height)
     }
 
     static func drawSeparate(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
@@ -226,7 +236,8 @@ enum StampRenderer {
         let margin = unit * 0.025
         let layout = snapshot.layout
         if let map, layout.showsMap {
-            let side = min(unit * 0.5, unit * (snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20) * CGFloat(layout.mapSize))
+            let space = availableSize(size: size, anchor: layout.map, margin: margin)
+            let side = min(space.width, space.height, unit * 0.5, unit * (snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20) * CGFloat(layout.mapSize))
             let rect = positionedRect(size: size, element: CGSize(width: side, height: side), centre: layout.map, margin: margin)
             map.draw(in: rect)
             let markerSize = side * 0.12
@@ -247,22 +258,24 @@ enum StampRenderer {
         case "right": paragraph.alignment = .right
         default: paragraph.alignment = layout.information.x >= 0.5 ? .right : .left
         }
-        let textWidth = max(1, min(size.width - margin * 2, size.width * 0.60 * CGFloat(max(1, layout.informationSize))))
-        guard let measured = fitText(text, width: textWidth, maxHeight: size.height - margin * 2,
-                                     initialSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(layout.informationSize)),
-                                     style: snapshot.fontStyle, paragraph: paragraph) else { return false }
-        let shadow = NSShadow()
-        shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
-        shadow.shadowBlurRadius = max(1, unit * 0.002)
-        shadow.shadowOffset = CGSize(width: 1, height: 1)
-        let rect = positionedRect(size: size, element: CGSize(width: textWidth, height: measured.height),
-                                  centre: layout.information, margin: margin)
         if layout.showsInformation {
+            let textSpace = availableSize(size: size, anchor: layout.information, margin: margin)
+            let textWidth = max(1, min(textSpace.width, size.width * 0.60 * CGFloat(max(1, layout.informationSize))))
+            guard let measured = fitText(text, width: textWidth, maxHeight: textSpace.height,
+                                         initialSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(layout.informationSize)),
+                                         style: snapshot.fontStyle, paragraph: paragraph) else { return false }
+            let shadow = NSShadow()
+            shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
+            shadow.shadowBlurRadius = max(1, unit * 0.002)
+            shadow.shadowOffset = CGSize(width: 1, height: 1)
+            let rect = positionedRect(size: size, element: CGSize(width: textWidth, height: measured.height),
+                                      centre: layout.information, margin: margin)
             text.draw(in: rect, withAttributes: [.font: measured.font, .foregroundColor: UIColor.white,
                                                 .paragraphStyle: paragraph, .shadow: shadow])
         }
         if layout.showsLogo, let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
-            let maxSide = min(unit * 0.35, unit * 0.15 * CGFloat(layout.logoSize))
+            let space = availableSize(size: size, anchor: layout.logo, margin: margin)
+            let maxSide = min(space.width, space.height, unit * 0.35, unit * 0.15 * CGFloat(layout.logoSize))
             let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
             let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
             logo.draw(in: positionedRect(size: size, element: logoSize, centre: layout.logo, margin: margin))
