@@ -5,6 +5,7 @@ import UIKit
 @MainActor
 final class GooglePhotosManager: ObservableObject {
     @Published private(set) var busy = false
+    @Published private(set) var pendingCloudCaptures = 0
     @Published var message: String?
     @Published private(set) var cloudPhotos: [CloudPhoto] = []
     @Published private(set) var cloudNextPage: String?
@@ -81,6 +82,66 @@ final class GooglePhotosManager: ObservableObject {
                 cloudLoaded = true
             } catch {
                 cloudError = "Não foi possível carregar as fotos. Verifique a conexão e tente novamente."
+            }
+        }
+    }
+
+    /// Starts a bounded foreground pass. Pending receipts stay durable across
+    /// offline errors, suspension, account changes and future retries.
+    func drainCloudQueue(expectedOwnerHash: String, personalConsent: Bool) {
+        guard personalConsent, connected, !busy, let owner = ownerID,
+              CloudCaptureQueue.ownerHash(owner) == expectedOwnerHash else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
+                                                            appropriateFor: nil, create: true)
+                let queue = CloudCaptureQueue(directory: documents.appendingPathComponent("CloudPending"))
+                let items = try queue.entries(for: owner).filter { $0.phase == .ready }
+                pendingCloudCaptures = items.count
+                guard !items.isEmpty else { return }
+                let token: String? = await withCheckedContinuation { continuation in
+                    auth.freshToken(for: owner) { continuation.resume(returning: $0) }
+                }
+                guard let token, GIDSignIn.sharedInstance.currentUser?.userID == owner else { return }
+                let isCurrent: (String) async -> Bool = { expected in
+                    await MainActor.run { GIDSignIn.sharedInstance.currentUser?.userID == expected }
+                }
+                let albumID = try await GoogleAlbumCoordinator.shared.resolve(
+                    directory: documents.appendingPathComponent("GooglePhotoAlbums", isDirectory: true),
+                    owner: owner, transport: GooglePersonalPhotoTransport(token: token), accountIsCurrent: isCurrent)
+                let receipts = documents.appendingPathComponent("GooglePhotoReceipts", isDirectory: true)
+                let coordinator = CloudPairUploadCoordinator(queue: queue, root: documents,
+                    accountIsCurrent: isCurrent) { bytes, receipt, account, filename, format in
+                    let uploader = PersonalPhotoUploader(directory: receipts,
+                        transport: GooglePersonalPhotoTransport(token: token, albumID: albumID, photoFormat: format),
+                        accountIsCurrent: isCurrent)
+                    return await uploader.upload(jpeg: bytes, captureID: receipt, owner: account,
+                                                 personalConsent: true, filename: filename, format: format)
+                }
+                for item in items {
+                    guard await isCurrent(owner) else { break }
+                    let profile = PhotoProfileIndex.load().captures[item.id]
+                    let originalName = profile.map {
+                        CloudProfileFilename.encode(captureID: item.id, profile: $0, originalExtension: item.originalExtension)
+                    } ?? item.id.uuidString + ".original." + item.originalExtension
+                    let stampedName = profile.map {
+                        CloudProfileFilename.encode(captureID: item.id, profile: $0)
+                    } ?? item.id.uuidString + ".jpg"
+                    switch await coordinator.send(id: item.id, owner: owner, personalConsent: personalConsent,
+                                                  originalFilename: originalName, stampedFilename: stampedName) {
+                    case .verified(_, let stampedID):
+                        try? PhotoProfileIndex.bindCloud(captureID: item.id, owner: owner, mediaID: stampedID)
+                        pendingCloudCaptures = max(0, pendingCloudCaptures - 1)
+                    case .pending, .unavailable:
+                        // Avoid a retry loop on unavailable network, changed files or ambiguous receipts.
+                        return
+                    }
+                }
+            } catch {
+                // The queue and local files remain available for a future pass.
+                return
             }
         }
     }
