@@ -78,6 +78,7 @@ struct CameraScreen: View {
     @State private var showingZoomDial = false
     @State private var zoomDismissTask: Task<Void, Never>?
     @State private var zoomPresetDragStart: CGFloat?
+    @State private var suppressZoomPresetTap = false
     @State private var quickRecording = false
     @State private var quickRecordingLocked = false
     @State private var quickZoomStart: CGFloat = 1
@@ -193,6 +194,18 @@ struct CameraScreen: View {
                         Text(camera.processingVideos == 1 ? "Aplicando carimbo ao vídeo…" : "Aplicando carimbo a \(camera.processingVideos) vídeos…")
                             .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
                     }
+                    if !camera.isRecording, CloudStoragePreference.selectedHash() != nil {
+                        if selectedCloudHash == nil {
+                            Text("Conta Google diferente: capturas guardadas no iPhone")
+                                .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
+                        } else if localCloudNeedsAttention {
+                            Text("Envio não confirmado. Fotos preservadas no iPhone.")
+                                .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
+                        } else if localCloudPendingCount > 0 {
+                            Text("\(localCloudPendingCount) captura(s) aguardando envio")
+                                .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
+                        }
+                    }
                     if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
@@ -221,6 +234,7 @@ struct CameraScreen: View {
                             }
                             ForEach(camera.zoomOptions, id: \.self) { factor in
                                 Button {
+                                    guard !suppressZoomPresetTap else { return }
                                     camera.setZoom(factor)
                                     withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
                                     scheduleZoomDismiss()
@@ -242,6 +256,7 @@ struct CameraScreen: View {
                                 guard zoomPresetDragStart != nil || !showingZoomDial else { return }
                                 if zoomPresetDragStart == nil {
                                     zoomPresetDragStart = camera.zoomFactor
+                                    suppressZoomPresetTap = true
                                     zoomEditingChanged(true)
                                     withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
                                 }
@@ -252,6 +267,7 @@ struct CameraScreen: View {
                             .onEnded { _ in
                                 guard zoomPresetDragStart != nil else { return }
                                 zoomPresetDragStart = nil; zoomEditingChanged(false)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { suppressZoomPresetTap = false }
                             }
                     )
                     .simultaneousGesture(
@@ -260,7 +276,7 @@ struct CameraScreen: View {
                                 switch phase {
                                 case .first(true), .second(true, nil):
                                     guard zoomPresetDragStart == nil, !showingZoomDial else { return }
-                                    zoomPresetDragStart = camera.zoomFactor; zoomEditingChanged(true)
+                                    zoomPresetDragStart = camera.zoomFactor; suppressZoomPresetTap = true; zoomEditingChanged(true)
                                     withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
                                 case .second(true, let drag?):
                                     guard let start = zoomPresetDragStart else { return }
@@ -272,6 +288,7 @@ struct CameraScreen: View {
                             .onEnded { _ in
                                 guard zoomPresetDragStart != nil else { return }
                                 zoomPresetDragStart = nil; zoomEditingChanged(false)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { suppressZoomPresetTap = false }
                             }
                     )
                     HStack {
@@ -557,8 +574,9 @@ struct CameraScreen: View {
                                 Button("Atualizar agora") {
                                     Task {
                                         await directUpdate.install(expectedVersion: version) {
-                                            !camera.isCapturing && !camera.isSwitching && !camera.isRecording &&
-                                                !camera.isFinishingRecording && camera.processingVideos == 0 && !googlePhotos.busy
+                                            UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
+                                                recording: camera.isRecording, finishing: camera.isFinishingRecording,
+                                                processingVideos: camera.processingVideos, cloudBusy: googlePhotos.busy)
                                         }
                                     }
                                 }
@@ -776,6 +794,8 @@ struct CameraScreen: View {
     private func dismissZoomDial() {
         guard showingZoomDial else { return }
         zoomDismissTask?.cancel()
+        zoomPresetDragStart = nil
+        suppressZoomPresetTap = false
         withAnimation(.easeIn(duration: 0.22)) { showingZoomDial = false }
     }
 

@@ -81,7 +81,7 @@ struct CloudPhotoGallery: View {
                         if selecting {
                             Text("\(selectedIDs.count) selecionada(s)")
                             Spacer()
-                            Button("Selecionar todas") { selectedIDs = Set(googlePhotos.cloudPhotos.map(\.id)) }
+                            Button("Selecionar exibidas") { selectedIDs = Set(googlePhotos.cloudPhotos.map(\.id)) }
                         } else {
                             Button("Atualizar") { googlePhotos.loadCloudPhotos() }.disabled(googlePhotos.busy)
                             Spacer()

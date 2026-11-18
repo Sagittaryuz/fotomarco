@@ -20,12 +20,6 @@ struct StampLayoutEditor: View {
     private var layout: Binding<StampLayout> {
         Binding(get: { store.selected.layout }, set: { store.setLayout($0) })
     }
-    private var name: Binding<String> {
-        Binding(get: { store.selected.name }, set: { store.rename($0) })
-    }
-    private var note: Binding<String> {
-        Binding(get: { store.selected.note }, set: { store.setNote($0) })
-    }
     private func flag(_ keyPath: WritableKeyPath<StampLayout, Bool>) -> Binding<Bool> {
         Binding(get: { store.selected.layout[keyPath: keyPath] },
                 set: { value in var next = store.selected.layout; next[keyPath: keyPath] = value; store.setLayout(next) })

@@ -61,6 +61,10 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         coordinator.synchronizeSelection()
     }
 
+    static func dismantleUIView(_ uiView: UICollectionView, coordinator: Coordinator) {
+        coordinator.stopAutoScroll()
+    }
+
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate {
         var parent: GalleryGrid
         weak var collection: UICollectionView?
@@ -195,6 +199,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             lastPoint = CGPoint(x: point.x, y: point.y + delta)
             if let next = lastPoint, let path = collection.indexPathForItem(at: next) { applyRange(to: path) }
         }
+        func stopAutoScroll() { timer?.invalidate(); timer = nil; dragOrigin = nil; lastPoint = nil }
         deinit { timer?.invalidate() }
     }
 }

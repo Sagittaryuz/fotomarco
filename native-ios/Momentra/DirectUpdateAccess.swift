@@ -3,6 +3,13 @@ import Security
 import UIKit
 import Darwin
 
+enum UpdateCloseReadiness {
+    static func allowsClose(capturing: Bool, switching: Bool, recording: Bool, finishing: Bool,
+                            processingVideos: Int, cloudBusy: Bool) -> Bool {
+        !capturing && !switching && !recording && !finishing && processingVideos == 0 && !cloudBusy
+    }
+}
+
 @MainActor
 final class DirectUpdateAccess: ObservableObject {
     static let shared = DirectUpdateAccess()
@@ -86,7 +93,7 @@ final class DirectUpdateAccess: ObservableObject {
             if opened {
                 // Only leave after iOS accepts the installer request. The system
                 // still controls installation and may ask for confirmation.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { exit(EXIT_SUCCESS) }
+                exit(EXIT_SUCCESS)
             } else { message = "Não foi possível abrir o instalador do iPhone." }
         } catch { message = "O instalador ainda não está disponível para essa versão. Tente novamente mais tarde." }
     }
