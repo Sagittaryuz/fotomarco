@@ -745,6 +745,10 @@ struct CameraScreen: View {
     private func retryCloudCaptures() {
         lastCloudAttempt = Date()
         guard scenePhase == .active, let hash = selectedCloudHash else { return }
+        if googlePhotos.ownerID == nil {
+            googlePhotos.restoreForQueuedPhotos()
+            return
+        }
         googlePhotos.drainCloudQueue(expectedOwnerHash: hash, personalConsent: true)
     }
 

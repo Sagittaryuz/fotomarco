@@ -26,6 +26,19 @@ final class GooglePhotosManager: ObservableObject {
         }
     }
 
+    /// Retry a previously authorized session after temporary offline startup.
+    func restoreForQueuedPhotos() {
+        guard NativeGoogleAuth.configured, !busy, GIDSignIn.sharedInstance.currentUser == nil,
+              GIDSignIn.sharedInstance.hasPreviousSignIn() else { return }
+        busy = true
+        GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] _, _ in
+            Task { @MainActor in
+                self?.busy = false
+                self?.objectWillChange.send()
+            }
+        }
+    }
+
     var configured: Bool { NativeGoogleAuth.configured }
     var ownerID: String? { GIDSignIn.sharedInstance.currentUser?.userID }
     var connected: Bool {
