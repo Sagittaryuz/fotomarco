@@ -40,6 +40,7 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
 
 struct StampSnapshot {
     let capturedAt: Date
+    let layout: StampLayout
     let gpsEnabled: Bool
     let mapEnabled: Bool
     let addressEnabled: Bool
@@ -60,8 +61,9 @@ struct StampSnapshot {
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, cachedAddress: String? = nil, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, cachedAddress: String? = nil, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?, layout: StampLayout = StampLayout()) {
         self.capturedAt = capturedAt
+        self.layout = layout
         self.gpsEnabled = gpsEnabled
         self.mapEnabled = gpsEnabled && mapEnabled
         self.addressEnabled = gpsEnabled && addressEnabled
@@ -213,6 +215,56 @@ enum StampRenderer {
         return nil
     }
 
+    static func positionedRect(size: CGSize, element: CGSize, centre: StampPoint, margin: CGFloat) -> CGRect {
+        let x = min(max(margin, CGFloat(centre.x) * size.width - element.width / 2), max(margin, size.width - margin - element.width))
+        let y = min(max(margin, CGFloat(centre.y) * size.height - element.height / 2), max(margin, size.height - margin - element.height))
+        return CGRect(origin: CGPoint(x: x, y: y), size: element)
+    }
+
+    static func drawSeparate(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
+        let unit = min(size.width, size.height)
+        let margin = unit * 0.025
+        let layout = snapshot.layout
+        if let map, layout.showsMap {
+            let side = unit * (snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20)
+            let rect = positionedRect(size: size, element: CGSize(width: side, height: side), centre: layout.map, margin: margin)
+            map.draw(in: rect)
+            let markerSize = side * 0.12
+            let marker = CGRect(x: rect.midX - markerSize / 2, y: rect.midY - markerSize / 2, width: markerSize, height: markerSize)
+            context.setFillColor(UIColor.systemBlue.cgColor)
+            context.fillEllipse(in: marker)
+            context.setStrokeColor(UIColor.white.cgColor)
+            context.setLineWidth(max(1, side * 0.012))
+            context.strokeEllipse(in: marker)
+        }
+        let lines = (address.map { [$0] } ?? []) + snapshot.lines
+        let text = lines.joined(separator: "\n") as NSString
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.alignment = layout.information.x >= 0.5 ? .right : .left
+        let textWidth = max(1, size.width * 0.60)
+        guard let measured = fitText(text, width: textWidth, maxHeight: size.height - margin * 2,
+                                     initialSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027)),
+                                     style: snapshot.fontStyle, paragraph: paragraph) else { return false }
+        let shadow = NSShadow()
+        shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
+        shadow.shadowBlurRadius = max(1, unit * 0.002)
+        shadow.shadowOffset = CGSize(width: 1, height: 1)
+        let rect = positionedRect(size: size, element: CGSize(width: textWidth, height: measured.height),
+                                  centre: layout.information, margin: margin)
+        if layout.showsInformation {
+            text.draw(in: rect, withAttributes: [.font: measured.font, .foregroundColor: UIColor.white,
+                                                .paragraphStyle: paragraph, .shadow: shadow])
+        }
+        if layout.showsLogo, let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
+            let maxSide = unit * 0.15
+            let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
+            let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
+            logo.draw(in: positionedRect(size: size, element: logoSize, centre: layout.logo, margin: margin))
+        }
+        return true
+    }
+
     static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
         guard let sourceImage = UIImage(data: data) else { return nil }
         let image = style.apply(to: sourceImage)
@@ -230,6 +282,10 @@ enum StampRenderer {
             // Do not rely solely on upstream callers to filter location-derived assets.
             let map = snapshot.mapEnabled && snapshot.location != nil ? map : nil
             let address = snapshot.addressEnabled && snapshot.location != nil ? address : nil
+            if snapshot.layout.mode == .separate {
+                fits = drawSeparate(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
+                return
+            }
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
             let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027))

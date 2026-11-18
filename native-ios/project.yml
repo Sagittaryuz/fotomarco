@@ -49,6 +49,7 @@ targets:
       - MomentraCaptureExtension
       - path: Momentra/MomentraCaptureIntent.swift
       - path: Momentra/StampRenderer.swift
+      - path: Momentra/StampLayout.swift
       - path: Momentra/PressureService.swift
       - path: Momentra/ForecastModel.swift
       - path: Momentra/ZoomScale.swift

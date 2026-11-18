@@ -17,6 +17,7 @@ struct CameraScreen: View {
     @StateObject private var updates = UpdateService()
     @StateObject private var directUpdate = DirectUpdateAccess.shared
     @StateObject private var googlePhotos = GooglePhotosManager()
+    @StateObject private var stampProfiles = StampProfilesStore()
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
     @AppStorage("native.camera.scanQR") private var scanQR = true
@@ -177,9 +178,9 @@ struct CameraScreen: View {
                     }
                     HStack {
                         Menu {
-                            Button("HAMOA") { profile = "HAMOA" }
-                            Button("PIRESCO") { profile = "PIRESCO" }
-                            Button("Pessoal") { profile = "PESSOAL" }
+                            ForEach(stampProfiles.profiles) { item in
+                                Button(item.name.isEmpty ? "Sem nome" : item.name) { stampProfiles.select(item.id) }
+                            }
                         } label: {
                             Image(systemName: "square.on.square").font(.title2)
                                 .frame(width: 54, height: 54)
@@ -329,11 +330,12 @@ struct CameraScreen: View {
         trackedCamera
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
-        .onChange(of: profile) { _, _ in refreshLogo(); publishCaptureContext() }
+        .onChange(of: stampProfiles.selectedID) { _, _ in refreshLogo(); publishCaptureContext() }
+        .onChange(of: stampProfiles.profiles) { _, _ in refreshLogo(); publishCaptureContext() }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
-            let targetProfile = profile
+            let targetProfile = stampProfiles.selectedID
             logoLoading = true
             Task { @MainActor in
                 defer { logoLoading = false; selectedLogo = nil }
@@ -341,7 +343,7 @@ struct CameraScreen: View {
                     guard let data = try await item.loadTransferable(type: Data.self) else { throw ProfileLogoStore.LogoError.invalid }
                     let name = try await Task.detached(priority: .utility) { try ProfileLogoStore.save(data) }.value
                     setLogo(name, for: targetProfile)
-                    if profile == targetProfile { refreshLogo() }
+                    if stampProfiles.selectedID == targetProfile { refreshLogo() }
                 } catch {
                     importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível salvar o logotipo. A imagem anterior foi preservada."
                 }
@@ -421,38 +423,13 @@ struct CameraScreen: View {
                     Section("Aparência") {
                         NavigationLink("Ícone do aplicativo") { AppIconPicker() }
                     }
-                    Section("Perfil do carimbo") {
-                        Picker("Perfil", selection: $profile) {
-                            Text("HAMOA").tag("HAMOA")
-                            Text("PIRESCO").tag("PIRESCO")
-                            Text("Pessoal").tag("PESSOAL")
+                    Section("Carimbo") {
+                        NavigationLink("Layout e perfis") {
+                            StampLayoutEditor(store: stampProfiles, selectedLogo: $selectedLogo, logoLoading: logoLoading,
+                                              importLogo: { showLogoImport = true },
+                                              importSettings: { showSettingsImport = true },
+                                              mapEnabled: $mapEnabled)
                         }
-                        TextField("Título", text: activeTitle)
-                        TextField("Observação", text: activeNote)
-                        PhotosPicker(selection: $selectedLogo, matching: .images) {
-                            Label("Escolher logotipo", systemImage: "photo")
-                        }.disabled(logoLoading)
-                        Button { showLogoImport = true } label: {
-                            Label("Escolher logotipo dos Arquivos", systemImage: "folder")
-                        }.disabled(logoLoading)
-                        Picker("Posição do logotipo na foto", selection: $logoCorner) {
-                            Text("Automática").tag("auto")
-                            Text("Superior esquerda").tag("top-left")
-                            Text("Superior direita").tag("top-right")
-                            Text("Inferior esquerda").tag("bottom-left")
-                            Text("Inferior direita").tag("bottom-right")
-                        }
-                        Text("O logotipo pode ser deslocado para não cobrir o carimbo; a prévia é aproximada.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        if !activeLogoName.isEmpty {
-                            Button("Remover logotipo do perfil", role: .destructive) {
-                                setLogo("", for: profile)
-                                refreshLogo()
-                            }.disabled(logoLoading)
-                        }
-                        Button("Importar ajustes do Scripting") { showSettingsImport = true }
-                        Text("Exporte os ajustes e cada logotipo no Momentra para Scripting. Algumas opções ainda não são importadas.")
-                            .font(.footnote).foregroundStyle(.secondary)
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
@@ -555,7 +532,7 @@ struct CameraScreen: View {
                 }
                 .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
                     guard let url = try? result.get() else { return }
-                    let targetProfile = profile
+                    let targetProfile = stampProfiles.selectedID
                     logoLoading = true
                     Task { @MainActor in
                         defer { logoLoading = false }
@@ -569,7 +546,7 @@ struct CameraScreen: View {
                                 return try ProfileLogoStore.save(data)
                             }.value
                             setLogo(name, for: targetProfile)
-                            if profile == targetProfile { refreshLogo() }
+                            if stampProfiles.selectedID == targetProfile { refreshLogo() }
                         } catch {
                             importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o logotipo. A imagem anterior foi preservada."
                         }
@@ -656,22 +633,6 @@ struct CameraScreen: View {
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos, style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural)
     }
 
-    private var activeTitle: Binding<String> {
-        switch profile {
-        case "PIRESCO": return $pirescoTitle
-        case "PESSOAL": return $pessoalTitle
-        default: return $hamoaTitle
-        }
-    }
-
-    private var activeNote: Binding<String> {
-        switch profile {
-        case "PIRESCO": return $pirescoNote
-        case "PESSOAL": return $pessoalNote
-        default: return $hamoaNote
-        }
-    }
-
     private func refreshGalleryThumbnail() {
         Task {
             let image = await Task.detached(priority: .utility) { () -> UIImage? in
@@ -710,13 +671,13 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, cachedAddress: addressPreview.current(for: location.location, at: date), title: activeTitle.wrappedValue, note: activeNote.wrappedValue, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, cachedAddress: addressPreview.current(for: location.location, at: date), title: "", note: stampProfiles.selected.note, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading, layout: stampProfiles.selected.layout)
     }
 
     private func publishCaptureContext() {
         guard #available(iOS 18.0, *) else { return }
         let context = MomentraCaptureContext(stampEnabled: stampEnabled, gpsEnabled: gpsEnabled,
-            title: String(activeTitle.wrappedValue.prefix(40)), note: String(activeNote.wrappedValue.prefix(96)),
+            title: "", note: String(stampProfiles.selected.note.prefix(96)),
             compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal,
             longDate: dateFormat == "long", fontStyle: stampFont, aspect: photoAspect, saveToPhotos: saveToPhotos)
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
@@ -739,23 +700,11 @@ struct CameraScreen: View {
 
     private func refreshAddress() { addressPreview.update(location: location.location, enabled: canPreviewAddress) }
 
-    private var activeLogoName: String {
-        switch profile {
-        case "PIRESCO": return pirescoLogo
-        case "PESSOAL": return pessoalLogo
-        default: return hamoaLogo
-        }
+    private func setLogo(_ name: String, for profileID: UUID) {
+        stampProfiles.setLogo(name, for: profileID)
     }
 
-    private func setLogo(_ name: String, for profileID: String) {
-        switch profileID {
-        case "PIRESCO": pirescoLogo = name
-        case "PESSOAL": pessoalLogo = name
-        default: hamoaLogo = name
-        }
-    }
-
-    private func refreshLogo() { logo = ProfileLogoStore.load(activeLogoName) }
+    private func refreshLogo() { logo = ProfileLogoStore.load(stampProfiles.selected.logoName) }
 
     private func apply(_ transfer: SettingsTransfer) {
         let s = transfer.settings
@@ -763,7 +712,10 @@ struct CameraScreen: View {
         hamoaTitle = h.title; hamoaNote = h.note
         pirescoTitle = p.title; pirescoNote = p.note
         pessoalTitle = personal.title; pessoalNote = personal.note
-        profile = s.profile; stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
+        profile = s.profile
+        let selectedImport = s.profiles[s.profile] ?? h
+        stampProfiles.setNote(selectedImport.note)
+        stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
         saveToPhotos = s.allowGallery
         if let size = s.size { stampSize = size }
         if let position = s.position { stampPosition = position }
