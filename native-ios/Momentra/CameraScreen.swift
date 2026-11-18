@@ -168,7 +168,8 @@ struct CameraScreen: View {
                 ? (PhotoAspect(rawValue: photoAspect) ?? .standard).fittedSize(in: geometry.size) ?? geometry.size
                 : geometry.size
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.black.ignoresSafeArea().contentShape(Rectangle())
+                    .onTapGesture { dismissZoomDial() }
                 CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
                     .frame(width: previewSize.width, height: previewSize.height)
                     .clipped().contentShape(Rectangle())
