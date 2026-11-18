@@ -18,6 +18,13 @@ targets:
     type: application
     platform: iOS
     sources: [Momentra]
+    info:
+      path: Configuration/MomentraInfo.plist
+      properties:
+        BGTaskSchedulerPermittedIdentifiers:
+          - br.com.momentra.camera.cloud-processing
+        UIBackgroundModes:
+          - processing
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn

@@ -16,7 +16,7 @@ struct CameraScreen: View {
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
     @StateObject private var directUpdate = DirectUpdateAccess.shared
-    @StateObject private var googlePhotos = GooglePhotosManager()
+    @StateObject private var googlePhotos = GooglePhotosManager.shared
     @StateObject private var stampProfiles = StampProfilesStore()
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
@@ -370,7 +370,7 @@ struct CameraScreen: View {
         .onDisappear { flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
-            else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+            else { CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
 
@@ -554,6 +554,7 @@ struct CameraScreen: View {
                     Section("Armazenamento") {
                         Button {
                             cloudOwnerHash = ""
+                            CloudBackgroundScheduler.cancelPending()
                         } label: {
                             HStack {
                                 Text("No dispositivo")
@@ -571,7 +572,7 @@ struct CameraScreen: View {
                                 if selectedCloudHash != nil { Image(systemName: "checkmark") }
                             }
                         }
-                        Text("O original e a foto carimbada ficam temporariamente no iPhone até os dois envios serem confirmados. Uma prévia reduzida permanece no aparelho. Sem internet, o envio continua quando o app estiver aberto e conectado.")
+                        Text("O original e a foto carimbada ficam temporariamente no iPhone até os dois envios serem confirmados. Uma prévia reduzida permanece no aparelho. Sem internet, o iPhone tentará enviar depois, em segundo plano ou ao abrir o app.")
                             .font(.footnote).foregroundStyle(.secondary)
                         if googlePhotos.pendingCloudCaptures > 0 {
                             Text("\(googlePhotos.pendingCloudCaptures) captura(s) aguardando conclusão")
@@ -611,6 +612,7 @@ struct CameraScreen: View {
                     Button("Confirmar somente na nuvem") {
                         guard let owner = googlePhotos.ownerID, googlePhotos.connected else { return }
                         cloudOwnerHash = CloudCaptureQueue.ownerHash(owner)
+                        CloudBackgroundScheduler.scheduleIfNeeded()
                         retryCloudCaptures()
                     }
                     Button("Cancelar", role: .cancel) {}

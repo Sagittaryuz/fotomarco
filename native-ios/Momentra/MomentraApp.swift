@@ -3,6 +3,7 @@ import GoogleSignIn
 
 @main
 struct MomentraApp: App {
+    @UIApplicationDelegateAdaptor(MomentraAppDelegate.self) private var appDelegate
     var body: some Scene {
         WindowGroup {
             AppWelcomeGate().task {

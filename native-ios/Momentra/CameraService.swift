@@ -444,6 +444,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                                                        appropriateFor: nil, create: true)
                 try CloudCaptureStager.stage(root: root, captureID: captureID, ownerHash: cloudOwnerHash,
                                              originalExtension: originalExtension)
+                CloudBackgroundScheduler.scheduleIfNeeded()
                 NotificationCenter.default.post(name: .momentraCloudCaptureStaged, object: nil)
             } catch {
                 report("Não foi possível preparar o envio. O original e a foto carimbada continuam em Capturas.")

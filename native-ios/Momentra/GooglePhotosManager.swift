@@ -4,6 +4,8 @@ import UIKit
 
 @MainActor
 final class GooglePhotosManager: ObservableObject {
+    static let shared = GooglePhotosManager()
+    private var cloudDrainTask: Task<Void, Never>?
     @Published private(set) var busy = false
     @Published private(set) var pendingCloudCaptures = 0
     @Published private(set) var cloudNeedsAttention = false
@@ -60,6 +62,7 @@ final class GooglePhotosManager: ObservableObject {
     func signOut() {
         guard !busy else { return }
         CloudStoragePreference.disable()
+        CloudBackgroundScheduler.cancelPending()
         auth.signOut()
         cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false; cloudError = nil
         pendingCloudCaptures = 0; cloudNeedsAttention = false
@@ -109,9 +112,10 @@ final class GooglePhotosManager: ObservableObject {
               CloudCaptureQueue.ownerHash(owner) == expectedOwnerHash,
               CloudStoragePreference.enabled(for: owner) else { return }
         busy = true
-        Task {
-            defer { busy = false }
+        cloudDrainTask = Task {
+            defer { busy = false; cloudDrainTask = nil }
             do {
+                guard !Task.isCancelled else { return }
                 let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                             appropriateFor: nil, create: true)
                 let queue = CloudCaptureQueue(directory: documents.appendingPathComponent("CloudPending"))
@@ -129,7 +133,8 @@ final class GooglePhotosManager: ObservableObject {
                 }
                 guard let token, GIDSignIn.sharedInstance.currentUser?.userID == owner else { return }
                 let isCurrent: (String) async -> Bool = { expected in
-                    await MainActor.run {
+                    guard !Task.isCancelled else { return false }
+                    return await MainActor.run {
                         GIDSignIn.sharedInstance.currentUser?.userID == expected &&
                         CloudStoragePreference.enabled(for: expected)
                     }
@@ -184,6 +189,27 @@ final class GooglePhotosManager: ObservableObject {
                 return
             }
         }
+    }
+
+    /// Called by the iOS background scheduler. Returns without changing files
+    /// if authentication cannot be restored or another operation is active.
+    func runBackgroundCloudPass() async -> Bool {
+        guard !Task.isCancelled, let hash = CloudStoragePreference.selectedHash() else { return false }
+        if ownerID == nil && !busy { restoreForQueuedPhotos() }
+        for _ in 0..<20 {
+            guard !Task.isCancelled else { return false }
+            if !busy { break }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return false }
+        }
+        guard !busy, !Task.isCancelled else { return false }
+        drainCloudQueue(expectedOwnerHash: hash, personalConsent: true)
+        guard let work = cloudDrainTask else { return false }
+        await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
+        return !Task.isCancelled
     }
 
     func sendProcessedPhoto(_ url: URL) {
