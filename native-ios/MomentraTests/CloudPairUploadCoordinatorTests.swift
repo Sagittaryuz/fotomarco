@@ -13,6 +13,21 @@ private actor PairTransportMock {
     func received() -> [UUID] { calls }
 }
 
+private actor PairReceiptTransport: PersonalPhotoTransport {
+    var creations = 0
+    var stampedVerified = false
+    func uploadBytes(_ data: Data) async throws -> String { "upload-token" }
+    func createItem(uploadToken: String, filename: String) async throws -> String {
+        creations += 1
+        return "media-" + String(creations)
+    }
+    func verifyItem(id: String) async throws -> Bool {
+        id != "media-2" || stampedVerified
+    }
+    func allowVerification() { stampedVerified = true }
+    func creationCount() -> Int { creations }
+}
+
 final class CloudPairUploadCoordinatorTests: XCTestCase {
     func testRetriesBothReceiptsWithoutRemovingFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -93,6 +108,41 @@ final class CloudPairUploadCoordinatorTests: XCTestCase {
         let calls = await mock.received()
         XCTAssertTrue(calls.isEmpty)
         XCTAssertEqual(try queue.entries(for: owner).first?.phase, .ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stamped.path))
+    }
+
+    func testKnownReceiptsResumeWithoutCreatingDuplicates() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID(), owner = "person-a"
+        let a = root.appendingPathComponent("Originals"), b = root.appendingPathComponent("Processed")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        let original = a.appendingPathComponent(id.uuidString + ".jpg")
+        let stamped = b.appendingPathComponent(id.uuidString + ".jpg")
+        try Data([0xff, 0xd8, 0xff, 0xd9, 0x01]).write(to: original)
+        try Data([0xff, 0xd8, 0xff, 0xd9, 0x02]).write(to: stamped)
+        let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
+        try queue.enqueue(id: id, owner: owner, originalExtension: "jpg")
+        try queue.markReady(id: id, original: original, processed: stamped)
+        let transport = PairReceiptTransport()
+        let uploader = PersonalPhotoUploader(directory: root.appendingPathComponent("Receipts"), transport: transport,
+                                              accountIsCurrent: { $0 == owner })
+        let coordinator = CloudPairUploadCoordinator(queue: queue, root: root, accountIsCurrent: { $0 == owner }) {
+            bytes, receipt, user, filename, format in
+            await uploader.upload(jpeg: bytes, captureID: receipt, owner: user,
+                                  personalConsent: true, filename: filename, format: format)
+        }
+        let first = await coordinator.send(id: id, owner: owner, personalConsent: true,
+                                           originalFilename: "original.jpg", stampedFilename: "stamped.jpg")
+        XCTAssertEqual(first, .pending)
+        await transport.allowVerification()
+        let second = await coordinator.send(id: id, owner: owner, personalConsent: true,
+                                            originalFilename: "original.jpg", stampedFilename: "stamped.jpg")
+        XCTAssertEqual(second, .verified(original: "media-1", stamped: "media-2"))
+        let creations = await transport.creationCount()
+        XCTAssertEqual(creations, 2)
         XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: stamped.path))
     }
