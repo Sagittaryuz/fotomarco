@@ -1,12 +1,13 @@
 import SwiftUI
 import Photos
 import ImageIO
+import QuickLook
 
 private struct OriginalFile: Identifiable {
     let url: URL
     let isVideo: Bool
     let isProcessed: Bool
-    let date: Date
+    let date: Date?
     var id: URL { url }
 }
 
@@ -20,14 +21,15 @@ private enum OriginalStore {
             return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]).compactMap { url in
                 let info = try url.resourceValues(forKeys: Set(keys))
                 guard info.isRegularFile == true else { return nil }
-                return OriginalFile(url: url, isVideo: isVideo, isProcessed: isProcessed, date: info.contentModificationDate ?? .distantPast)
+                return OriginalFile(url: url, isVideo: isVideo, isProcessed: isProcessed, date: info.contentModificationDate)
             }
-        }.sorted { $0.date > $1.date }
+        }.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 }
 
 struct OriginalsView: View {
     @ObservedObject var googlePhotos: GooglePhotosManager
+    @ObservedObject var stampProfiles: StampProfilesStore
     @Environment(\.dismiss) private var dismiss
     @State private var files: [OriginalFile] = []
     @State private var message: String?
@@ -35,6 +37,9 @@ struct OriginalsView: View {
     @State private var photoForGoogle: URL?
     @State private var showPhotoConsent = false
     @State private var gallerySection = 0
+    @State private var profileLookup = PhotoProfileLookup()
+    @State private var captureColumns = 3
+    @State private var selectedCapture: URL?
     @StateObject private var picker = GooglePickerFlow()
 
     var body: some View {
@@ -49,18 +54,19 @@ struct OriginalsView: View {
                 if gallerySection == 0 {
                     captures
                 } else if gallerySection == 1 {
-                    DevicePhotoGallery()
+                    DevicePhotoGallery(profileLookup: profileLookup, stampProfiles: stampProfiles)
                 } else {
-                    CloudPhotoGallery(googlePhotos: googlePhotos, picker: picker)
+                    CloudPhotoGallery(googlePhotos: googlePhotos, picker: picker, profileLookup: profileLookup, stampProfiles: stampProfiles)
                 }
             }
             .navigationTitle("Galeria")
             .toolbar { Button("Concluído") { picker.cancel(); dismiss() } }
             .interactiveDismissDisabled(picker.busy || picker.waitingForSelection)
             .onAppear { reload() }
+            .quickLookPreview($selectedCapture)
             .onChange(of: gallerySection) { previous, section in
                 if previous == 2 && section != 2 { picker.cancel() }
-                if section == 0 { reload() }
+                reload()
             }
             .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
                 Button("Confirmo uso pessoal e envio") {
@@ -70,7 +76,7 @@ struct OriginalsView: View {
                 Button("Cancelar", role: .cancel) { photoForGoogle = nil }
             }
             .onChange(of: googlePhotos.message) { _, value in
-                if let value { message = value; googlePhotos.message = nil }
+                if let value { message = value; googlePhotos.message = nil; reload() }
             }
             .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }
@@ -78,41 +84,66 @@ struct OriginalsView: View {
         }
     }
 
+    private func resolved(_ tag: CaptureProfileTag?) -> CaptureProfileTag? {
+        guard let tag else { return nil }
+        if let profile = stampProfiles.profiles.first(where: { $0.id == tag.id }) {
+            return CaptureProfileTag(id: tag.id, name: profile.name)
+        }
+        return tag
+    }
+
+    private var captureGroups: [GalleryGroup<OriginalFile>] {
+        GalleryGrouping.groups(files, date: { item in
+            guard let id = UUID(uuidString: item.url.deletingPathExtension().lastPathComponent) else { return item.date }
+            return profileLookup.dates[id] ?? item.date
+        }, profile: { item in
+            guard let id = UUID(uuidString: item.url.deletingPathExtension().lastPathComponent) else { return nil }
+            return resolved(profileLookup.captures[id])
+        })
+    }
+
     private var captures: some View {
-            List {
-                Section {
-                    Text("Fotos processadas, originais e vídeos guardados neste aplicativo. Compartilhe ou salve no Fotos antes de desinstalá-lo.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 if files.isEmpty {
-                    Text("Nenhuma captura disponível.").foregroundStyle(.secondary)
+                    ContentUnavailableView("Nenhuma captura disponível", systemImage: "photo")
                 }
-                ForEach(files) { item in
-                    HStack(spacing: 12) {
-                        Thumbnail(url: item.url, isVideo: item.isVideo)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.isVideo ? "Vídeo original" : item.isProcessed ? "Foto processada" : "Foto original").font(.headline)
-                            Text(item.date, format: .dateTime.day().month().year().hour().minute())
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Menu {
-                            ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
-                            Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
-                                .disabled(isSaving)
-                            if googlePhotos.configured && item.isProcessed {
-                                Button { photoForGoogle = item.url; showPhotoConsent = true } label: { Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up") }
-                                    .disabled(googlePhotos.busy)
+                ForEach(captureGroups) { group in
+                    Text(group.title).font(.headline).padding(.horizontal, 12)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: captureColumns), spacing: 3) {
+                        ForEach(group.items) { item in
+                            ZStack(alignment: .bottomTrailing) {
+                                Button { selectedCapture = item.url } label: {
+                                    Thumbnail(url: item.url, isVideo: item.isVideo)
+                                }.buttonStyle(.plain).accessibilityLabel("Abrir captura")
+                                Menu {
+                                    ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
+                                    Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
+                                        .disabled(isSaving)
+                                    if googlePhotos.configured && item.isProcessed {
+                                        Button { photoForGoogle = item.url; showPhotoConsent = true } label: {
+                                            Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up")
+                                        }.disabled(googlePhotos.busy)
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle.fill")
+                                        .font(.title3).foregroundStyle(.white).shadow(radius: 2).padding(6)
+                                }.accessibilityLabel("Opções da captura")
                             }
-                        } label: {
-                            Image(systemName: "ellipsis.circle").font(.title2).frame(width: 44, height: 44)
-                        }.accessibilityLabel("Opções da captura")
+                        }
                     }
                 }
             }
+        }
+        .simultaneousGesture(MagnifyGesture().onEnded { value in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                captureColumns = GalleryZoom.next(columns: captureColumns, magnification: value.magnification)
+            }
+        })
     }
 
     private func reload() {
+        profileLookup = PhotoProfileIndex.load()
         do { files = try OriginalStore.files() }
         catch { message = "Não foi possível abrir as capturas guardadas." }
     }
@@ -148,7 +179,7 @@ private struct Thumbnail: View {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
             else { Image(systemName: isVideo ? "video.fill" : "photo").foregroundStyle(.secondary) }
         }
-        .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit).clipped()
         .task(id: url) {
             guard !isVideo else { return }
             let fileURL = url

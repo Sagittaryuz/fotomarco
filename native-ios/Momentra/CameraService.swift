@@ -20,6 +20,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var pendingStamp: StampSnapshot?
     private var pendingAspect: PhotoAspect = .standard
     private var pendingPhotoSaveToPhotos = true
+    private var pendingProfileTag: CaptureProfileTag?
     private var pendingStyle: MomentraPhotoStyle = .natural
     private var pendingVideoSaveToPhotos = true
     private var captureRotation: CGFloat = 0
@@ -100,7 +101,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         DispatchQueue.main.async { self.ready = false }
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil) {
         guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -114,6 +115,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             self.pendingAspect = aspect
             self.pendingStyle = style
             self.pendingPhotoSaveToPhotos = saveToPhotos
+            self.pendingProfileTag = profile
             self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
@@ -330,6 +332,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let aspect = self.pendingAspect
             let style = self.pendingStyle
             let saveToPhotos = self.pendingPhotoSaveToPhotos
+            let profileTag = self.pendingProfileTag
+            self.pendingProfileTag = nil
             let captureID = UUID()
             self.pendingStamp = nil
             do {
@@ -344,6 +348,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.report("Não foi possível preservar a foto original. Libere espaço e tente novamente.")
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
+            }
+            if let profileTag {
+                do { try PhotoProfileIndex.register(captureID: captureID, profile: profileTag, captureDate: Date()) }
+                catch { self.report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
             }
             guard let snapshot else {
                 guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil, style: style) else {
@@ -390,9 +398,15 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
             }
+            var createdAssetID: String?
             PHPhotoLibrary.shared().performChanges({
-                PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
+                let creation = PHAssetCreationRequest.forAsset()
+                creation.addResource(with: .photo, data: data, options: nil)
+                createdAssetID = creation.placeholderForCreatedAsset?.localIdentifier
             }) { success, _ in
+                if success, let assetID = createdAssetID {
+                    try? PhotoProfileIndex.bindLocal(captureID: captureID, assetID: assetID)
+                }
                 if !success { self.report("Não foi possível salvar no Fotos. A foto processada e o original estão em Capturas.") }
                 DispatchQueue.main.async { self.isCapturing = false }
             }

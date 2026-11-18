@@ -4,8 +4,21 @@ import ImageIO
 struct CloudPhotoGallery: View {
     @ObservedObject var googlePhotos: GooglePhotosManager
     @ObservedObject var picker: GooglePickerFlow
+    let profileLookup: PhotoProfileLookup
+    @ObservedObject var stampProfiles: StampProfilesStore
     @State private var showPickerConsent = false
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 3)]
+    @State private var columnCount = 3
+
+    private var groups: [GalleryGroup<CloudPhoto>] {
+        GalleryGrouping.groups(googlePhotos.cloudPhotos, date: { $0.date }, profile: { item in
+            let locallyRecorded = googlePhotos.ownerID.flatMap { owner in
+                profileLookup.cloud[PhotoProfileIndex.cloudKey(owner: owner, mediaID: item.id)]
+            }
+            guard let tag = locallyRecorded ?? CloudProfileFilename.decode(item.name) else { return nil }
+            guard let profile = stampProfiles.profiles.first(where: { $0.id == tag.id }) else { return tag }
+            return CaptureProfileTag(id: tag.id, name: profile.name)
+        })
+    }
 
     var body: some View {
         Group {
@@ -36,13 +49,18 @@ struct CloudPhotoGallery: View {
                         if googlePhotos.cloudLoaded && googlePhotos.cloudPhotos.isEmpty {
                             ContentUnavailableView("Nenhuma foto criada pelo Momentra", systemImage: "photo.on.rectangle")
                         }
-                        LazyVGrid(columns: columns, spacing: 3) {
-                            ForEach(googlePhotos.cloudPhotos) { item in
-                                if let url = item.productURL {
-                                    Link(destination: url) { CloudThumbnail(url: item.thumbnailURL) }
-                                        .accessibilityLabel("Abrir \(item.name) no Google Fotos")
-                                } else {
-                                    CloudThumbnail(url: item.thumbnailURL).accessibilityLabel(item.name)
+                        ForEach(groups) { group in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(group.title).font(.headline).padding(.horizontal, 12)
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: columnCount), spacing: 3) {
+                                    ForEach(group.items) { item in
+                                        if let url = item.productURL {
+                                            Link(destination: url) { CloudThumbnail(url: item.thumbnailURL) }
+                                                .accessibilityLabel("Abrir \(item.name) no Google Fotos")
+                                        } else {
+                                            CloudThumbnail(url: item.thumbnailURL).accessibilityLabel(item.name)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -53,6 +71,11 @@ struct CloudPhotoGallery: View {
                         Button("Atualizar") { googlePhotos.loadCloudPhotos() }.disabled(googlePhotos.busy).padding()
                     }
                 }
+                .simultaneousGesture(MagnifyGesture().onEnded { value in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        columnCount = GalleryZoom.next(columns: columnCount, magnification: value.magnification)
+                    }
+                })
                 .task(id: googlePhotos.connected) {
                     if !googlePhotos.cloudLoaded && !googlePhotos.busy { googlePhotos.loadCloudPhotos() }
                 }

@@ -361,7 +361,7 @@ struct CameraScreen: View {
     var body: some View {
         moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
-        .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos) }
+        .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos, stampProfiles: stampProfiles) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {
@@ -637,7 +637,9 @@ struct CameraScreen: View {
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
-        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos, style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural)
+        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos,
+                       style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
+                       profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name))
     }
 
     private func refreshGalleryThumbnail() {

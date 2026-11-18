@@ -10,11 +10,21 @@ private struct DeviceAsset: Identifiable {
 
 /// Displays only assets that the user has authorized PhotoKit to reveal.
 struct DevicePhotoGallery: View {
+    let profileLookup: PhotoProfileLookup
+    @ObservedObject var stampProfiles: StampProfilesStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     @State private var assets: [DeviceAsset] = []
     @State private var selected: DeviceAsset?
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 3)]
+    @State private var columnCount = 3
+
+    private var groups: [GalleryGroup<DeviceAsset>] {
+        GalleryGrouping.groups(assets, date: { $0.asset.creationDate }, profile: { item in
+            guard let tag = profileLookup.assets[item.id] else { return nil }
+            guard let profile = stampProfiles.profiles.first(where: { $0.id == tag.id }) else { return tag }
+            return CaptureProfileTag(id: tag.id, name: profile.name)
+        })
+    }
 
     var body: some View {
         Group {
@@ -27,14 +37,24 @@ struct DevicePhotoGallery: View {
                     if assets.isEmpty {
                         ContentUnavailableView("Nenhuma foto disponível", systemImage: "photo", description: Text("Confira as fotos e a permissão de acesso no iPhone."))
                     } else {
-                        LazyVGrid(columns: columns, spacing: 3) {
-                            ForEach(assets) { item in
-                                Button { selected = item } label: { DeviceThumbnail(asset: item.asset) }
-                                    .buttonStyle(.plain).accessibilityLabel("Abrir foto")
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(groups) { group in
+                                Text(group.title).font(.headline).padding(.horizontal, 12)
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: columnCount), spacing: 3) {
+                                    ForEach(group.items) { item in
+                                        Button { selected = item } label: { DeviceThumbnail(asset: item.asset) }
+                                            .buttonStyle(.plain).accessibilityLabel("Abrir foto")
+                                    }
+                                }
                             }
                         }
                     }
                 }
+                .simultaneousGesture(MagnifyGesture().onEnded { value in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        columnCount = GalleryZoom.next(columns: columnCount, magnification: value.magnification)
+                    }
+                })
             } else if authorization == .notDetermined {
                 ContentUnavailableView {
                     Label("Fotos do iPhone", systemImage: "photo.on.rectangle")
@@ -55,7 +75,7 @@ struct DevicePhotoGallery: View {
         }
         .onAppear { refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
-        .sheet(item: $selected, onDismiss: refresh) { item in DevicePhotoDetail(asset: item.asset) }
+        .sheet(item: $selected, onDismiss: refresh) { item in DevicePhotoDetail(asset: item.asset, profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name)) }
     }
 
     private func requestAccess() {
@@ -104,6 +124,7 @@ private struct DeviceThumbnail: View {
 
 private struct DevicePhotoDetail: View {
     let asset: PHAsset
+    let profile: CaptureProfileTag
     @Environment(\.dismiss) private var dismiss
     @State private var data: Data?
     @State private var preview: UIImage?
@@ -172,7 +193,7 @@ private struct DevicePhotoDetail: View {
         saving = true
         Task {
             let success = await Task.detached(priority: .userInitiated) { () -> Bool in
-                ExistingPhotoStamp.saveCopy(data, lines: lines)
+                ExistingPhotoStamp.saveCopy(data, lines: lines, profile: profile, captureDate: asset.creationDate)
             }.value
             saving = false
             message = success ? "Cópia criada em Capturas. O original foi preservado." : "Não foi possível criar a cópia. O original foi preservado."
@@ -181,14 +202,16 @@ private struct DevicePhotoDetail: View {
 }
 
 enum ExistingPhotoStamp {
-    static func saveCopy(_ data: Data, lines: [String]) -> Bool {
+    static func saveCopy(_ data: Data, lines: [String], profile: CaptureProfileTag? = nil, captureDate: Date? = nil) -> Bool {
         guard let result = render(data, lines: lines) else { return false }
         do {
             let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let directory = root.appendingPathComponent("Processed", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let url = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension("jpg")
+            let id = UUID()
+            let url = directory.appendingPathComponent(id.uuidString).appendingPathExtension("jpg")
             try result.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            if let profile { try? PhotoProfileIndex.register(captureID: id, profile: profile, captureDate: captureDate) }
             return true
         } catch { return false }
     }

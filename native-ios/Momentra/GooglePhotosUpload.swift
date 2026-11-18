@@ -174,7 +174,7 @@ actor PersonalPhotoUploader {
         self.accountIsCurrent = accountIsCurrent
     }
 
-    func upload(jpeg: Data, captureID: UUID, owner: String, personalConsent: Bool) async -> PersonalUploadOutcome {
+    func upload(jpeg: Data, captureID: UUID, owner: String, personalConsent: Bool, filename: String? = nil) async -> PersonalUploadOutcome {
         guard personalConsent, !owner.isEmpty, owner.utf8.count <= 512,
               jpeg.count >= 4, jpeg.count <= 20 * 1024 * 1024,
               jpeg.prefix(3).elementsEqual([0xff, 0xd8, 0xff]) else { return .failed }
@@ -208,7 +208,7 @@ actor PersonalPhotoUploader {
         } catch { return .failed }
         guard await accountIsCurrent(owner) else { return .uncertain }
         let id: String
-        do { id = try await transport.createItem(uploadToken: token, filename: captureID.uuidString + ".jpg") }
+        do { id = try await transport.createItem(uploadToken: token, filename: filename ?? captureID.uuidString + ".jpg") }
         catch { return .uncertain }
         guard Self.validID(id) else { return .uncertain }
         do {

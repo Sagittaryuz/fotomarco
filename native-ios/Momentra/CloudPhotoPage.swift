@@ -5,6 +5,7 @@ struct CloudPhoto: Identifiable, Equatable {
     let name: String
     let thumbnailURL: URL?
     let productURL: URL?
+    let date: Date?
 }
 
 struct CloudPhotoPage {
@@ -19,6 +20,8 @@ struct CloudPhotoPage {
                 let mimeType: String?
                 let baseUrl: String?
                 let productUrl: String?
+                struct Metadata: Decodable { let creationTime: String? }
+                let mediaMetadata: Metadata?
             }
             let mediaItems: [Item]?
             let nextPageToken: String?
@@ -27,12 +30,17 @@ struct CloudPhotoPage {
         guard (response.mediaItems?.count ?? 0) <= 100, (response.nextPageToken?.utf8.count ?? 0) <= 2048 else {
             throw URLError(.cannotParseResponse)
         }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
         let items = (response.mediaItems ?? []).compactMap { item -> CloudPhoto? in
             guard !item.id.isEmpty, item.id.utf8.count <= 512,
                   item.mimeType?.lowercased().hasPrefix("image/") == true else { return nil }
             let thumbnail = item.baseUrl.flatMap(thumbnailURL)
             let product = item.productUrl.flatMap(productURL)
-            return CloudPhoto(id: item.id, name: String((item.filename ?? "Foto").prefix(200)), thumbnailURL: thumbnail, productURL: product)
+            let date = item.mediaMetadata?.creationTime.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
+            return CloudPhoto(id: item.id, name: String((item.filename ?? "Foto").prefix(200)), thumbnailURL: thumbnail, productURL: product, date: date)
         }
         return CloudPhotoPage(photos: items, nextPageToken: response.nextPageToken)
     }

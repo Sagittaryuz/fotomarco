@@ -26,6 +26,7 @@ final class GooglePhotosManager: ObservableObject {
     }
 
     var configured: Bool { NativeGoogleAuth.configured }
+    var ownerID: String? { GIDSignIn.sharedInstance.currentUser?.userID }
     var connected: Bool {
         guard let user = GIDSignIn.sharedInstance.currentUser, user.userID != nil,
               let granted = user.grantedScopes else { return false }
@@ -135,9 +136,13 @@ final class GooglePhotosManager: ObservableObject {
                 }
                 let uploader = PersonalPhotoUploader(directory: documents.appendingPathComponent("GooglePhotoReceipts", isDirectory: true),
                     transport: GooglePersonalPhotoTransport(token: token, albumID: albumID), accountIsCurrent: isCurrent)
-                let outcome = await uploader.upload(jpeg: data, captureID: id, owner: owner, personalConsent: true)
+                let profile = PhotoProfileIndex.load().captures[id]
+                let filename = profile.map { CloudProfileFilename.encode(captureID: id, profile: $0) }
+                let outcome = await uploader.upload(jpeg: data, captureID: id, owner: owner, personalConsent: true, filename: filename)
                 switch outcome {
-                case .verified: message = "Foto pessoal confirmada no Google Fotos. O arquivo local foi preservado."
+                case .verified(let mediaID):
+                    try? PhotoProfileIndex.bindCloud(captureID: id, owner: owner, mediaID: mediaID)
+                    message = "Foto pessoal confirmada no Google Fotos. O arquivo local foi preservado."
                 case .verificationPending: message = "O item foi criado, mas a verificação está pendente. Tente novamente para verificar, sem reenviar."
                 case .uncertain: message = "O resultado do envio é incerto. Confira no Google Fotos; o reenvio automático está bloqueado. Arquivo local preservado."
                 case .failed: message = "Não foi possível enviar. O arquivo local foi preservado."

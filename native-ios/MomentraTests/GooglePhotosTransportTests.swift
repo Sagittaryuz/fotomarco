@@ -4,11 +4,26 @@ import XCTest
 private final class PhotoURLProtocol: URLProtocol {
     static var responseBody = Data()
     static var capturedRequest: URLRequest?
+    static var capturedBody: Data?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.capturedRequest = request
+        if let body = request.httpBody {
+            Self.capturedBody = body
+        } else if let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var bytes = [UInt8](repeating: 0, count: 4096)
+            var body = Data()
+            while stream.hasBytesAvailable {
+                let count = stream.read(&bytes, maxLength: bytes.count)
+                guard count > 0 else { break }
+                body.append(contentsOf: bytes.prefix(count))
+            }
+            Self.capturedBody = body
+        } else { Self.capturedBody = nil }
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.responseBody)
@@ -43,7 +58,7 @@ final class GooglePhotosTransportTests: XCTestCase {
         configuration.protocolClasses = [PhotoURLProtocol.self]
         let transport = GooglePersonalPhotoTransport(token: "test-token", albumID: "album1", configuration: configuration)
         _ = try await transport.createItem(uploadToken: "token", filename: "photo.jpg")
-        let body = try XCTUnwrap(PhotoURLProtocol.capturedRequest?.httpBody)
+        let body = try XCTUnwrap(PhotoURLProtocol.capturedBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["albumId"] as? String, "album1")
     }
