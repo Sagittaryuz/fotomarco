@@ -323,6 +323,10 @@ struct CameraScreen: View {
             if recording && quickRecording && quickReleasePending { camera.stopRecording(); quickRecording = false }
         }
         .onChange(of: camera.isCapturing) { _, capturing in if !capturing { refreshGalleryThumbnail() } }
+    }
+
+    private var moreTrackedCamera: some View {
+        trackedCamera
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
         .onChange(of: profile) { _, _ in refreshLogo(); publishCaptureContext() }
@@ -346,7 +350,7 @@ struct CameraScreen: View {
     }
 
     var body: some View {
-        trackedCamera
+        moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos) }
         .sheet(isPresented: $showMap) {
