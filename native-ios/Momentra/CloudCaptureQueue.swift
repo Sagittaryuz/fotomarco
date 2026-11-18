@@ -80,6 +80,11 @@ final class CloudCaptureQueue {
         }
     }
 
+    func entry(id: UUID) throws -> CloudPendingCapture {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        return try read(id)
+    }
+
     /// A true result only confirms the local files still match the verified receipt.
     /// The caller must separately revalidate the remote account and album before cleanup.
     func verifiedFilesStillMatch(id: UUID, owner: String, original: URL, processed: URL) throws -> Bool {
