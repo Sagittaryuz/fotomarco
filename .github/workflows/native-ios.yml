@@ -33,6 +33,9 @@ jobs:
           APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
           test -f "$APP/Info.plist"
           test -f "$APP/Momentra"
+          if [ "$GITHUB_REF_NAME" = "feat/native-one-tap-update" ]; then
+            python3 -c 'import plistlib,sys; p=plistlib.load(open(sys.argv[1],"rb")); assert "processing" in p.get("UIBackgroundModes",[]); assert "br.com.momentra.camera.cloud-processing" in p.get("BGTaskSchedulerPermittedIdentifiers",[])' "$APP/Info.plist"
+          fi
           if [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ] || [ "$GITHUB_REF_NAME" = "feat/native-direct-updates" ] || [ "$GITHUB_REF_NAME" = "feat/native-icons" ] || [ "$GITHUB_REF_NAME" = "feat/native-camera-redesign" ] || [ "$GITHUB_REF_NAME" = "feat/native-address-zoom" ] || [ "$GITHUB_REF_NAME" = "feat/native-one-tap-update" ]; then
             CAPTURE="$APP/Extensions/MomentraCaptureExtension.appex"
             CONTROL="$APP/PlugIns/MomentraCameraControl.appex"
