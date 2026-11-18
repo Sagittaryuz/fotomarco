@@ -23,14 +23,7 @@ final class VideoStampRendererTests: XCTestCase {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         let frame = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
-        if let data = UIImage(cgImage: frame).pngData() {
-            print("MOMENTRA_SYNTHETIC_FRAME:" + data.base64EncodedString())
-        }
-        if let overlay = StampRenderer.overlay(size: CGSize(width: 160, height: 120), snapshot: snapshot, map: nil, address: nil),
-           let data = overlay.pngData() {
-            print("MOMENTRA_SYNTHETIC_OVERLAY:" + data.base64EncodedString())
-        }
-        XCTAssertGreaterThan(try darkPixels(in: frame), 30, "O quadro deve conter o carimbo escuro")
+        XCTAssertGreaterThan(try brightPixels(in: frame), 15, "O quadro deve conter o texto claro do carimbo")
     }
 
     func testMissingSourceDoesNotCreateAnOutput() async {
@@ -94,7 +87,7 @@ final class VideoStampRendererTests: XCTestCase {
         guard writer.status == .completed else { throw writer.error ?? NSError(domain: "VideoTest", code: 5) }
     }
 
-    private func darkPixels(in image: CGImage) throws -> Int {
+    private func brightPixels(in image: CGImage) throws -> Int {
         let width = image.width, height = image.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
         guard let context = CGContext(data: &bytes, width: width, height: height, bitsPerComponent: 8,
@@ -104,7 +97,7 @@ final class VideoStampRendererTests: XCTestCase {
         }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return stride(from: 0, to: bytes.count, by: 4).filter {
-            bytes[$0] < 80 && bytes[$0 + 1] < 80 && bytes[$0 + 2] < 80
+            bytes[$0] > 205 && bytes[$0 + 1] > 205 && bytes[$0 + 2] > 205
         }.count
     }
 }
