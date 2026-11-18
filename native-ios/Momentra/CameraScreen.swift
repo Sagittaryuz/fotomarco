@@ -32,6 +32,9 @@ struct CameraScreen: View {
     @AppStorage("native.cloud.only.ownerHash") private var cloudOwnerHash = ""
     @State private var showCloudOnlyConsent = false
     @State private var lastCloudAttempt = Date.distantPast
+    @State private var localCloudPendingCount = 0
+    @State private var localCloudNeedsAttention = false
+    @State private var cloudStatusGeneration = 0
     @AppStorage("native.stamp.size") private var stampSize = "regular"
     @AppStorage("native.stamp.position") private var stampPosition = "bottom"
     @AppStorage("native.stamp.horizontal") private var stampHorizontal = "auto"
@@ -384,6 +387,9 @@ struct CameraScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .momentraCloudCaptureStaged).receive(on: RunLoop.main)) { _ in
             retryCloudCaptures()
         }
+        .onReceive(googlePhotos.$pendingCloudCaptures) { _ in
+            refreshCloudQueueStatus()
+        }
     }
 
     private var trackedCamera: some View {
@@ -555,6 +561,7 @@ struct CameraScreen: View {
                         Button {
                             cloudOwnerHash = ""
                             CloudBackgroundScheduler.cancelPending()
+                            refreshCloudQueueStatus()
                         } label: {
                             HStack {
                                 Text("No dispositivo")
@@ -574,11 +581,11 @@ struct CameraScreen: View {
                         }
                         Text("O original e a foto carimbada ficam temporariamente no iPhone até os dois envios serem confirmados. Uma prévia reduzida permanece no aparelho. Sem internet, o iPhone tentará enviar depois, em segundo plano ou ao abrir o app.")
                             .font(.footnote).foregroundStyle(.secondary)
-                        if googlePhotos.pendingCloudCaptures > 0 {
-                            Text("\(googlePhotos.pendingCloudCaptures) captura(s) aguardando conclusão")
+                        if localCloudPendingCount > 0 {
+                            Text("\(localCloudPendingCount) captura(s) aguardando conclusão")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
-                        if googlePhotos.cloudNeedsAttention {
+                        if localCloudNeedsAttention {
                             Text("Um envio não pôde ser confirmado. As fotos continuam no iPhone; confira o álbum Momentra no Google Fotos.")
                                 .font(.footnote).foregroundStyle(.orange)
                         }
@@ -750,12 +757,35 @@ struct CameraScreen: View {
 
     private func retryCloudCaptures() {
         lastCloudAttempt = Date()
+        refreshCloudQueueStatus()
         guard scenePhase == .active, let hash = selectedCloudHash else { return }
         if googlePhotos.ownerID == nil {
             googlePhotos.restoreForQueuedPhotos()
             return
         }
         googlePhotos.drainCloudQueue(expectedOwnerHash: hash, personalConsent: true)
+    }
+
+    private func refreshCloudQueueStatus() {
+        cloudStatusGeneration &+= 1
+        let generation = cloudStatusGeneration
+        guard let hash = selectedCloudHash else {
+            localCloudPendingCount = 0
+            localCloudNeedsAttention = false
+            return
+        }
+        Task {
+            let status = await Task.detached(priority: .utility) { () -> (Int, Bool)? in
+                guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
+                                                               appropriateFor: nil, create: false),
+                      let entries = try? CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
+                        .entries(ownerHash: hash) else { return nil }
+                return (entries.filter { $0.phase != .cleaned }.count, entries.contains { $0.phase == .uncertain })
+            }.value
+            guard selectedCloudHash == hash, cloudStatusGeneration == generation, let status else { return }
+            localCloudPendingCount = status.0
+            localCloudNeedsAttention = status.1
+        }
     }
 
     private func refreshGalleryThumbnail() {
