@@ -29,8 +29,11 @@ struct CameraScreen: View {
     @AppStorage("native.address.autoPreviewMigrated") private var addressPreviewMigrated = false
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
-    @AppStorage("native.cloud.only.ownerHash") private var cloudOwnerHash = ""
-    @State private var showCloudOnlyConsent = false
+    @StateObject private var archiveAccounts = CloudArchiveAccounts.shared
+    @AppStorage("native.archive.keepLocal") private var keepArchiveLocal = true
+    @State private var archiveStatus = CloudArchiveDelivery.Summary()
+    @State private var archiveNotice: String?
+    @State private var connectingArchive = false
     @State private var lastCloudAttempt = Date.distantPast
     @State private var localCloudPendingCount = 0
     @State private var localCloudNeedsAttention = false
@@ -204,17 +207,10 @@ struct CameraScreen: View {
                         Text(camera.processingVideos == 1 ? "Aplicando carimbo ao vídeo…" : "Aplicando carimbo a \(camera.processingVideos) vídeos…")
                             .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
                     }
-                    if !camera.isRecording, CloudStoragePreference.selectedHash() != nil {
-                        if selectedCloudHash == nil {
-                            Text("Conta Google diferente: capturas guardadas no iPhone")
-                                .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
-                        } else if localCloudNeedsAttention {
-                            Text("Envio não confirmado. Fotos preservadas no iPhone.")
-                                .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
-                        } else if localCloudPendingCount > 0 {
-                            Text("\(localCloudPendingCount) captura(s) aguardando envio")
-                                .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
-                        }
+                    if !camera.isRecording, archiveStatus.pending > 0 {
+                        Text(archiveStatus.needsAttention ? "Envios pendentes. Confira Armazenamento e contas."
+                             : "\(archiveStatus.pending) captura(s) aguardando envio")
+                            .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
                     }
                     if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
@@ -520,7 +516,6 @@ struct CameraScreen: View {
             showLogoImport = false
             showForecastTerms = false
             showGoogleConsent = false
-            showCloudOnlyConsent = false
             showAspectPanel = false
             selectedRecognizedText = nil
             camera.start()
@@ -564,7 +559,11 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selected.layout) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.name) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.note) { _, _ in publishCaptureContext() }
-        .onChange(of: cloudOwnerHash) { _, _ in publishCaptureContext() }
+        .onChange(of: keepArchiveLocal) { _, _ in publishCaptureContext() }
+        .onChange(of: archiveAccounts.accounts.map { $0.enabled ? $0.id : nil }) { _, _ in
+            publishCaptureContext()
+            retryCloudCaptures()
+        }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
@@ -687,9 +686,9 @@ struct CameraScreen: View {
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
-                    Toggle("Salvar cópia no armazenamento interno", isOn: $saveToPhotos)
-                        .disabled(selectedCloudHash != nil)
-                    Text(selectedCloudHash == nil
+                    Toggle("Copiar para o app Fotos", isOn: $saveToPhotos)
+                        .disabled(!effectiveLocalStorage)
+                    Text(effectiveLocalStorage
                          ? "Adiciona uma cópia à biblioteca Fotos do iPhone. A opção de armazenamento abaixo define onde o Momentra guarda as capturas."
                          : "No modo somente nuvem, novas fotos não são copiadas para o app Fotos do iPhone.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -702,47 +701,53 @@ struct CameraScreen: View {
                         if let status = weather.status { Text(status).font(.footnote) }
                         Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
                     }
-                    Section("Armazenamento") {
-                        Button {
-                            cloudOwnerHash = ""
-                            CloudBackgroundScheduler.cancelPending()
-                            refreshCloudQueueStatus()
-                        } label: {
-                            HStack {
-                                Text("No dispositivo")
-                                Spacer()
-                                if selectedCloudHash == nil { Image(systemName: "checkmark") }
+                    Section("Armazenamento e contas") {
+                        Toggle("Armazenamento local", isOn: $keepArchiveLocal)
+                            .disabled(keepArchiveLocal && archiveDestinations.isEmpty)
+                        ForEach(archiveAccounts.accounts, id: \.id) { account in
+                            Toggle(isOn: Binding(get: { account.enabled }, set: { enabled in
+                                if !enabled && !keepArchiveLocal && archiveDestinations.count == 1 { keepArchiveLocal = true }
+                                do { try archiveAccounts.setEnabled(enabled, for: account.id) }
+                                catch { archiveNotice = "Não foi possível alterar o destino." }
+                            })) {
+                                VStack(alignment: .leading) {
+                                    Text(account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
+                                    Text(account.label).font(.caption).foregroundStyle(.secondary)
+                                }
                             }
                         }
-                        Button {
-                            if googlePhotos.connected, googlePhotos.ownerID != nil { showCloudOnlyConsent = true }
-                            else { googlePhotos.message = "Conecte o Google Fotos para escolher essa opção." }
-                        } label: {
-                            HStack {
-                                Text("Somente na nuvem")
-                                Spacer()
-                                if selectedCloudHash != nil { Image(systemName: "checkmark") }
-                            }
-                        }
-                        Text("O original e a foto carimbada ficam temporariamente no iPhone até os dois envios serem confirmados. Uma prévia reduzida permanece no aparelho. Sem internet, o iPhone tentará enviar depois, em segundo plano ou ao abrir o app.")
+                        Button("Adicionar conta Google Drive") { connectArchive(.googleDrive) }.disabled(connectingArchive)
+                        Button("Adicionar conta OneDrive") { connectArchive(.oneDrive) }.disabled(connectingArchive)
+                        Text("Cada captura usa os destinos ativos no disparo. Sem conexão, o original e a versão processada ficam no iPhone. Os envios são retomados ao abrir o app ou quando o iOS permitir.")
                             .font(.footnote).foregroundStyle(.secondary)
-                        if localCloudPendingCount > 0 {
-                            Text("\(localCloudPendingCount) captura(s) aguardando conclusão")
-                                .font(.footnote).foregroundStyle(.secondary)
+                        if archiveStatus.pending > 0 {
+                            Text("\(archiveStatus.pending) captura(s) aguardando envio").font(.footnote)
                         }
-                        if localCloudNeedsAttention {
-                            Text("Um envio não pôde ser confirmado. As fotos continuam no iPhone; confira o álbum Momentra no Google Fotos.")
+                        if archiveStatus.needsAttention {
+                            Text("Há envios que precisam de atenção. Confira as contas, a conexão e o espaço disponível. Os arquivos pendentes ficam no iPhone.")
                                 .font(.footnote).foregroundStyle(.orange)
                         }
+                        ForEach(archiveStatus.issues, id: \.self) { issue in
+                            Text(issue).font(.footnote).foregroundStyle(.orange)
+                        }
+                        if let archiveNotice { Text(archiveNotice).font(.footnote) }
                     }
-                    Section("Google Fotos pessoal") {
+                    Section("Google Fotos · arquivo anterior") {
                         if googlePhotos.configured {
                             if googlePhotos.connected {
                                 Button("Desconectar conta") { googlePhotos.signOut() }.disabled(googlePhotos.busy)
                             } else {
                                 Button("Conectar Google Fotos") { showGoogleConsent = true }.disabled(googlePhotos.busy)
                             }
-                            Text("O Google Fotos é destinado a fotos pessoais. Conectar a conta não envia fotos por si só.")
+                            Text(localCloudPendingCount > 0
+                                 ? "\(localCloudPendingCount) captura(s) da fila anterior preservada(s)."
+                                 : "Use a conta anterior para consultar a galeria do Google Fotos.")
+                                .font(.footnote)
+                            if localCloudNeedsAttention {
+                                Text("Há envios antigos com confirmação pendente.")
+                                    .font(.footnote).foregroundStyle(.orange)
+                            }
+                            Text("A fila anterior permanece no aparelho. Novas fotos usam os destinos acima.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         } else {
                             Text("A conexão nativa ainda não está configurada.").font(.footnote).foregroundStyle(.secondary)
@@ -760,15 +765,6 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
-                .confirmationDialog("Somente fotos pessoais. O Momentra enviará o original e a foto carimbada ao álbum Momentra. Após verificar os dois arquivos, removerá as cópias em tamanho completo do aplicativo neste iPhone.", isPresented: $showCloudOnlyConsent, titleVisibility: .visible) {
-                    Button("Confirmar somente na nuvem") {
-                        guard let owner = googlePhotos.ownerID, googlePhotos.connected else { return }
-                        cloudOwnerHash = CloudCaptureQueue.ownerHash(owner)
-                        CloudBackgroundScheduler.scheduleIfNeeded()
-                        retryCloudCaptures()
-                    }
-                    Button("Cancelar", role: .cancel) {}
-                }
                 .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
                     Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
                     Button("Cancelar", role: .cancel) {}
@@ -888,48 +884,58 @@ struct CameraScreen: View {
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
-        let target = selectedCloudHash
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard,
-                       saveToPhotos: target == nil && saveToPhotos,
+                       saveToPhotos: effectiveLocalStorage && saveToPhotos,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
                        profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
-                       cloudOwnerHash: target)
+                       archivePlan: currentArchivePlan)
     }
 
-    private var selectedCloudHash: String? {
-        guard let saved = CloudStoragePreference.selectedHash(), saved == cloudOwnerHash else { return nil }
-        if let current = googlePhotos.ownerID, CloudCaptureQueue.ownerHash(current) != saved { return nil }
-        return saved
+    private var archiveDestinations: [CloudDeliveryPlan.Destination] {
+        archiveAccounts.accounts.filter(\.enabled).map(\.id)
+    }
+
+    private var effectiveLocalStorage: Bool { keepArchiveLocal || archiveDestinations.isEmpty }
+
+    private var currentArchivePlan: CloudDeliveryPlan? {
+        CloudDeliveryPlan(keepLocal: effectiveLocalStorage, destinations: archiveDestinations)
+    }
+
+    private func connectArchive(_ provider: CloudDeliveryPlan.Provider) {
+        guard let window = Self.presentingController()?.view.window else {
+            archiveNotice = "Não foi possível abrir a autenticação."
+            return
+        }
+        connectingArchive = true
+        archiveNotice = nil
+        Task {
+            defer { connectingArchive = false }
+            do { try await archiveAccounts.connect(provider, presenting: window) }
+            catch { archiveNotice = error.localizedDescription }
+        }
     }
 
     private func retryCloudCaptures() {
         lastCloudAttempt = Date()
         refreshCloudQueueStatus()
-        guard scenePhase == .active, let hash = selectedCloudHash else { return }
-        if googlePhotos.ownerID == nil {
-            googlePhotos.restoreForQueuedPhotos()
-            return
+        guard scenePhase == .active else { return }
+        Task {
+            if let status = await CloudArchiveDelivery.shared.drain() { archiveStatus = status }
         }
-        googlePhotos.drainCloudQueue(expectedOwnerHash: hash, personalConsent: true)
     }
 
     private func refreshCloudQueueStatus() {
         cloudStatusGeneration &+= 1
         let generation = cloudStatusGeneration
-        guard let hash = selectedCloudHash else {
-            localCloudPendingCount = 0
-            localCloudNeedsAttention = false
-            return
-        }
         Task {
             let status = await Task.detached(priority: .utility) { () -> (Int, Bool)? in
                 guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                                appropriateFor: nil, create: false),
                       let entries = try? CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
-                        .entries(ownerHash: hash) else { return nil }
+                        .allEntries() else { return nil }
                 return (entries.filter { $0.phase != .cleaned }.count, entries.contains { $0.phase == .uncertain })
             }.value
-            guard selectedCloudHash == hash, cloudStatusGeneration == generation, let status else { return }
+            guard cloudStatusGeneration == generation, let status else { return }
             localCloudPendingCount = status.0
             localCloudNeedsAttention = status.1
         }
@@ -1012,11 +1018,12 @@ struct CameraScreen: View {
             compact: stampProfiles.selected.layout.compact, position: stampProfiles.selected.layout.position,
             horizontal: stampProfiles.selected.layout.horizontal, longDate: stampProfiles.selected.layout.dateFormat == "long",
             fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect,
-            saveToPhotos: selectedCloudHash == nil && saveToPhotos,
+            saveToPhotos: effectiveLocalStorage && saveToPhotos,
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
-            cloudOwnerHash: selectedCloudHash,
+            cloudOwnerHash: nil,
             layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout)).flatMap { $0.count <= 2000 ? $0 : nil },
-            hasLogo: !stampProfiles.selected.logoName.isEmpty)
+            hasLogo: !stampProfiles.selected.logoName.isEmpty,
+            archivePlan: currentArchivePlan)
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 

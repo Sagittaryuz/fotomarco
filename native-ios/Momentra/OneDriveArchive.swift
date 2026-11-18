@@ -1,0 +1,282 @@
+import Foundation
+
+/// Operates only in the app folder of the OneDrive selected by the supplied token.
+struct OneDriveArchive {
+    static let scope = "Files.ReadWrite.AppFolder"
+
+    struct Item: Identifiable {
+        let id: String
+        let name: String
+        let date: Date?
+    }
+
+    struct Page {
+        let items: [Item]
+        let nextPage: String?
+    }
+
+    enum Failure: LocalizedError {
+        case invalidResponse
+        case invalidName
+        case integrity
+        case http(Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidResponse: return "Resposta inválida do OneDrive."
+            case .invalidName: return "Nome de arquivo inválido para o OneDrive."
+            case .integrity: return "O arquivo no OneDrive não pôde ser confirmado. A cópia local foi preservada."
+            case .http(401), .http(403): return "A conta precisa autorizar o acesso à pasta do Momentra no OneDrive."
+            case .http(404): return "Pasta ou arquivo indisponível no OneDrive."
+            case .http(507): return "Sem espaço disponível no OneDrive."
+            case .http(429): return "O OneDrive limitou temporariamente os envios. Tente novamente mais tarde."
+            case .http(let code): return "O OneDrive respondeu com o código \(code)."
+            }
+        }
+    }
+
+    private struct DriveItem: Decodable {
+        struct Folder: Decodable {}
+        struct File: Decodable {}
+        struct Parent: Decodable { let id: String? }
+        let id: String
+        let name: String
+        let size: Int64?
+        let createdDateTime: String?
+        let parentReference: Parent?
+        let folder: Folder?
+        let file: File?
+    }
+
+    private struct Listing: Decodable {
+        let value: [DriveItem]
+        let nextLink: String?
+        enum CodingKeys: String, CodingKey {
+            case value
+            case nextLink = "@odata.nextLink"
+        }
+    }
+
+    private static let graph = URL(string: "https://graph.microsoft.com/v1.0/me/drive")!
+    private static let fields = URLQueryItem(name: "$select",
+        value: "id,name,size,file,folder,parentReference,createdDateTime")
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpShouldSetCookies = false
+        return URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+    }()
+
+    private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask,
+                        willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                        completionHandler: @escaping (URLRequest?) -> Void) {
+            completionHandler(nil)
+        }
+    }
+
+    /// Reconcile by deterministic path on all retries, including after an ambiguous PUT.
+    /// Only return the ID after verifying the server's file bytes.
+    func upload(_ file: URL, name: String, fingerprint: CloudFileFingerprint,
+                accessToken: String) async throws -> String {
+        guard Self.validName(name) else { throw Failure.invalidName }
+        guard try CloudFileFingerprint.read(file) == fingerprint else { throw Failure.integrity }
+        let folder = try await folderID(accessToken: accessToken)
+        if let existing = try await item(named: name, in: folder, accessToken: accessToken) {
+            try await check(existing, name: name, folder: folder, fingerprint: fingerprint, accessToken: accessToken)
+            return existing.id
+        }
+
+        let url = try Self.query(path(name: name, in: folder).appendingPathComponent("content"),
+            items: [URLQueryItem(name: "@microsoft.graph.conflictBehavior", value: "fail")])
+        var request = try authorizedRequest(url, accessToken: accessToken)
+        request.httpMethod = "PUT"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await Self.session.upload(for: request, fromFile: file)
+        let status = try Self.status(response)
+        let uploadedID: String?
+        switch status {
+        case 200, 201:
+            let uploaded = try JSONDecoder().decode(DriveItem.self, from: data)
+            guard uploaded.name == name, Self.validID(uploaded.id) else { throw Failure.integrity }
+            uploadedID = uploaded.id
+        case 409, 412:
+            uploadedID = nil
+        default:
+            throw Failure.http(status)
+        }
+        guard let stored = try await item(named: name, in: folder, accessToken: accessToken),
+              uploadedID == nil || uploadedID == stored.id else { throw Failure.integrity }
+        try await check(stored, name: name, folder: folder, fingerprint: fingerprint, accessToken: accessToken)
+        return stored.id
+    }
+
+    func verify(id: String, name: String, fingerprint: CloudFileFingerprint,
+                accessToken: String) async throws {
+        guard Self.validID(id), Self.validName(name) else { throw Failure.integrity }
+        let folder = try await folderID(accessToken: accessToken)
+        guard let stored = try await item(named: name, in: folder, accessToken: accessToken),
+              stored.id == id else { throw Failure.integrity }
+        try await check(stored, name: name, folder: folder, fingerprint: fingerprint, accessToken: accessToken)
+    }
+
+    func list(accessToken: String, nextPage: String? = nil) async throws -> Page {
+        let folder = try await folderID(accessToken: accessToken)
+        let children = itemURL(folder).appendingPathComponent("children")
+        let url: URL
+        if let nextPage {
+            guard let next = Self.paginationURL(nextPage, folder: folder) else { throw Failure.invalidResponse }
+            url = next
+        } else {
+            url = try Self.query(children, items: [Self.fields, URLQueryItem(name: "$top", value: "100")])
+        }
+        let data = try await get(url, accessToken: accessToken)
+        let listing = try JSONDecoder().decode(Listing.self, from: data)
+        guard listing.value.count <= 100 else { throw Failure.invalidResponse }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let standard = ISO8601DateFormatter()
+        let items = listing.value.compactMap { item -> Item? in
+            guard item.file != nil, item.folder == nil, item.parentReference?.id == folder,
+                  Self.validID(item.id), Self.validName(item.name) else { return nil }
+            let date = item.createdDateTime.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
+            return Item(id: item.id, name: item.name, date: date)
+        }
+        let next = listing.nextLink.flatMap { Self.paginationURL($0, folder: folder)?.absoluteString }
+        if listing.nextLink != nil && next == nil { throw Failure.invalidResponse }
+        return Page(items: items, nextPage: next)
+    }
+
+    /// The caller owns the temporary file and must remove it after use.
+    func download(id: String, accessToken: String) async throws -> URL {
+        guard Self.validID(id) else { throw Failure.invalidResponse }
+        let folder = try await folderID(accessToken: accessToken)
+        let data = try await get(Self.query(itemURL(id), items: [Self.fields]), accessToken: accessToken)
+        let item = try JSONDecoder().decode(DriveItem.self, from: data)
+        guard item.id == id, item.file != nil, item.folder == nil, item.parentReference?.id == folder,
+              let size = item.size, size > 0, size <= 200 * 1024 * 1024 else {
+            throw Failure.invalidResponse
+        }
+        return try await content(id: id, byteCount: size, accessToken: accessToken)
+    }
+
+    private func folderID(accessToken: String) async throws -> String {
+        let url = Self.graph.appendingPathComponent("special").appendingPathComponent("approot")
+        let data = try await get(url, accessToken: accessToken)
+        let item = try JSONDecoder().decode(DriveItem.self, from: data)
+        guard item.folder != nil, Self.validID(item.id) else { throw Failure.invalidResponse }
+        return item.id
+    }
+
+    private func itemURL(_ id: String) -> URL {
+        Self.graph.appendingPathComponent("items").appendingPathComponent(id)
+    }
+
+    private func path(name: String, in folder: String) -> URL {
+        Self.graph.appendingPathComponent("items").appendingPathComponent(folder + ":")
+            .appendingPathComponent(name + ":")
+    }
+
+    private func item(named name: String, in folder: String, accessToken: String) async throws -> DriveItem? {
+        let url = path(name: name, in: folder).deletingLastPathComponent().appendingPathComponent(name)
+        do {
+            let data = try await get(Self.query(url, items: [Self.fields]), accessToken: accessToken)
+            return try JSONDecoder().decode(DriveItem.self, from: data)
+        } catch Failure.http(404) {
+            return nil
+        }
+    }
+
+    private func check(_ item: DriveItem, name: String, folder: String,
+                       fingerprint: CloudFileFingerprint, accessToken: String) async throws {
+        guard Self.validID(item.id), item.name == name, item.file != nil, item.folder == nil,
+              item.parentReference?.id == folder, item.size == fingerprint.byteCount else { throw Failure.integrity }
+        let downloaded = try await content(id: item.id, byteCount: fingerprint.byteCount, accessToken: accessToken)
+        defer { try? FileManager.default.removeItem(at: downloaded) }
+        guard try CloudFileFingerprint.read(downloaded) == fingerprint else { throw Failure.integrity }
+    }
+
+    private func content(id: String, byteCount: Int64, accessToken: String) async throws -> URL {
+        let request = try authorizedRequest(itemURL(id).appendingPathComponent("content"), accessToken: accessToken)
+        let (temporary, response) = try await Self.session.download(for: request)
+        let status = try Self.status(response)
+        if status == 200 { return try Self.checkedFile(temporary, byteCount: byteCount) }
+        try? FileManager.default.removeItem(at: temporary)
+        guard status == 302, let response = response as? HTTPURLResponse,
+              let location = response.value(forHTTPHeaderField: "Location"),
+              let url = URL(string: location), Self.secureURL(url) else { throw Failure.http(status) }
+
+        // Graph supplies a short-lived, preauthenticated URL. Never forward the access token.
+        let (download, downloadResponse) = try await Self.session.download(from: url)
+        guard let http = downloadResponse as? HTTPURLResponse, http.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: download)
+            throw Failure.invalidResponse
+        }
+        return try Self.checkedFile(download, byteCount: byteCount)
+    }
+
+    private static func checkedFile(_ url: URL, byteCount: Int64) throws -> URL {
+        do {
+            let length = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+            guard let length, Int64(length) == byteCount else { throw Failure.integrity }
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    private func get(_ url: URL, accessToken: String) async throws -> Data {
+        let (data, response) = try await Self.session.data(for: authorizedRequest(url, accessToken: accessToken))
+        let status = try Self.status(response)
+        guard status == 200 else { throw Failure.http(status) }
+        return data
+    }
+
+    private func authorizedRequest(_ url: URL, accessToken: String) throws -> URLRequest {
+        guard Self.secureURL(url), url.host?.lowercased() == "graph.microsoft.com",
+              !accessToken.isEmpty else { throw Failure.invalidResponse }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + accessToken, forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private static func query(_ url: URL, items: [URLQueryItem]) throws -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { throw Failure.invalidResponse }
+        components.queryItems = items
+        guard let result = components.url else { throw Failure.invalidResponse }
+        return result
+    }
+
+    private static func status(_ response: URLResponse) throws -> Int {
+        guard let response = response as? HTTPURLResponse else { throw Failure.invalidResponse }
+        return response.statusCode
+    }
+
+    private static func secureURL(_ url: URL) -> Bool {
+        url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil &&
+            (url.port == nil || url.port == 443) && url.fragment == nil
+    }
+
+    private static func paginationURL(_ value: String, folder: String) -> URL? {
+        guard value.utf8.count <= 8192, let url = URL(string: value), secureURL(url),
+              url.host?.lowercased() == "graph.microsoft.com",
+              url.path.hasPrefix("/v1.0/"), url.path.hasSuffix("/items/" + folder + "/children") else { return nil }
+        return url
+    }
+
+    private static func validID(_ id: String) -> Bool {
+        !id.isEmpty && id.utf8.count <= 512 && id.utf8.allSatisfy {
+            (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) ||
+                $0 == 33 || $0 == 45 || $0 == 95
+        }
+    }
+
+    private static func validName(_ name: String) -> Bool {
+        !name.isEmpty && name.utf8.count <= 160 && name != "." && name != ".." &&
+            !name.hasSuffix(".") && name.utf8.allSatisfy {
+                (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) ||
+                    $0 == 45 || $0 == 46 || $0 == 95
+            }
+    }
+}

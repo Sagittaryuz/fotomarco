@@ -122,10 +122,10 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
                 try FileManager.default.createDirectory(at: metadataDir, withIntermediateDirectories: true)
                 let metadata = LockedCaptureMetadata(captureID: captureID, capturedAt: capturedAt,
                     profileID: context.profileID, profileName: context.profileName,
-                    cloudOwnerHash: context.cloudOwnerHash)
+                    cloudOwnerHash: context.cloudOwnerHash, archivePlan: context.archivePlan)
                 guard metadata.isValid(for: captureID) else { throw CocoaError(.fileWriteInvalidFileName) }
                 try JSONEncoder().encode(metadata).write(to: metadataDir.appendingPathComponent(id).appendingPathExtension("json"), options: .atomic)
-                canScheduleCloud = metadata.cloudOwnerHash != nil
+                canScheduleCloud = metadata.archivePlan?.deliveries.isEmpty == false
             } catch {
                 DispatchQueue.main.async {
                     self.error = "A foto foi preservada, mas seu perfil e envio à nuvem não puderam ser preparados."

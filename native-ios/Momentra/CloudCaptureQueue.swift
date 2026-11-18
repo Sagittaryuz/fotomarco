@@ -156,13 +156,16 @@ final class CloudCaptureQueue {
     func entries(ownerHash hash: String) throws -> [CloudPendingCapture] {
         guard hash.utf8.count == 64,
               hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { throw QueueError.invalid }
+        return try allEntries().filter { $0.ownerHash == hash }
+    }
+
+    func allEntries() throws -> [CloudPendingCapture] {
         Self.lock.lock(); defer { Self.lock.unlock() }
         guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
         var result: [CloudPendingCapture] = []
         for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) where url.pathExtension == "json" {
             guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { throw QueueError.invalid }
-            let value = try read(id)
-            if value.ownerHash == hash { result.append(value) }
+            result.append(try read(id))
         }
         return result.sorted { $0.createdAt < $1.createdAt }
     }

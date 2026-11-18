@@ -34,8 +34,6 @@ struct OriginalsView: View {
     @State private var files: [OriginalFile] = []
     @State private var message: String?
     @State private var isSaving = false
-    @State private var photoForGoogle: URL?
-    @State private var showPhotoConsent = false
     @State private var gallerySection = 0
     @State private var profileLookup = PhotoProfileLookup()
     @State private var reloadToken = UUID()
@@ -44,6 +42,7 @@ struct OriginalsView: View {
     @State private var selectingCaptures = false
     @State private var selectedCaptureIDs: Set<URL> = []
     @StateObject private var picker = GooglePickerFlow()
+    @StateObject private var archiveAccounts = CloudArchiveAccounts.shared
 
     var body: some View {
         NavigationStack {
@@ -53,13 +52,14 @@ struct OriginalsView: View {
                     Text("Celular").tag(1)
                     Text("Nuvem").tag(2)
                 }.pickerStyle(.segmented).padding()
-                GalleryStorageSummary(cloud: gallerySection == 2)
+                if gallerySection != 2 { GalleryStorageSummary(cloud: false) }
                 if gallerySection == 0 {
                     captures
                 } else if gallerySection == 1 {
                     DevicePhotoGallery(profileLookup: profileLookup, stampProfiles: stampProfiles)
                 } else {
-                    CloudPhotoGallery(googlePhotos: googlePhotos, picker: picker, profileLookup: profileLookup, stampProfiles: stampProfiles)
+                    CloudArchiveGallery(accounts: archiveAccounts, googlePhotos: googlePhotos, picker: picker,
+                                        profileLookup: profileLookup, stampProfiles: stampProfiles)
                 }
             }
             .navigationTitle("Galeria")
@@ -75,13 +75,6 @@ struct OriginalsView: View {
                 if previous == 2 && section != 2 { picker.cancel() }
                 selectingCaptures = false; selectedCaptureIDs.removeAll()
                 reload()
-            }
-            .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
-                Button("Confirmo uso pessoal e envio") {
-                    if let url = photoForGoogle { googlePhotos.sendProcessedPhoto(url) }
-                    photoForGoogle = nil
-                }
-                Button("Cancelar", role: .cancel) { photoForGoogle = nil }
             }
             .onChange(of: googlePhotos.message) { _, value in
                 if let value { message = value; googlePhotos.message = nil; reload() }
@@ -128,9 +121,6 @@ struct OriginalsView: View {
                             Menu {
                                 ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
                                 Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }.disabled(isSaving)
-                                if googlePhotos.configured && item.isProcessed && !item.isVideo {
-                                    Button { photoForGoogle = item.url; showPhotoConsent = true } label: { Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up") }.disabled(googlePhotos.busy)
-                                }
                             } label: {
                                 Image(systemName: "ellipsis.circle.fill").font(.title3).foregroundStyle(.white).shadow(radius: 2).padding(6)
                             }.accessibilityLabel("Opções da captura")

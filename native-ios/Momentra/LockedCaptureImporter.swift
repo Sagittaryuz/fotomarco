@@ -33,12 +33,12 @@ enum LockedCaptureImporter {
             let fm = FileManager.default
             guard let root = try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return (0, false) }
             let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
-            copyFiles(from: directory, to: root.appendingPathComponent("Originals", isDirectory: true), cloudQueue: queue)
+            let archive = CloudArchiveJournal(root: root)
+            copyFiles(from: directory, to: root.appendingPathComponent("Originals", isDirectory: true), cloudQueue: queue, archive: archive)
             copyFiles(from: directory.appendingPathComponent("Processed", isDirectory: true),
-                      to: root.appendingPathComponent("Processed", isDirectory: true), cloudQueue: queue)
-            let ownerHash = CloudStoragePreference.selectedHash()
-            let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: ownerHash)
-            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: ownerHash))
+                      to: root.appendingPathComponent("Processed", isDirectory: true), cloudQueue: queue, archive: archive)
+            let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: nil)
+            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: nil))
         }.value
         if outcome.safe {
             // The system owns these session URLs; never remove a session directory directly.
@@ -77,20 +77,28 @@ enum LockedCaptureImporter {
               processed == originals, metadataIDs == originals else { return false }
         let profiles = PhotoProfileIndex.load(root: root)
         let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
+        let archive = CloudArchiveJournal(root: root)
         for id in originals {
             let name = id.uuidString + ".jpg"
             let metaURL = metadataDir.appendingPathComponent(id.uuidString + ".json")
             guard let metaInfo = try? metaURL.resourceValues(forKeys: [.fileSizeKey]),
-                  let size = metaInfo.fileSize, size > 0, size <= 4096,
+                  let size = metaInfo.fileSize, size > 0, size <= 64 * 1024,
                   let bytes = try? Data(contentsOf: metaURL), bytes.count == size,
                   let metadata = try? JSONDecoder().decode(LockedCaptureMetadata.self, from: bytes),
                   metadata.isValid(for: id),
                   let originalHash = try? CloudFileFingerprint.read(directory.appendingPathComponent(name)),
-                  let localOriginal = try? CloudFileFingerprint.read(root.appendingPathComponent("Originals").appendingPathComponent(name)),
-                  originalHash == localOriginal,
-                  let stampedHash = try? CloudFileFingerprint.read(processedDir.appendingPathComponent(name)),
-                  let localStamped = try? CloudFileFingerprint.read(root.appendingPathComponent("Processed").appendingPathComponent(name)),
-                  stampedHash == localStamped else { return false }
+                  let stampedHash = try? CloudFileFingerprint.read(processedDir.appendingPathComponent(name)) else { return false }
+            let item = try? archive.read(id)
+            if let plan = metadata.archivePlan, !plan.deliveries.isEmpty {
+                guard let item, item.plan.deliveries.map(\.destination) == plan.deliveries.map(\.destination),
+                      item.plan.keepLocal == plan.keepLocal else { return false }
+            }
+            if let item, item.cleanupStarted {
+                guard item.original == originalHash, item.stamped == stampedHash else { return false }
+            } else {
+                guard (try? CloudFileFingerprint.read(root.appendingPathComponent("Originals").appendingPathComponent(name))) == originalHash,
+                      (try? CloudFileFingerprint.read(root.appendingPathComponent("Processed").appendingPathComponent(name))) == stampedHash else { return false }
+            }
             if let profileID = metadata.profileID, let name = metadata.profileName, !name.isEmpty,
                profiles.captures[id]?.id != profileID { return false }
             if let ownerHash = metadata.cloudOwnerHash, ownerHash == allowedCloudOwnerHash {
@@ -131,7 +139,7 @@ enum LockedCaptureImporter {
                   let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
                   let info = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
                   info.isRegularFile == true, info.isSymbolicLink != true,
-                  let size = info.fileSize, size > 0, size <= 4096,
+                  let size = info.fileSize, size > 0, size <= 64 * 1024,
                   let bytes = try? Data(contentsOf: file), bytes.count == size,
                   let metadata = try? JSONDecoder().decode(LockedCaptureMetadata.self, from: bytes),
                   metadata.isValid(for: id) else { continue }
@@ -146,14 +154,21 @@ enum LockedCaptureImporter {
                     profile: CaptureProfileTag(id: profileID, name: profileName),
                     captureDate: metadata.capturedAt, root: root)
             }
-            guard let ownerHash = metadata.cloudOwnerHash, ownerHash == allowedCloudOwnerHash else { continue }
+            let plan = metadata.archivePlan.flatMap { $0.deliveries.isEmpty ? nil : $0 }
+            let ownerHash = metadata.cloudOwnerHash.flatMap { $0 == allowedCloudOwnerHash ? $0 : nil }
+            guard plan != nil || ownerHash != nil else { continue }
             let sourceStamped = directory.appendingPathComponent("Processed").appendingPathComponent(name)
             let localStamped = root.appendingPathComponent("Processed").appendingPathComponent(name)
             guard let sourceStampedHash = try? CloudFileFingerprint.read(sourceStamped),
                   let localStampedHash = try? CloudFileFingerprint.read(localStamped),
                   sourceStampedHash == localStampedHash else { continue }
             do {
-                try CloudCaptureStager.stage(root: root, captureID: id, ownerHash: ownerHash, originalExtension: "jpg")
+                if let plan {
+                    try CloudArchiveJournal(root: root).enqueue(id: id, date: metadata.capturedAt,
+                                                                originalExtension: "jpg", plan: plan)
+                } else if let ownerHash {
+                    try CloudCaptureStager.stage(root: root, captureID: id, ownerHash: ownerHash, originalExtension: "jpg")
+                }
                 staged += 1
             } catch {
                 // Both local files and the capture-session files remain untouched.
@@ -162,7 +177,8 @@ enum LockedCaptureImporter {
         return staged
     }
 
-    static func copyFiles(from directory: URL, to destination: URL, cloudQueue: CloudCaptureQueue? = nil) {
+    static func copyFiles(from directory: URL, to destination: URL, cloudQueue: CloudCaptureQueue? = nil,
+                          archive: CloudArchiveJournal? = nil) {
         let fm = FileManager.default
         guard (try? fm.createDirectory(at: destination, withIntermediateDirectories: true)) != nil,
               let entries = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey], options: [.skipsHiddenFiles]) else { return }
@@ -174,11 +190,15 @@ enum LockedCaptureImporter {
                   let data = try? Data(contentsOf: source), data.count == size else { continue }
             let target = destination.appendingPathComponent(source.lastPathComponent)
             guard !fm.fileExists(atPath: target.path) else { continue }
-            if let cloudQueue {
-                cloudQueue.publishImportedFileIfAllowed(id: captureID) { writeIfAbsent(data, to: target) }
-            } else {
-                writeIfAbsent(data, to: target)
+            let publish = {
+                if let cloudQueue {
+                    cloudQueue.publishImportedFileIfAllowed(id: captureID) { writeIfAbsent(data, to: target) }
+                } else {
+                    writeIfAbsent(data, to: target)
+                }
             }
+            if let archive { archive.publishImportedFileIfAllowed(id: captureID, publish: publish) }
+            else { publish() }
         }
     }
 

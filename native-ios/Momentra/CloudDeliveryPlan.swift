@@ -2,11 +2,11 @@ import Foundation
 
 /// Destinations are frozen when a capture is created. Changing switches later
 /// must never cause an older capture to be sent to a different account.
-struct CloudDeliveryPlan: Codable, Equatable {
-    enum Provider: String, Codable { case googleDrive, oneDrive }
-    enum Phase: String, Codable { case pending, uncertain, verified }
+struct CloudDeliveryPlan: Codable, Equatable, Sendable {
+    enum Provider: String, Codable, Sendable { case googleDrive, oneDrive }
+    enum Phase: String, Codable, Sendable { case pending, uncertain, verified }
 
-    struct Destination: Codable, Hashable {
+    struct Destination: Codable, Hashable, Sendable {
         let provider: Provider
         /// Hash of the stable provider account identifier, never a token or email.
         let accountHash: String
@@ -19,7 +19,7 @@ struct CloudDeliveryPlan: Codable, Equatable {
         }
     }
 
-    struct Delivery: Codable, Equatable {
+    struct Delivery: Codable, Equatable, Sendable {
         let destination: Destination
         private(set) var phase: Phase = .pending
         private(set) var originalID: String?
@@ -38,6 +38,15 @@ struct CloudDeliveryPlan: Codable, Equatable {
             self.stampedID = stampedID
             phase = .verified
         }
+    }
+
+    var isValidNewPlan: Bool {
+        let destinations = deliveries.map(\.destination)
+        return (keepLocal || !destinations.isEmpty) && Set(destinations).count == destinations.count
+            && deliveries.allSatisfy {
+                $0.phase == .pending && $0.originalID == nil && $0.stampedID == nil
+                    && Destination(provider: $0.destination.provider, accountHash: $0.destination.accountHash) != nil
+            }
     }
 
     let keepLocal: Bool

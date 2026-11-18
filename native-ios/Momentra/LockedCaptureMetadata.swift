@@ -8,6 +8,7 @@ struct LockedCaptureMetadata: Codable {
     let profileID: UUID?
     let profileName: String?
     let cloudOwnerHash: String?
+    var archivePlan: CloudDeliveryPlan? = nil
 
     static func safeProfileName(_ name: String) -> String {
         let result = bounded(name, characters: 60, bytes: 240)
@@ -29,6 +30,6 @@ struct LockedCaptureMetadata: Codable {
             guard hash.utf8.count == 64,
                   hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { return false }
         }
-        return true
+        return archivePlan?.isValidNewPlan ?? true
     }
 }

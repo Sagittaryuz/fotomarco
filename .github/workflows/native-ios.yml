@@ -28,6 +28,10 @@ jobs:
           MOMENTRA_GOOGLE_IOS_CLIENT_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
           MOMENTRA_GOOGLE_IOS_REVERSED_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_REVERSED_ID }}
         run: python3 native-ios/scripts/configure-google.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
+      - name: Configure Microsoft public client when available
+        env:
+          MOMENTRA_MICROSOFT_CLIENT_ID: ${{ vars.MOMENTRA_MICROSOFT_CLIENT_ID }}
+        run: python3 native-ios/scripts/configure-microsoft.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
       - name: Check unsigned IPA structure
         run: |
           APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"

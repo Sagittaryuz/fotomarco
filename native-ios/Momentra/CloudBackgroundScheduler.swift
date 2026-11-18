@@ -24,8 +24,8 @@ enum CloudBackgroundScheduler {
             let work = Task { @MainActor in
                 if #available(iOS 18.0, *) { await LockedCaptureImporter.importExisting() }
                 guard !Task.isCancelled else { completion.finish(false); return }
-                let success = await GooglePhotosManager.shared.runBackgroundCloudPass()
-                completion.finish(success)
+                let summary = await CloudArchiveDelivery.shared.drain()
+                completion.finish(!Task.isCancelled && summary?.needsAttention == false)
             }
             processing.expirationHandler = {
                 work.cancel()
@@ -35,13 +35,8 @@ enum CloudBackgroundScheduler {
     }
 
     static func scheduleIfNeeded() {
-        guard let ownerHash = CloudStoragePreference.selectedHash() else { return }
-        guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                                                      appropriateFor: nil, create: false) else { return }
-        let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
-        // If protected storage is temporarily inaccessible, ask iOS to retry later.
-        if let items = try? queue.entries(ownerHash: ownerHash),
-           !CloudBackgroundPolicy.shouldSchedule(items.map(\.phase)) { return }
+        guard let journal = try? CloudArchiveJournal.documents() else { return }
+        if let ids = try? journal.ids(), !ids.contains(where: { (try? journal.read($0).finished) != true }) { return }
         let request = BGProcessingTaskRequest(identifier: identifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false

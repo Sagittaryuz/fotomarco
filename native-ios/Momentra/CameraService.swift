@@ -22,7 +22,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var pendingAspect: PhotoAspect = .standard
     private var pendingPhotoSaveToPhotos = true
     private var pendingProfileTag: CaptureProfileTag?
-    private var pendingCloudOwnerHash: String?
+    private var pendingArchivePlan: CloudDeliveryPlan?
     private var pendingStyle: MomentraPhotoStyle = .natural
     private var pendingVideoSaveToPhotos = true
     private var pendingVideoSnapshot: StampSnapshot?
@@ -107,7 +107,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         DispatchQueue.main.async { self.ready = false }
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, cloudOwnerHash: String? = nil) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil) {
         guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -122,7 +122,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             self.pendingStyle = style
             self.pendingPhotoSaveToPhotos = saveToPhotos
             self.pendingProfileTag = profile
-            self.pendingCloudOwnerHash = cloudOwnerHash
+            self.pendingArchivePlan = archivePlan
             self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
@@ -388,12 +388,12 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let style = self.pendingStyle
             let saveToPhotos = self.pendingPhotoSaveToPhotos
             let profileTag = self.pendingProfileTag
-            let cloudOwnerHash = self.pendingCloudOwnerHash
+            let archivePlan = self.pendingArchivePlan
             self.pendingProfileTag = nil
-            self.pendingCloudOwnerHash = nil
+            self.pendingArchivePlan = nil
             let captureID = UUID()
             self.pendingStamp = nil
-            var originalExtension = ""
+            var archiveQueued = false
             do {
                 let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
                 let originals = base.appendingPathComponent("Originals", isDirectory: true)
@@ -401,14 +401,22 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 let source = CGImageSourceCreateWithData(data as CFData, nil)
                 let type = source.flatMap { CGImageSourceGetType($0) }.map { $0 as String }.flatMap { UTType($0) }
                 let suffix = (type?.preferredFilenameExtension ?? "image").lowercased()
-                originalExtension = suffix
                 try data.write(to: originals.appendingPathComponent(captureID.uuidString + "." + suffix), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                if let archivePlan, !archivePlan.deliveries.isEmpty {
+                    do {
+                        try CloudArchiveJournal(root: base).enqueue(id: captureID, date: snapshot?.capturedAt ?? Date(),
+                                                                   originalExtension: suffix, plan: archivePlan)
+                        archiveQueued = true
+                    } catch {
+                        self.report("Não foi possível registrar o envio. A captura será mantida no iPhone. Confira o espaço disponível.")
+                    }
+                }
             } catch {
                 self.report("Não foi possível preservar a foto original. Libere espaço e tente novamente.")
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
             }
-            let savedOriginalExtension = originalExtension
+            let shouldNotifyArchive = archiveQueued
             if let profileTag {
                 do { try PhotoProfileIndex.register(captureID: captureID, profile: profileTag, captureDate: Date()) }
                 catch { self.report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
@@ -419,7 +427,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     DispatchQueue.main.async { self.isCapturing = false }
                     return
                 }
-                self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos, cloudOwnerHash: cloudOwnerHash, originalExtension: savedOriginalExtension)
+                self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos, archiveQueued: shouldNotifyArchive)
                 return
             }
             StampMap.load(snapshot: snapshot, queue: self.queue) { map in
@@ -435,13 +443,13 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                         DispatchQueue.main.async { self.isCapturing = false }
                         return
                     }
-                    self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos, cloudOwnerHash: cloudOwnerHash, originalExtension: savedOriginalExtension)
+                    self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos, archiveQueued: shouldNotifyArchive)
                 }
             }
         }
     }
 
-    private func savePhoto(_ data: Data, captureID: UUID, saveToPhotos: Bool, cloudOwnerHash: String?, originalExtension: String) {
+    private func savePhoto(_ data: Data, captureID: UUID, saveToPhotos: Bool, archiveQueued: Bool) {
         do { _ = try ProcessedFileStore.save(data, captureID: captureID) }
         catch {
             report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
@@ -457,17 +465,9 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let image = UIImage(cgImage: preview)
             DispatchQueue.main.async { self.completedPhoto.send(image) }
         }
-        if let cloudOwnerHash {
-            do {
-                let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                                                       appropriateFor: nil, create: true)
-                try CloudCaptureStager.stage(root: root, captureID: captureID, ownerHash: cloudOwnerHash,
-                                             originalExtension: originalExtension)
-                CloudBackgroundScheduler.scheduleIfNeeded()
-                NotificationCenter.default.post(name: .momentraCloudCaptureStaged, object: nil)
-            } catch {
-                report("Não foi possível preparar o envio. O original e a foto carimbada continuam em Capturas.")
-            }
+        if archiveQueued {
+            CloudBackgroundScheduler.scheduleIfNeeded()
+            NotificationCenter.default.post(name: .momentraCloudCaptureStaged, object: nil)
         }
         guard saveToPhotos else {
             DispatchQueue.main.async { self.isCapturing = false }

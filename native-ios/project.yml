@@ -55,6 +55,7 @@ targets:
     sources:
       - MomentraCaptureExtension
       - path: Momentra/MomentraCaptureIntent.swift
+      - path: Momentra/CloudDeliveryPlan.swift
       - path: Momentra/LockedCaptureMetadata.swift
       - path: Momentra/StampRenderer.swift
       - path: Momentra/StampLayout.swift
@@ -80,6 +81,7 @@ targets:
     sources:
       - MomentraCameraControl
       - path: Momentra/MomentraCaptureIntent.swift
+      - path: Momentra/CloudDeliveryPlan.swift
     info:
       path: MomentraCameraControl/Info.plist
       properties:
