@@ -22,4 +22,10 @@ final class ZoomScaleTests: XCTestCase {
         XCTAssertNil(scale.deviceFactor(for: 3))
         XCTAssertNil(ZoomScale(wideFactor: 0, minimum: 1, maximum: 4).deviceFactor(for: 1))
     }
+
+    func testQuickCaptureDragZoomIsSmoothAndBounded() {
+        XCTAssertEqual(QuickCaptureZoom.value(start: 1, verticalTranslation: -180, range: 0.5...8), 2, accuracy: 0.001)
+        XCTAssertEqual(QuickCaptureZoom.value(start: 1, verticalTranslation: 180, range: 0.5...8), 0.5, accuracy: 0.001)
+        XCTAssertEqual(QuickCaptureZoom.value(start: 1, verticalTranslation: -4000, range: 0.5...8), 8, accuracy: 0.001)
+    }
 }

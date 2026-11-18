@@ -94,7 +94,9 @@ final class CloudCaptureQueue {
         let processedPath = root.appendingPathComponent("Processed", isDirectory: true)
             .appendingPathComponent(id.uuidString + ".jpg").standardizedFileURL
         guard original.standardizedFileURL == originalPath, processed.standardizedFileURL == processedPath else { return false }
-        return try CloudFileFingerprint.read(original) == expectedOriginal && CloudFileFingerprint.read(processed) == expectedProcessed
+        guard let currentOriginal = try? CloudFileFingerprint.read(original),
+              let currentProcessed = try? CloudFileFingerprint.read(processed) else { return false }
+        return currentOriginal == expectedOriginal && currentProcessed == expectedProcessed
     }
 
     func entries(for owner: String) throws -> [CloudPendingCapture] {

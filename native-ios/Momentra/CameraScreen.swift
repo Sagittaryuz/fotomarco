@@ -72,29 +72,32 @@ struct CameraScreen: View {
     @State private var showingZoomDial = false
     @State private var zoomDismissTask: Task<Void, Never>?
     @State private var quickRecording = false
+    @State private var quickRecordingLocked = false
+    @State private var quickZoomStart: CGFloat = 1
+    @State private var recordingStartedAt: Date?
     @State private var quickReleasePending = false
     @State private var suppressQuickPhoto = false
     @Environment(\.scenePhase) private var scenePhase
 
-    private var cameraContent: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color.black.ignoresSafeArea()
-                CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped().contentShape(Rectangle())
-                    .onTapGesture { dismissZoomDial() }
-                    .overlay {
-                        if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .separate {
-                            TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                                SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date))
-                            }
-                        }
-                    }
-                if showGrid {
-                    CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
-                }
-                VStack(spacing: 0) {
+    private var cameraHeader: some View {
+        Group {
+            if camera.isRecording {
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let elapsed = max(0, Int(timeline.date.timeIntervalSince(recordingStartedAt ?? timeline.date)))
+                    Text(String(format: "%02d:%02d:%02d", elapsed / 3600, (elapsed / 60) % 60, elapsed % 60))
+                        .font(.system(.headline, design: .monospaced)).foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(.red, in: RoundedRectangle(cornerRadius: 6))
+                        .accessibilityLabel("Gravando, \(elapsed) segundos")
+                }.padding(.top, 8)
+            } else {
+                normalCameraHeader
+            }
+        }
+    }
+
+    private var normalCameraHeader: some View {
+        VStack(spacing: 0) {
                     MomentraWordmark().padding(.top, 4).padding(.bottom, 4)
                     HStack {
                         Button { cycleFlash() } label: {
@@ -150,16 +153,41 @@ struct CameraScreen: View {
                             .background(.black.opacity(0.75), in: Capsule())
                             .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }
-                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
+        }
+    }
+
+    private var cameraContent: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped().contentShape(Rectangle())
+                    .onTapGesture { dismissZoomDial() }
+                    .overlay {
+                        if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .separate {
+                            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                                SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date))
+                            }
+                        }
+                    }
+                if showGrid {
+                    CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
+                }
+                VStack(spacing: 0) {
+                    cameraHeader
+                    if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
-                    LiveRecognitionBanner(engine: camera.recognition) { text in
-                        selectedRecognizedText = RecognizedTextSelection(text: text)
+                    if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
+                    if !camera.isRecording {
+                        LiveRecognitionBanner(engine: camera.recognition) { text in
+                            selectedRecognizedText = RecognizedTextSelection(text: text)
+                        }
                     }
                     VStack(spacing: 0) {
                     if showingZoomDial {
@@ -167,6 +195,12 @@ struct CameraScreen: View {
                             .frame(height: 132).transition(.move(edge: .bottom))
                     } else if !camera.zoomOptions.isEmpty {
                         HStack(spacing: 0) {
+                            if camera.isRecording && !camera.zoomOptions.contains(where: { abs($0 - camera.zoomFactor) < 0.01 }) {
+                                Text(String(format: "%.1f×", Double(camera.zoomFactor)).replacingOccurrences(of: ".", with: ","))
+                                    .font(.subheadline.weight(.medium)).foregroundStyle(.yellow)
+                                    .frame(width: 48, height: 44)
+                                    .background(Color.black.opacity(0.58), in: Circle())
+                            }
                             ForEach(camera.zoomOptions, id: \.self) { factor in
                                 Button {
                                     camera.setZoom(factor)
@@ -196,35 +230,49 @@ struct CameraScreen: View {
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Escolher perfil do carimbo")
+                        .opacity(camera.isRecording ? 0 : 1)
                         Spacer(minLength: 0)
                         Button {
                             guard !suppressQuickPhoto else { return }
-                            if mode == .video {
-                                if camera.isRecording { camera.stopRecording() } else { camera.startRecording(saveToPhotos: saveToPhotos) }
+                            if camera.isRecording && (mode == .video || quickRecordingLocked) {
+                                camera.stopRecording(); quickRecording = false; quickRecordingLocked = false
+                            } else if mode == .video {
+                                camera.startRecording(saveToPhotos: saveToPhotos)
                             } else {
                                 if countdown > 0 { cancelCountdown() } else { schedulePhoto() }
                             }
                         } label: {
-                            Circle().fill(mode == .video ? .red : .white).padding(camera.isRecording ? 18 : 7)
+                            Circle().fill(mode == .video || camera.isRecording ? .red : .white).padding(camera.isRecording ? 12 : 7)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
                                 .frame(width: min(94, geometry.size.width * 0.25), height: min(94, geometry.size.width * 0.25))
                         }
                         .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || (camera.isFinishingRecording && !quickRecording))
-                        .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : mode == .photo ? "Fotografar" : camera.isRecording ? "Parar gravação" : "Gravar vídeo")
+                        .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : camera.isRecording ? "Parar gravação" : mode == .photo ? "Fotografar" : "Gravar vídeo")
                         .simultaneousGesture(
                             LongPressGesture(minimumDuration: 0.5, maximumDistance: 40)
                                 .sequenced(before: DragGesture(minimumDistance: 0))
                                 .onChanged { phase in
-                                    guard case .second(true, _) = phase, !quickRecording,
-                                          mode == .photo, countdown == 0, camera.ready, camera.videoAvailable,
-                                          !camera.isCapturing, !camera.isRecording, !camera.isFinishingRecording else { return }
-                                    suppressQuickPhoto = true; quickRecording = true; quickReleasePending = false
-                                    camera.startRecording(saveToPhotos: saveToPhotos)
+                                    guard case let .second(true, drag) = phase, mode == .photo else { return }
+                                    if !quickRecording {
+                                        guard countdown == 0, camera.ready, camera.videoAvailable,
+                                              !camera.isCapturing, !camera.isRecording, !camera.isFinishingRecording else { return }
+                                        suppressQuickPhoto = true; quickRecording = true; quickReleasePending = false
+                                        quickRecordingLocked = false; quickZoomStart = camera.zoomFactor
+                                        dismissZoomDial()
+                                        camera.startRecording(saveToPhotos: saveToPhotos)
+                                    }
+                                    if let drag {
+                                        camera.setZoom(QuickCaptureZoom.value(start: quickZoomStart,
+                                            verticalTranslation: drag.translation.height, range: camera.zoomRange))
+                                        if drag.translation.width > 100 { quickRecordingLocked = true }
+                                    }
                                 }
                                 .onEnded { _ in
                                     guard quickRecording else { return }
-                                    quickReleasePending = true
-                                    if camera.isRecording { camera.stopRecording(); quickRecording = false }
+                                    if !quickRecordingLocked {
+                                        quickReleasePending = true
+                                        if camera.isRecording { camera.stopRecording(); quickRecording = false }
+                                    }
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { suppressQuickPhoto = false }
                                 }
                         )
@@ -240,6 +288,14 @@ struct CameraScreen: View {
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Abrir mapa")
+                        .opacity(camera.isRecording ? 0 : 1)
+                        .overlay {
+                            if camera.isRecording && quickRecording {
+                                Image(systemName: quickRecordingLocked ? "lock.fill" : "lock.open.fill")
+                                    .font(.title3).foregroundStyle(.white.opacity(0.7))
+                                    .accessibilityLabel(quickRecordingLocked ? "Gravação bloqueada" : "Deslize à direita para bloquear")
+                            }
+                        }
                     }.padding(.horizontal, max(28, geometry.size.width * 0.08)).padding(.bottom, 16)
                     }
                     .background {
@@ -248,7 +304,9 @@ struct CameraScreen: View {
                                 .transition(.move(edge: .bottom))
                         }
                     }
-                    if showAspectPanel {
+                    if camera.isRecording {
+                        Color.black.frame(height: 84)
+                    } else if showAspectPanel {
                         PhotoAspectPanel(selection: $photoAspect) {
                             withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel = false }
                         }.transition(.move(edge: .bottom).combined(with: .opacity))
@@ -328,7 +386,21 @@ struct CameraScreen: View {
         .onChange(of: showSettings) { _, _ in refreshAddress() }
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
         .onChange(of: camera.isRecording) { _, recording in
-            if recording && quickRecording && quickReleasePending { camera.stopRecording(); quickRecording = false }
+            if recording {
+                recordingStartedAt = Date()
+                if quickRecording && quickReleasePending && !quickRecordingLocked {
+                    camera.stopRecording(); quickRecording = false
+                }
+            } else {
+                recordingStartedAt = nil
+                quickRecordingLocked = false
+            }
+        }
+        .onChange(of: camera.isFinishingRecording) { _, finishing in
+            if !finishing && !camera.isRecording && quickRecording {
+                quickRecording = false; quickRecordingLocked = false; quickReleasePending = false
+                suppressQuickPhoto = false
+            }
         }
         .onChange(of: camera.isCapturing) { _, capturing in if !capturing { refreshGalleryThumbnail() } }
     }

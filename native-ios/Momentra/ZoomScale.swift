@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 // AVFoundation zoom factors on a virtual device start at its widest lens.
 // The UI instead expresses zoom relative to the standard wide camera.
@@ -16,4 +17,13 @@ struct ZoomScale {
     }
 
     var options: [CGFloat] { [CGFloat(0.5), 1, 2, 4, 8].filter { deviceFactor(for: $0) != nil } }
+}
+
+/// Vertical movement while holding the shutter maps smoothly to optical zoom.
+enum QuickCaptureZoom {
+    static func value(start: CGFloat, verticalTranslation: CGFloat, range: ClosedRange<CGFloat>) -> CGFloat {
+        guard start.isFinite, verticalTranslation.isFinite, start > 0 else { return range.lowerBound }
+        let factor = start * CGFloat(pow(2.0, Double(-verticalTranslation / 180)))
+        return min(range.upperBound, max(range.lowerBound, factor))
+    }
 }
