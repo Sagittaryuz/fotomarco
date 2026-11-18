@@ -143,7 +143,7 @@ enum GalleryZoom {
 
 enum CloudProfileFilename {
     static func encode(captureID: UUID, profile: CaptureProfileTag) -> String {
-        var text = String(profile.name.prefix(18))
+        var text = String(profile.name.prefix(60))
         while text.utf8.count > 72 { text.removeLast() }
         let name = Data(text.utf8).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
@@ -160,7 +160,7 @@ enum CloudProfileFilename {
         var encoded = String(parts[2]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         encoded += String(repeating: "=", count: (4 - encoded.count % 4) % 4)
         guard let bytes = Data(base64Encoded: encoded), let name = String(data: bytes, encoding: .utf8),
-              name.count <= 18 else { return nil }
+              name.count <= 60 else { return nil }
         return CaptureProfileTag(id: id, name: name)
     }
 }

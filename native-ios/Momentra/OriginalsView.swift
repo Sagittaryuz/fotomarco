@@ -38,6 +38,7 @@ struct OriginalsView: View {
     @State private var showPhotoConsent = false
     @State private var gallerySection = 0
     @State private var profileLookup = PhotoProfileLookup()
+    @State private var reloadToken = UUID()
     @State private var captureColumns = 3
     @State private var selectedCapture: URL?
     @StateObject private var picker = GooglePickerFlow()
@@ -143,9 +144,17 @@ struct OriginalsView: View {
     }
 
     private func reload() {
-        profileLookup = PhotoProfileIndex.load()
-        do { files = try OriginalStore.files() }
-        catch { message = "Não foi possível abrir as capturas guardadas." }
+        let token = UUID()
+        reloadToken = token
+        Task {
+            let result = await Task.detached(priority: .utility) { () -> (PhotoProfileLookup, [OriginalFile]?) in
+                (PhotoProfileIndex.load(), try? OriginalStore.files())
+            }.value
+            guard reloadToken == token else { return }
+            profileLookup = result.0
+            if let loaded = result.1 { files = loaded }
+            else { message = "Não foi possível abrir as capturas guardadas." }
+        }
     }
 
     private func save(_ item: OriginalFile) {
