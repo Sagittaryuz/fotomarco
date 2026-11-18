@@ -26,7 +26,7 @@ final class VideoStampRendererTests: XCTestCase {
         XCTAssertGreaterThan(try brightPixels(in: frame), 15, "O quadro deve conter o texto claro do carimbo")
     }
 
-    func testPortraitTransformKeepsVideoAndStampUpright() async throws {
+    func testPortraitTransformPreservesFrameDimensionsAndStamp() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
