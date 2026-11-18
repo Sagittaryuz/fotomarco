@@ -153,6 +153,7 @@ struct CameraScreen: View {
                     LiveRecognitionBanner(engine: camera.recognition) { text in
                         selectedRecognizedText = RecognizedTextSelection(text: text)
                     }
+                    VStack(spacing: 0) {
                     if showingZoomDial {
                         ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, editingChanged: zoomEditingChanged)
                             .frame(height: 132).transition(.move(edge: .bottom))
@@ -232,6 +233,13 @@ struct CameraScreen: View {
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Abrir mapa")
                     }.padding(.horizontal, max(28, geometry.size.width * 0.08)).padding(.bottom, 16)
+                    }
+                    .background {
+                        if showingZoomDial {
+                            ZoomDialBackdrop().allowsHitTesting(false)
+                                .transition(.move(edge: .bottom))
+                        }
+                    }
                     if showAspectPanel {
                         PhotoAspectPanel(selection: $photoAspect) {
                             withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel = false }

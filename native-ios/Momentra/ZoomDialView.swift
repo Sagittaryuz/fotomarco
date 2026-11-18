@@ -14,8 +14,6 @@ struct ZoomDialView: View {
         Canvas { context, size in
             let radius = size.width * 0.63
             let center = CGPoint(x: size.width / 2, y: radius + 8)
-            let disc = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-            context.fill(Path(ellipseIn: disc), with: .color(.black.opacity(0.72)))
             guard value > 0 else { return }
             for index in 5...400 {
                 let tick = CGFloat(index) / 10
