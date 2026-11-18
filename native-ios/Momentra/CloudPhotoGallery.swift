@@ -45,6 +45,9 @@ struct CloudPhotoGallery: View {
                         if let error = googlePhotos.cloudError {
                             Text(error).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                             Button("Tentar novamente") { googlePhotos.loadCloudPhotos() }.disabled(googlePhotos.busy)
+                            if let owner = googlePhotos.ownerID {
+                                CloudOfflinePreviews(owner: owner, columnCount: columnCount, profiles: profileLookup)
+                            }
                         }
                         if googlePhotos.cloudLoaded && googlePhotos.cloudPhotos.isEmpty {
                             ContentUnavailableView("Nenhuma foto criada pelo Momentra", systemImage: "photo.on.rectangle")
