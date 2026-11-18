@@ -53,8 +53,7 @@ struct StampLayoutEditor: View {
             HStack(spacing: 10) {
                 ForEach(0..<4, id: \.self) { index in
                     let corner = corners[index]
-                    let selected = (point.wrappedValue.x >= 0.5) == (corner.1.x >= 0.5) &&
-                        (point.wrappedValue.y >= 0.5) == (corner.1.y >= 0.5)
+                    let selected = point.wrappedValue == corner.1
                     Button { point.wrappedValue = corner.1 } label: {
                         RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.blue : Color.secondary, lineWidth: selected ? 2 : 1)
                             .frame(width: 48, height: 58)
@@ -255,7 +254,7 @@ private struct StampLayoutPreview: View {
                         let measured = StampRenderer.fitText(previewString as NSString, width: width, maxHeight: space.height,
                             initialSize: 10 * layout.informationSize, style: layout.fontStyle, paragraph: paragraph)
                         let box = rect(\.information, in: size, element: CGSize(width: width, height: measured?.height ?? 0))
-                        previewText.frame(width: box.width, height: box.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
+                        previewText(size: measured?.font.pointSize).frame(width: box.width, height: box.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
                             .position(x: box.midX, y: box.midY).gesture(gesture(\.information, in: size))
                     }
                     if layout.showsLogo, let logo {
@@ -320,9 +319,11 @@ private struct StampLayoutPreview: View {
              (layout.dateFormat == "long" ? "17 de novembro de 2026, 08:50" : "17/11/2026 08:50")
     }
 
-    private var previewText: some View {
+    private var previewText: some View { previewText(size: nil) }
+
+    private func previewText(size: CGFloat?) -> some View {
         Text(previewString)
-            .font(.system(size: 10 * layout.informationSize * (layout.mode == .combined ? layout.combinedSize : 1), weight: .medium))
+            .font(.system(size: size ?? 10 * layout.informationSize * (layout.mode == .combined ? layout.combinedSize : 1), weight: .medium))
             .fontDesign(layout.fontStyle == "mono" ? .monospaced : layout.fontStyle == "serif" ? .serif : .default)
             .foregroundStyle(.white)
             .multilineTextAlignment(textAlignment)
