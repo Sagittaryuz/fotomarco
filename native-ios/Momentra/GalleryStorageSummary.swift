@@ -6,6 +6,7 @@ struct GalleryStorageSummary: View {
     @State private var local: StorageTotals?
     @StateObject private var google = GoogleStorageQuota()
     @State private var confirmAccess = false
+    @State private var showDetails = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -32,8 +33,12 @@ struct GalleryStorageSummary: View {
                     legend(cloud ? "Google Drive" : "Momentra (aprox.)", color: cloud ? .blue : .green, bytes: totals.primary)
                     legend(cloud ? "Outros serviços" : "Outros dados", color: cloud ? .teal : .mint, bytes: totals.other)
                 }
-                Text("\(format(max(0, totals.total - totals.used))) disponíveis")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("\(format(max(0, totals.total - totals.used))) disponíveis")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Gerenciar") { showDetails = true }.font(.caption)
+                }
             } else if cloud {
                 if google.loading { ProgressView().controlSize(.small) }
                 else if google.hasScope {
@@ -56,6 +61,9 @@ struct GalleryStorageSummary: View {
             if phase == .active {
                 if cloud { google.refresh() } else { Task { await refreshLocal() } }
             }
+        }
+        .sheet(isPresented: $showDetails) {
+            if let totals = cloud ? google.totals : local { StorageDetailView(totals: totals, cloud: cloud) }
         }
         .confirmationDialog("Para mostrar o espaço disponível, o Momentra consultará o armazenamento compartilhado da conta Google usando acesso limitado aos dados do aplicativo no Google Drive.", isPresented: $confirmAccess, titleVisibility: .visible) {
             Button("Continuar") { google.requestAccess() }
@@ -197,5 +205,65 @@ private final class GoogleStorageQuota: ObservableObject {
         var controller = scene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
         while let presented = controller?.presentedViewController { controller = presented }
         return controller
+    }
+}
+
+private struct StorageDetailView: View {
+    let totals: StorageTotals
+    let cloud: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    private func format(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 28) {
+                    Image(systemName: cloud ? "cloud.fill" : "iphone")
+                        .font(.system(size: 72)).foregroundStyle(cloud ? .blue : .green)
+                        .padding(.top, 24)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Armazenamento")
+                            Spacer()
+                            Text("\(cloud ? "" : "≈ ")\(format(totals.used)) usados de \(format(totals.total))")
+                                .foregroundStyle(.secondary)
+                        }.font(.subheadline)
+                        GeometryReader { proxy in
+                            HStack(spacing: 1) {
+                                Rectangle().fill(cloud ? Color.blue : Color.green).frame(width: proxy.size.width * totals.primaryFraction)
+                                Rectangle().fill(cloud ? Color.teal : Color.mint).frame(width: proxy.size.width * totals.otherFraction)
+                                Spacer(minLength: 0)
+                            }.background(.secondary.opacity(0.22), in: Capsule()).clipShape(Capsule())
+                        }.frame(height: 10)
+                        Text("\(format(max(0, totals.total - totals.used))) disponíveis")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    VStack(spacing: 0) {
+                        row(cloud ? "Google Drive" : "Momentra (aproximado)", value: format(totals.primary),
+                            symbol: cloud ? "folder.fill" : "camera.fill", color: cloud ? .blue : .green)
+                        Divider().padding(.leading, 52)
+                        row(cloud ? "Outros serviços" : "Outros dados", value: format(totals.other),
+                            symbol: cloud ? "cloud.fill" : "square.stack.fill", color: cloud ? .teal : .mint)
+                    }.background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                    Text(cloud ? "Outros serviços incluem o Google Fotos e o Gmail; a API não informa cada parcela separadamente." :
+                         "Os números do iPhone são aproximados e podem incluir espaço que o sistema consegue recuperar.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }.padding()
+            }
+            .navigationTitle("Gerenciar armazenamento")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Concluído") { dismiss() } } }
+        }
+    }
+    private func row(_ title: String, value: String, symbol: String, color: Color) -> some View {
+        HStack {
+            Image(systemName: symbol).foregroundStyle(color).frame(width: 32)
+            Text(title)
+            Spacer()
+            Text(value).foregroundStyle(.secondary)
+        }.padding()
     }
 }
