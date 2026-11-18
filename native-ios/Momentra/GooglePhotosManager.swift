@@ -90,7 +90,8 @@ final class GooglePhotosManager: ObservableObject {
     /// offline errors, suspension, account changes and future retries.
     func drainCloudQueue(expectedOwnerHash: String, personalConsent: Bool) {
         guard personalConsent, connected, !busy, let owner = ownerID,
-              CloudCaptureQueue.ownerHash(owner) == expectedOwnerHash else { return }
+              CloudCaptureQueue.ownerHash(owner) == expectedOwnerHash,
+              CloudStoragePreference.enabled(for: owner) else { return }
         busy = true
         Task {
             defer { busy = false }
@@ -98,15 +99,18 @@ final class GooglePhotosManager: ObservableObject {
                 let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                             appropriateFor: nil, create: true)
                 let queue = CloudCaptureQueue(directory: documents.appendingPathComponent("CloudPending"))
-                let items = try queue.entries(for: owner).filter { $0.phase == .ready }
+                let items = try queue.entries(for: owner).filter { $0.phase != .cleaned }
                 pendingCloudCaptures = items.count
-                guard !items.isEmpty else { return }
+                guard items.contains(where: { $0.phase == .ready || $0.phase == .verified || $0.phase == .cleaning }) else { return }
                 let token: String? = await withCheckedContinuation { continuation in
                     auth.freshToken(for: owner) { continuation.resume(returning: $0) }
                 }
                 guard let token, GIDSignIn.sharedInstance.currentUser?.userID == owner else { return }
                 let isCurrent: (String) async -> Bool = { expected in
-                    await MainActor.run { GIDSignIn.sharedInstance.currentUser?.userID == expected }
+                    await MainActor.run {
+                        GIDSignIn.sharedInstance.currentUser?.userID == expected &&
+                        CloudStoragePreference.enabled(for: expected)
+                    }
                 }
                 let albumID = try await GoogleAlbumCoordinator.shared.resolve(
                     directory: documents.appendingPathComponent("GooglePhotoAlbums", isDirectory: true),
@@ -120,23 +124,33 @@ final class GooglePhotosManager: ObservableObject {
                     return await uploader.upload(jpeg: bytes, captureID: receipt, owner: account,
                                                  personalConsent: true, filename: filename, format: format)
                 }
+                let verificationTransport = GooglePersonalPhotoTransport(token: token, albumID: albumID)
+                let cleanup = CloudCaptureCleanup(queue: queue, root: documents, accountIsCurrent: isCurrent) { id in
+                    (try? await verificationTransport.verifyItem(id: id)) == true
+                }
                 for item in items {
                     guard await isCurrent(owner) else { break }
-                    let profile = PhotoProfileIndex.load().captures[item.id]
-                    let originalName = profile.map {
-                        CloudProfileFilename.encode(captureID: item.id, profile: $0, originalExtension: item.originalExtension)
-                    } ?? item.id.uuidString + ".original." + item.originalExtension
-                    let stampedName = profile.map {
-                        CloudProfileFilename.encode(captureID: item.id, profile: $0)
-                    } ?? item.id.uuidString + ".jpg"
-                    switch await coordinator.send(id: item.id, owner: owner, personalConsent: personalConsent,
-                                                  originalFilename: originalName, stampedFilename: stampedName) {
-                    case .verified(_, let stampedID):
-                        try? PhotoProfileIndex.bindCloud(captureID: item.id, owner: owner, mediaID: stampedID)
+                    if item.phase == .ready {
+                        let profile = PhotoProfileIndex.load().captures[item.id]
+                        let originalName = profile.map {
+                            CloudProfileFilename.encode(captureID: item.id, profile: $0, originalExtension: item.originalExtension)
+                        } ?? item.id.uuidString + ".original." + item.originalExtension
+                        let stampedName = profile.map {
+                            CloudProfileFilename.encode(captureID: item.id, profile: $0)
+                        } ?? item.id.uuidString + ".jpg"
+                        switch await coordinator.send(id: item.id, owner: owner, personalConsent: personalConsent,
+                                                      originalFilename: originalName, stampedFilename: stampedName) {
+                        case .verified(_, let stampedID):
+                            try? PhotoProfileIndex.bindCloud(captureID: item.id, owner: owner, mediaID: stampedID)
+                        case .pending, .unavailable:
+                            continue
+                        }
+                    } else if item.phase != .verified && item.phase != .cleaning {
+                        continue
+                    }
+                    guard await isCurrent(owner) else { break }
+                    if await cleanup.clean(id: item.id, owner: owner, cloudOnlyEnabled: true) == .cleaned {
                         pendingCloudCaptures = max(0, pendingCloudCaptures - 1)
-                    case .pending, .unavailable:
-                        // Avoid a retry loop on unavailable network, changed files or ambiguous receipts.
-                        return
                     }
                 }
             } catch {
