@@ -62,6 +62,11 @@ struct CloudDeliveryPlan: Codable, Equatable {
     /// This is only one precondition: file integrity and remote receipts must
     /// also be checked before any caller removes a full-resolution local file.
     var destinationsVerified: Bool {
-        !deliveries.isEmpty && deliveries.allSatisfy { $0.phase == .verified }
+        !deliveries.isEmpty && Set(deliveries.map(\.destination)).count == deliveries.count &&
+        deliveries.allSatisfy { delivery in
+            delivery.phase == .verified && !(delivery.originalID ?? "").isEmpty &&
+            !(delivery.stampedID ?? "").isEmpty &&
+            Destination(provider: delivery.destination.provider, accountHash: delivery.destination.accountHash) != nil
+        }
     }
 }

@@ -30,4 +30,15 @@ final class CloudDeliveryPlanTests: XCTestCase {
         XCTAssertNotNil(CloudDeliveryPlan(keepLocal: true, destinations: []))
         XCTAssertNil(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: "email@example.com"))
     }
+
+    func testCorruptedPersistedReceiptCannotBeVerified() throws {
+        let plan = try XCTUnwrap(CloudDeliveryPlan(keepLocal: false, destinations: [google]))
+        let encoded = try JSONEncoder().encode(plan)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var deliveries = try XCTUnwrap(object["deliveries"] as? [[String: Any]])
+        deliveries[0]["phase"] = "verified"
+        object["deliveries"] = deliveries
+        let corrupted = try JSONSerialization.data(withJSONObject: object)
+        XCTAssertFalse(try JSONDecoder().decode(CloudDeliveryPlan.self, from: corrupted).destinationsVerified)
+    }
 }
