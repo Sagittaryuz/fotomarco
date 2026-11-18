@@ -150,14 +150,14 @@ struct CameraScreen: View {
                             .background(.black.opacity(0.75), in: Capsule())
                             .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }
-                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampPosition == "top" { liveStamp }
+                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampPosition != "top" && !showingZoomDial { liveStamp }
+                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
                     LiveRecognitionBanner(engine: camera.recognition) { text in
                         selectedRecognizedText = RecognizedTextSelection(text: text)
                     }
@@ -301,10 +301,10 @@ struct CameraScreen: View {
         .statusBarHidden()
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
-        .onAppear { if !addressPreviewMigrated { addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
+        .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); Task { await updates.check() } }
             else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
@@ -322,7 +322,7 @@ struct CameraScreen: View {
         .onChange(of: scanQR) { _, enabled in camera.recognition.setEnabled(qr: enabled, text: scanText) }
         .onChange(of: scanText) { _, enabled in camera.recognition.setEnabled(qr: scanQR, text: enabled) }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
-        .onChange(of: addressEnabled) { _, _ in refreshAddress() }
+        .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in refreshAddress() }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
@@ -336,9 +336,9 @@ struct CameraScreen: View {
     private var moreTrackedCamera: some View {
         trackedCamera
         .onChange(of: showMap) { _, _ in refreshAddress() }
-        .onChange(of: pressureEnabled) { _, enabled in pressure.setEnabled(enabled && scenePhase == .active) }
-        .onChange(of: stampProfiles.selectedID) { _, _ in refreshLogo(); publishCaptureContext() }
-        .onChange(of: stampProfiles.profiles) { _, _ in refreshLogo(); publishCaptureContext() }
+        .onChange(of: stampProfiles.selectedID) { _, _ in refreshLogo(); refreshAddress(); publishCaptureContext() }
+        .onChange(of: stampProfiles.selected.logoName) { _, _ in refreshLogo() }
+        .onChange(of: stampProfiles.selected.layout) { _, _ in publishCaptureContext() }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
@@ -406,7 +406,11 @@ struct CameraScreen: View {
                         if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
                     }
                     Section("Conta Google") {
-                        LabeledContent("Conta", value: GIDSignIn.sharedInstance.currentUser?.profile?.email ?? "Não conectada")
+                        HStack(spacing: 12) {
+                            GoogleAccountMark().frame(width: 48, height: 48)
+                                .clipShape(Circle()).accessibilityHidden(true)
+                            LabeledContent("Conta", value: GIDSignIn.sharedInstance.currentUser?.profile?.email ?? "Não conectada")
+                        }
                         if !googlePhotos.connected && googlePhotos.configured {
                             GoogleWelcomeButton { showGoogleConsent = true }.frame(height: 48).disabled(googlePhotos.busy)
                         } else if googlePhotos.connected {
@@ -433,58 +437,24 @@ struct CameraScreen: View {
                     Section("Carimbo") {
                         NavigationLink("Layout e perfis") {
                             StampLayoutEditor(store: stampProfiles, selectedLogo: $selectedLogo, logoLoading: logoLoading,
-                                              importLogo: { showLogoImport = true },
-                                              importSettings: { showSettingsImport = true },
-                                              mapEnabled: $mapEnabled)
+                                              importLogo: { showLogoImport = true })
+                        }
+                        if stampProfiles.profiles.count > 1 {
+                            Picker("Perfil ao abrir o app", selection: Binding(
+                                get: { stampProfiles.startupSelection },
+                                set: { stampProfiles.setStartup($0) }
+                            )) {
+                                Text("Usado por último").tag("last")
+                                ForEach(stampProfiles.profiles) { item in
+                                    Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id.uuidString)
+                                }
+                            }
                         }
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
-                    Picker("Tamanho do carimbo", selection: $stampSize) {
-                        Text("Normal").tag("regular")
-                        Text("Compacto").tag("compact")
-                    }.disabled(!stampEnabled)
-                    Picker("Posição do carimbo", selection: $stampPosition) {
-                        Text("Embaixo").tag("bottom")
-                        Text("Em cima").tag("top")
-                    }.disabled(!stampEnabled)
-                    Picker("Alinhamento do carimbo", selection: $stampHorizontal) {
-                        Text("Largura total").tag("auto")
-                        Text("Esquerda").tag("left")
-                        Text("Direita").tag("right")
-                    }.disabled(!stampEnabled)
-                    Text("A posição exata na foto pode diferir da prévia.").font(.footnote).foregroundStyle(.secondary)
-                    Picker("Data e hora", selection: $dateFormat) {
-                        Text("Numérica").tag("numeric")
-                        Text("Por extenso").tag("long")
-                    }.disabled(!stampEnabled)
-                    Picker("Fonte do carimbo", selection: $stampFont) {
-                        Text("Sistema").tag("system")
-                        Text("Serifada").tag("serif")
-                        Text("Monoespaçada").tag("mono")
-                    }.disabled(!stampEnabled)
                     Toggle("Salvar cópia no Fotos", isOn: $saveToPhotos)
                     Text("As capturas continuam guardadas no aplicativo. Use Capturas para compartilhá-las ou salvá-las no Fotos manualmente.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Toggle("Mapa no carimbo", isOn: $mapEnabled).disabled(!gpsEnabled || !stampEnabled)
-                    Picker("Tamanho do mapa", selection: $mapScale) {
-                        Text("Pequeno").tag("small")
-                        Text("Médio").tag("medium")
-                        Text("Grande").tag("large")
-                    }.disabled(!gpsEnabled || !stampEnabled || !mapEnabled)
-                    Picker("Posição do mapa na foto", selection: $mapCorner) {
-                        Text("Automática").tag("auto")
-                        Text("Superior esquerda").tag("top-left")
-                        Text("Superior direita").tag("top-right")
-                        Text("Inferior esquerda").tag("bottom-left")
-                        Text("Inferior direita").tag("bottom-right")
-                    }.disabled(!gpsEnabled || !stampEnabled || !mapEnabled)
-                    Text("O mapa pode ser deslocado para evitar sobreposição; a prévia é aproximada.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Toggle("Endereço no carimbo", isOn: $addressEnabled).disabled(!gpsEnabled || !stampEnabled)
-                    Toggle("Pressão do sensor", isOn: $pressureEnabled).disabled(!pressure.available || !stampEnabled)
-                    if !pressure.available { Text("Sensor de pressão indisponível neste aparelho.").font(.footnote).foregroundStyle(.secondary) }
-                    Text("Mapa e endereço usam serviços da Apple quando ativados e podem enviar a localização para obtê-los.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Section("Previsão meteorológica") {
                         Link("Ler termos da MET Norway", destination: URL(string: "https://docs.api.met.no/doc/TermsOfService")!)
@@ -662,14 +632,14 @@ struct CameraScreen: View {
 
     private var liveStamp: some View {
         HStack(spacing: 0) {
-            if stampHorizontal == "right" { Spacer(minLength: 0) }
+            if stampProfiles.selected.layout.horizontal == "right" { Spacer(minLength: 0) }
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 LiveStampView(snapshot: makeSnapshot(at: timeline.date))
-            }.frame(maxWidth: stampHorizontal == "auto" ? .infinity : 280)
-            if stampHorizontal == "left" { Spacer(minLength: 0) }
+            }.frame(maxWidth: stampProfiles.selected.layout.horizontal == "auto" ? .infinity : 280)
+            if stampProfiles.selected.layout.horizontal == "left" { Spacer(minLength: 0) }
         }.padding(.horizontal, 16)
-            .padding(.top, stampPosition == "top" ? 12 : 0)
-            .padding(.bottom, stampPosition == "top" ? 0 : 12)
+            .padding(.top, stampProfiles.selected.layout.position == "top" ? 12 : 0)
+            .padding(.bottom, stampProfiles.selected.layout.position == "top" ? 0 : 12)
     }
 
     private static func presentingController() -> UIViewController? {
@@ -680,15 +650,24 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled, mapEnabled: mapEnabled, addressEnabled: addressEnabled, cachedAddress: addressPreview.current(for: location.location, at: date), title: "", note: stampProfiles.selected.note, logo: logo, logoCorner: logoCorner, compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal, longDate: dateFormat == "long", fontStyle: stampFont, mapScale: mapScale, mapCorner: mapCorner, pressure: pressureEnabled ? pressure.sample : nil, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil, location: location.location, heading: location.heading, layout: stampProfiles.selected.layout)
+        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled,
+            mapEnabled: stampProfiles.selected.layout.showsMap, addressEnabled: stampProfiles.selected.layout.showsAddress,
+            cachedAddress: addressPreview.current(for: location.location, at: date), title: "", note: stampProfiles.selected.note,
+            logo: logo, logoCorner: "auto", compact: stampProfiles.selected.layout.compact,
+            position: stampProfiles.selected.layout.position, horizontal: stampProfiles.selected.layout.horizontal,
+            longDate: stampProfiles.selected.layout.dateFormat == "long", fontStyle: stampProfiles.selected.layout.fontStyle,
+            mapScale: stampProfiles.selected.layout.mapScale, mapCorner: "auto",
+            pressure: pressure.sample, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil,
+            location: location.location, heading: location.heading, layout: stampProfiles.selected.layout)
     }
 
     private func publishCaptureContext() {
         guard #available(iOS 18.0, *) else { return }
         let context = MomentraCaptureContext(stampEnabled: stampEnabled, gpsEnabled: gpsEnabled,
             title: "", note: String(stampProfiles.selected.note.prefix(96)),
-            compact: stampSize == "compact", position: stampPosition, horizontal: stampHorizontal,
-            longDate: dateFormat == "long", fontStyle: stampFont, aspect: photoAspect, saveToPhotos: saveToPhotos)
+            compact: stampProfiles.selected.layout.compact, position: stampProfiles.selected.layout.position,
+            horizontal: stampProfiles.selected.layout.horizontal, longDate: stampProfiles.selected.layout.dateFormat == "long",
+            fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect, saveToPhotos: saveToPhotos)
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 
@@ -704,7 +683,7 @@ struct CameraScreen: View {
     }
 
     private var canPreviewAddress: Bool {
-        scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && addressEnabled
+        scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && stampProfiles.selected.layout.showsAddress
     }
 
     private func refreshAddress() { addressPreview.update(location: location.location, enabled: canPreviewAddress) }
@@ -783,25 +762,29 @@ private struct LiveStampView: View {
                         Circle().fill(.blue).frame(width: 13, height: 13).overlay(Circle().stroke(.white, lineWidth: 2))
                     }
                 }
-                .frame(width: snapshot.mapScale == "small" ? 60 : snapshot.mapScale == "large" ? 100 : 80,
-                       height: snapshot.mapScale == "small" ? 75 : snapshot.mapScale == "large" ? 125 : 100)
+                .mapStyle(snapshot.layout.mapStyle == .satellite ? .imagery : .standard)
+                .frame(width: (snapshot.mapScale == "small" ? 60 : snapshot.mapScale == "large" ? 100 : 80) * snapshot.layout.mapSize * snapshot.layout.combinedSize,
+                       height: (snapshot.mapScale == "small" ? 75 : snapshot.mapScale == "large" ? 125 : 100) * snapshot.layout.mapSize * snapshot.layout.combinedSize)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
                 .id("\(Int(coordinate.latitude * 1000))-\(Int(coordinate.longitude * 1000))")
             }
-            VStack(alignment: .leading, spacing: 2) {
+            if snapshot.layout.showsInformation {
+            VStack(alignment: snapshot.layout.textAlignment == "right" ? .trailing : snapshot.layout.textAlignment == "center" ? .center : .leading, spacing: 2) {
                 ForEach(snapshot.lines, id: \.self) { line in
-                    Text(line).font((snapshot.compact ? Font.caption2 : Font.caption).weight(.medium)).fixedSize(horizontal: false, vertical: true)
+                    Text(line).font(.system(size: (snapshot.compact ? 10 : 12) * snapshot.layout.informationSize * snapshot.layout.combinedSize, weight: .medium)).fixedSize(horizontal: false, vertical: true)
                         .fontDesign(snapshot.fontStyle == "mono" ? .monospaced : snapshot.fontStyle == "serif" ? .serif : .default)
                 }
                 if snapshot.addressEnabled && snapshot.location != nil {
                     Text(snapshot.cachedAddress ?? "Buscando endereço…").font(.caption2).foregroundStyle(.white.opacity(0.8))
                 }
             }
+            }
             Spacer(minLength: 0)
-            if let logo = snapshot.logo {
-                Image(uiImage: logo).resizable().scaledToFit().frame(width: 38, height: 38)
+            if snapshot.layout.showsLogo, let logo = snapshot.logo {
+                Image(uiImage: logo).resizable().scaledToFit().frame(width: 38 * snapshot.layout.logoSize * snapshot.layout.combinedSize,
+                                                                 height: 38 * snapshot.layout.logoSize * snapshot.layout.combinedSize)
                     .accessibilityLabel("Logotipo do perfil")
             }
         }

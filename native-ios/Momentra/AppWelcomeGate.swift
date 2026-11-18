@@ -146,3 +146,15 @@ struct GoogleWelcomeButton: UIViewRepresentable {
         @objc func tapped() { action() }
     }
 }
+
+/// Uses the Google SDK's own icon-only artwork, avoiding a hand-drawn brand mark.
+struct GoogleAccountMark: UIViewRepresentable {
+    func makeUIView(context: Context) -> GIDSignInButton {
+        let button = GIDSignInButton()
+        button.style = .iconOnly
+        button.isUserInteractionEnabled = false
+        button.accessibilityElementsHidden = true
+        return button
+    }
+    func updateUIView(_ button: GIDSignInButton, context: Context) {}
+}

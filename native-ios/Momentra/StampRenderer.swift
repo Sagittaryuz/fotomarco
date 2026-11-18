@@ -226,7 +226,7 @@ enum StampRenderer {
         let margin = unit * 0.025
         let layout = snapshot.layout
         if let map, layout.showsMap {
-            let side = unit * (snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20)
+            let side = min(unit * 0.5, unit * (snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20) * CGFloat(layout.mapSize))
             let rect = positionedRect(size: size, element: CGSize(width: side, height: side), centre: layout.map, margin: margin)
             map.draw(in: rect)
             let markerSize = side * 0.12
@@ -241,10 +241,15 @@ enum StampRenderer {
         let text = lines.joined(separator: "\n") as NSString
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
-        paragraph.alignment = layout.information.x >= 0.5 ? .right : .left
-        let textWidth = max(1, size.width * 0.60)
+        switch layout.textAlignment {
+        case "left": paragraph.alignment = .left
+        case "center": paragraph.alignment = .center
+        case "right": paragraph.alignment = .right
+        default: paragraph.alignment = layout.information.x >= 0.5 ? .right : .left
+        }
+        let textWidth = max(1, min(size.width - margin * 2, size.width * 0.60 * CGFloat(max(1, layout.informationSize))))
         guard let measured = fitText(text, width: textWidth, maxHeight: size.height - margin * 2,
-                                     initialSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027)),
+                                     initialSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(layout.informationSize)),
                                      style: snapshot.fontStyle, paragraph: paragraph) else { return false }
         let shadow = NSShadow()
         shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
@@ -257,7 +262,7 @@ enum StampRenderer {
                                                 .paragraphStyle: paragraph, .shadow: shadow])
         }
         if layout.showsLogo, let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
-            let maxSide = unit * 0.15
+            let maxSide = min(unit * 0.35, unit * 0.15 * CGFloat(layout.logoSize))
             let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
             let logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
             logo.draw(in: positionedRect(size: size, element: logoSize, centre: layout.logo, margin: margin))
@@ -288,31 +293,39 @@ enum StampRenderer {
             }
             let unit = min(size.width, size.height)
             let margin = unit * 0.035
-            let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027))
+            let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(snapshot.layout.informationSize * snapshot.layout.combinedSize))
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byWordWrapping
-            let lines = (address.map { [$0] } ?? []) + snapshot.lines
+            switch snapshot.layout.textAlignment {
+            case "center": paragraph.alignment = .center
+            case "right": paragraph.alignment = .right
+            default: paragraph.alignment = .left
+            }
+            let lines = snapshot.layout.showsInformation ? (address.map { [$0] } ?? []) + snapshot.lines : []
             let text = lines.joined(separator: "\n") as NSString
             let mapFraction: CGFloat = snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20
-            let mapSide = map == nil ? 0 : unit * mapFraction
+            let mapSide = map == nil ? 0 : min(unit * 0.4, unit * mapFraction * CGFloat(snapshot.layout.mapSize * snapshot.layout.combinedSize))
             let separateMap = map != nil && snapshot.mapCorner != "auto"
             let inlineMapSide = separateMap ? 0 : mapSide
             let mapGap = inlineMapSide == 0 ? 0 : margin
             guard let horizontalBox = stampBox(imageSize: size, height: 1, margin: margin,
                                                 horizontal: snapshot.horizontal, position: snapshot.position) else { fits = false; return }
-            let textWidth = horizontalBox.width - margin * 2 - inlineMapSide - mapGap
             let logoSize: CGSize?
-            if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
-                let maxSide = unit * 0.15
+            if snapshot.layout.showsLogo, let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
+                let maxSide = min(unit * 0.35, unit * 0.15 * CGFloat(snapshot.layout.logoSize * snapshot.layout.combinedSize))
                 let scale = min(maxSide / logo.size.width, maxSide / logo.size.height)
                 logoSize = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
             } else { logoSize = nil }
-            let availableTextHeight = size.height - margin * (4 + (logoSize == nil ? 0 : 1) + (separateMap ? 1 : 0))
-                - (logoSize?.height ?? 0) - (separateMap ? mapSide : 0)
+            let inlineLogo = snapshot.logoCorner == "auto" ? logoSize : nil
+            let textWidth = horizontalBox.width - margin * 2 - inlineMapSide - mapGap
+                - (inlineLogo?.width ?? 0) - (inlineLogo == nil ? 0 : margin)
+            let externalLogoHeight = inlineLogo == nil ? (logoSize?.height ?? 0) : 0
+            let availableTextHeight = size.height - margin * (4 + (externalLogoHeight > 0 ? 1 : 0) + (separateMap ? 1 : 0))
+                - externalLogoHeight - (separateMap ? mapSide : 0)
             guard let layout = fitText(text, width: textWidth, maxHeight: availableTextHeight,
                                        initialSize: fontSize, style: snapshot.fontStyle, paragraph: paragraph) else { fits = false; return }
             let attrs: [NSAttributedString.Key: Any] = [.font: layout.font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
-            let height = max(layout.height, inlineMapSide) + margin * 2
+            let height = max(layout.height, inlineMapSide, inlineLogo?.height ?? 0) + margin * 2
             guard let box = stampBox(imageSize: size, height: height, margin: margin,
                                      horizontal: snapshot.horizontal, position: snapshot.position) else { fits = false; return }
             context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.65).cgColor)
@@ -339,10 +352,17 @@ enum StampRenderer {
             }
             let textRect = CGRect(x: box.minX + margin + inlineMapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
             text.draw(in: textRect, withAttributes: attrs)
-            if let logo = snapshot.logo, let logoSize {
-                guard let logoRect = StampRenderer.logoRect(imageSize: size, logoSize: logoSize, stamp: box, margin: margin,
-                                              corner: snapshot.logoCorner, stampPosition: snapshot.position,
-                                              additional: separateMapRect.map { [$0] } ?? []) else { fits = false; return }
+            if snapshot.layout.showsLogo, let logo = snapshot.logo, let logoSize {
+                let logoRect: CGRect
+                if inlineLogo != nil {
+                    logoRect = CGRect(x: box.maxX - margin - logoSize.width, y: box.minY + margin,
+                                      width: logoSize.width, height: logoSize.height)
+                } else {
+                    guard let external = StampRenderer.logoRect(imageSize: size, logoSize: logoSize, stamp: box, margin: margin,
+                                                  corner: snapshot.logoCorner, stampPosition: snapshot.position,
+                                                  additional: separateMapRect.map { [$0] } ?? []) else { fits = false; return }
+                    logoRect = external
+                }
                 logo.draw(in: logoRect)
             }
         }
@@ -437,6 +457,7 @@ enum StampMap {
         guard snapshot.mapEnabled, let location = snapshot.location else { completion(nil); return }
         let options = MKMapSnapshotter.Options()
         options.region = MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 350, longitudinalMeters: 350)
+        options.mapType = snapshot.layout.mapStyle == .satellite ? .satellite : .standard
         options.size = CGSize(width: 256, height: 256)
         let snapshotter = MKMapSnapshotter(options: options)
         var finished = false

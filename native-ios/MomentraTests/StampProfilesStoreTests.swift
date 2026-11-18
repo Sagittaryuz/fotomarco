@@ -60,4 +60,49 @@ final class StampProfilesStoreTests: XCTestCase {
         XCTAssertEqual(rect.minX, 20)
         XCTAssertEqual(rect.maxY, 1480)
     }
+
+    func testMapStylePersistsAndOldLayoutsDefaultToMap() throws {
+        let old = try JSONDecoder().decode(StampLayout.self, from: Data(#"{"mode":"separate"}"#.utf8))
+        XCTAssertEqual(old.mapStyle, .map)
+        XCTAssertEqual(old.mapSize, 1)
+        XCTAssertEqual(old.informationSize, 1)
+        XCTAssertEqual(old.logoSize, 1)
+        var updated = old
+        updated.mapStyle = .satellite
+        updated.mapSize = 1.5
+        updated.informationSize = 0.8
+        updated.logoSize = 1.2
+        let restored = try JSONDecoder().decode(StampLayout.self, from: JSONEncoder().encode(updated))
+        XCTAssertEqual(restored.mapStyle, .satellite)
+        XCTAssertEqual(restored.mapSize, 1.5, accuracy: 0.001)
+        XCTAssertEqual(restored.informationSize, 0.8, accuracy: 0.001)
+        XCTAssertEqual(restored.logoSize, 1.2, accuracy: 0.001)
+        XCTAssertEqual(restored.mode, .separate)
+    }
+
+    func testStartupCanUseLastProfileOrAFixedProfile() {
+        let store = StampProfilesStore(defaults: defaults)
+        let first = store.selectedID
+        XCTAssertTrue(store.create())
+        let second = store.selectedID
+        store.setStartup(first.uuidString)
+        let fixed = StampProfilesStore(defaults: defaults)
+        XCTAssertEqual(fixed.selectedID, first)
+        fixed.select(second)
+        let again = StampProfilesStore(defaults: defaults)
+        XCTAssertEqual(again.selectedID, first)
+        again.setStartup("last")
+        again.select(second)
+        let last = StampProfilesStore(defaults: defaults)
+        XCTAssertEqual(last.selectedID, second)
+    }
+
+    func testDeletingFixedProfileFallsBackToLastSelection() {
+        let store = StampProfilesStore(defaults: defaults)
+        XCTAssertTrue(store.create())
+        store.setStartup(store.selectedID.uuidString)
+        store.removeSelected()
+        XCTAssertEqual(store.startupSelection, "last")
+        XCTAssertEqual(store.profiles.count, 1)
+    }
 }

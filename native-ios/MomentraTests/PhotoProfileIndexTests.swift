@@ -33,6 +33,8 @@ final class PhotoProfileIndexTests: XCTestCase {
         let profile = CaptureProfileTag(id: UUID(), name: "Padrão")
         let filename = CloudProfileFilename.encode(captureID: UUID(), profile: profile)
         XCTAssertEqual(CloudProfileFilename.decode(filename), profile)
+        let original = CloudProfileFilename.encode(captureID: UUID(), profile: profile, originalExtension: "heic")
+        XCTAssertEqual(CloudProfileFilename.decode(original), profile)
         XCTAssertNil(CloudProfileFilename.decode("unrelated.jpg"))
     }
 

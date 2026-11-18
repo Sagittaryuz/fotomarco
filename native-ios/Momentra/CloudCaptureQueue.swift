@@ -11,6 +11,8 @@ struct CloudPendingCapture: Codable, Equatable, Identifiable {
     var phase: CloudCapturePhase
     var originalMediaID: String?
     var processedMediaID: String?
+    var originalFingerprint: CloudFileFingerprint?
+    var processedFingerprint: CloudFileFingerprint?
 }
 
 /// A durable journal. Credentials and full-size image bytes are not stored here.
@@ -25,19 +27,37 @@ final class CloudCaptureQueue {
     }
 
     func enqueue(id: UUID, owner: String, originalExtension: String, at date: Date = Date()) throws {
-        guard !owner.isEmpty, owner.utf8.count <= 512, Self.validExtension(originalExtension) else { throw QueueError.invalid }
+        guard !owner.isEmpty, owner.utf8.count <= 512 else { throw QueueError.invalid }
+        try enqueue(id: id, ownerHash: Self.ownerHash(owner), originalExtension: originalExtension, at: date)
+    }
+
+    func enqueue(id: UUID, ownerHash: String, originalExtension: String, at date: Date = Date()) throws {
+        guard ownerHash.utf8.count == 64,
+              ownerHash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+              Self.validExtension(originalExtension) else { throw QueueError.invalid }
         Self.lock.lock(); defer { Self.lock.unlock() }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         guard !FileManager.default.fileExists(atPath: path(for: id).path) else { throw QueueError.duplicate }
-        try write(CloudPendingCapture(id: id, ownerHash: Self.ownerHash(owner),
+        try write(CloudPendingCapture(id: id, ownerHash: ownerHash,
             originalExtension: originalExtension.lowercased(), createdAt: date,
-            phase: .awaitingPhoto, originalMediaID: nil, processedMediaID: nil))
+            phase: .awaitingPhoto, originalMediaID: nil, processedMediaID: nil,
+            originalFingerprint: nil, processedFingerprint: nil))
     }
 
-    func markReady(id: UUID) throws {
+    func markReady(id: UUID, original: URL, processed: URL) throws {
         try update(id: id) { value in
             guard value.phase == .awaitingPhoto else { throw QueueError.invalidTransition }
+            let root = directory.deletingLastPathComponent().standardizedFileURL
+            let expectedOriginal = root.appendingPathComponent("Originals", isDirectory: true)
+                .appendingPathComponent(id.uuidString + "." + value.originalExtension).standardizedFileURL
+            let expectedProcessed = root.appendingPathComponent("Processed", isDirectory: true)
+                .appendingPathComponent(id.uuidString + ".jpg").standardizedFileURL
+            guard original.standardizedFileURL == expectedOriginal, processed.standardizedFileURL == expectedProcessed else {
+                throw QueueError.invalid
+            }
+            value.originalFingerprint = try CloudFileFingerprint.read(original)
+            value.processedFingerprint = try CloudFileFingerprint.read(processed)
             value.phase = .ready
         }
     }
@@ -51,13 +71,30 @@ final class CloudCaptureQueue {
 
     func markVerified(id: UUID, originalMediaID: String, processedMediaID: String) throws {
         try update(id: id) { value in
-            guard value.phase == .ready,
+            guard value.phase == .ready, value.originalFingerprint != nil, value.processedFingerprint != nil,
                   GoogleAlbumCoordinator.validID(originalMediaID),
                   GoogleAlbumCoordinator.validID(processedMediaID) else { throw QueueError.invalidTransition }
             value.originalMediaID = originalMediaID
             value.processedMediaID = processedMediaID
             value.phase = .verified
         }
+    }
+
+    /// A true result only confirms the local files still match the verified receipt.
+    /// The caller must separately revalidate the remote account and album before cleanup.
+    func verifiedFilesStillMatch(id: UUID, owner: String, original: URL, processed: URL) throws -> Bool {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        let item = try read(id)
+        guard item.phase == .verified, item.ownerHash == Self.ownerHash(owner),
+              let expectedOriginal = item.originalFingerprint, let expectedProcessed = item.processedFingerprint,
+              item.originalMediaID != nil, item.processedMediaID != nil else { return false }
+        let root = directory.deletingLastPathComponent().standardizedFileURL
+        let originalPath = root.appendingPathComponent("Originals", isDirectory: true)
+            .appendingPathComponent(id.uuidString + "." + item.originalExtension).standardizedFileURL
+        let processedPath = root.appendingPathComponent("Processed", isDirectory: true)
+            .appendingPathComponent(id.uuidString + ".jpg").standardizedFileURL
+        guard original.standardizedFileURL == originalPath, processed.standardizedFileURL == processedPath else { return false }
+        return try CloudFileFingerprint.read(original) == expectedOriginal && CloudFileFingerprint.read(processed) == expectedProcessed
     }
 
     func entries(for owner: String) throws -> [CloudPendingCapture] {

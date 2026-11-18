@@ -9,55 +9,72 @@ struct StampProfile: Identifiable, Codable, Equatable {
     var layout: StampLayout = StampLayout()
 }
 
-/// The old keys remain intact for recovery and for older versions of the app.
+/// Legacy keys remain intact for recovery and for older app versions.
 @MainActor
 final class StampProfilesStore: ObservableObject {
     static let maximumProfiles = 5
     private let defaults: UserDefaults
     private let profilesKey = "native.stamp.layoutProfiles.v1"
     private let selectedKey = "native.stamp.selectedLayoutProfile.v1"
+    private let startupKey = "native.stamp.startupProfile.v1"
 
-    @Published private(set) var profiles: [StampProfile] {
-        didSet { persist() }
-    }
+    @Published private(set) var profiles: [StampProfile] { didSet { persist() } }
     @Published private(set) var selectedID: UUID {
         didSet { defaults.set(selectedID.uuidString, forKey: selectedKey) }
+    }
+    /// "last" or a profile UUID; only applied on a new app launch.
+    @Published private(set) var startupSelection: String {
+        didSet { defaults.set(startupSelection, forKey: startupKey) }
     }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: profilesKey),
-           let saved = try? JSONDecoder().decode([StampProfile].self, from: data),
-           !saved.isEmpty, saved.count <= Self.maximumProfiles,
-           Set(saved.map(\.id)).count == saved.count {
-            profiles = saved
-            let candidate = defaults.string(forKey: selectedKey).flatMap(UUID.init(uuidString:))
-            selectedID = saved.contains(where: { $0.id == candidate }) ? candidate! : saved[0].id
+        let profileKey = "native.stamp.layoutProfiles.v1"
+        let selectionKey = "native.stamp.selectedLayoutProfile.v1"
+        let startupKey = "native.stamp.startupProfile.v1"
+        let migrationKey = "native.stamp.profileSettingsMigrated.v1"
+        let data = defaults.data(forKey: profileKey)
+        var loaded: [StampProfile]
+        if let data, let saved = try? JSONDecoder().decode([StampProfile].self, from: data),
+           !saved.isEmpty, saved.count <= Self.maximumProfiles, Set(saved.map(\.id)).count == saved.count {
+            loaded = saved
         } else {
             let previous = defaults.string(forKey: "native.profile") ?? "HAMOA"
             let key = previous == "PIRESCO" ? "piresco" : previous == "PESSOAL" ? "pessoal" : "hamoa"
-            let initial = StampProfile(name: "Padrão",
+            loaded = [StampProfile(name: "Padrão",
                 note: defaults.string(forKey: "native.profile.\(key).note") ?? "",
-                logoName: defaults.string(forKey: "native.profile.\(key).logo") ?? "")
-            profiles = [initial]
-            selectedID = initial.id
-            // Preserve an unreadable archive separately before creating a usable default.
-            if let oldData = defaults.data(forKey: profilesKey),
-               defaults.data(forKey: profilesKey + ".recovery") == nil {
-                defaults.set(oldData, forKey: profilesKey + ".recovery")
+                logoName: defaults.string(forKey: "native.profile.\(key).logo") ?? "")]
+            if let data, defaults.data(forKey: profileKey + ".recovery") == nil {
+                defaults.set(data, forKey: profileKey + ".recovery")
             }
-            defaults.set(try? JSONEncoder().encode(profiles), forKey: profilesKey)
-            defaults.set(selectedID.uuidString, forKey: selectedKey)
         }
+        let last = defaults.string(forKey: selectionKey).flatMap(UUID.init(uuidString:))
+        let lastID = loaded.first(where: { $0.id == last })?.id ?? loaded[0].id
+        if !defaults.bool(forKey: migrationKey), let index = loaded.firstIndex(where: { $0.id == lastID }) {
+            Self.importLegacyAppearance(into: &loaded[index].layout, defaults: defaults)
+            defaults.set(true, forKey: migrationKey)
+        }
+        let savedStartup = defaults.string(forKey: startupKey) ?? "last"
+        let fixed = UUID(uuidString: savedStartup).flatMap { id in loaded.first(where: { $0.id == id })?.id }
+        self.profiles = loaded
+        self.startupSelection = fixed?.uuidString ?? "last"
+        self.selectedID = fixed ?? lastID
+        defaults.set(try? JSONEncoder().encode(loaded), forKey: profileKey)
+        defaults.set(self.selectedID.uuidString, forKey: selectionKey)
+        defaults.set(self.startupSelection, forKey: startupKey)
     }
 
-    var selected: StampProfile {
-        profiles.first(where: { $0.id == selectedID }) ?? profiles[0]
-    }
+    var selected: StampProfile { profiles.first(where: { $0.id == selectedID }) ?? profiles[0] }
 
     func select(_ id: UUID) {
         guard profiles.contains(where: { $0.id == id }) else { return }
         selectedID = id
+    }
+
+    func setStartup(_ value: String) {
+        if value == "last" { startupSelection = value; return }
+        guard let id = UUID(uuidString: value), profiles.contains(where: { $0.id == id }) else { return }
+        startupSelection = id.uuidString
     }
 
     @discardableResult
@@ -71,8 +88,10 @@ final class StampProfilesStore: ObservableObject {
 
     func removeSelected() {
         guard profiles.count > 1, let index = profiles.firstIndex(where: { $0.id == selectedID }) else { return }
+        let removed = selectedID
         profiles.remove(at: index)
         selectedID = profiles[min(index, profiles.count - 1)].id
+        if startupSelection == removed.uuidString || profiles.count == 1 { startupSelection = "last" }
     }
 
     func rename(_ value: String) { update { $0.name = String(value.prefix(60)) } }
@@ -88,9 +107,20 @@ final class StampProfilesStore: ObservableObject {
         guard let index = profiles.firstIndex(where: { $0.id == selectedID }) else { return }
         change(&profiles[index])
     }
-
     private func persist() {
         guard let data = try? JSONEncoder().encode(profiles) else { return }
         defaults.set(data, forKey: profilesKey)
+    }
+    private static func importLegacyAppearance(into layout: inout StampLayout, defaults: UserDefaults) {
+        layout.fontStyle = defaults.string(forKey: "native.stamp.font") ?? layout.fontStyle
+        layout.dateFormat = defaults.string(forKey: "native.stamp.dateFormat") ?? layout.dateFormat
+        layout.position = defaults.string(forKey: "native.stamp.position") ?? layout.position
+        layout.horizontal = defaults.string(forKey: "native.stamp.horizontal") ?? layout.horizontal
+        layout.mapScale = defaults.string(forKey: "native.map.scale") ?? layout.mapScale
+        layout.mapCorner = defaults.string(forKey: "native.map.corner") ?? layout.mapCorner
+        layout.logoCorner = defaults.string(forKey: "native.logo.corner") ?? layout.logoCorner
+        layout.compact = defaults.string(forKey: "native.stamp.size") == "compact"
+        if defaults.object(forKey: "native.map.enabled") != nil { layout.showsMap = defaults.bool(forKey: "native.map.enabled") }
+        if defaults.object(forKey: "native.address.enabled") != nil { layout.showsAddress = defaults.bool(forKey: "native.address.enabled") }
     }
 }

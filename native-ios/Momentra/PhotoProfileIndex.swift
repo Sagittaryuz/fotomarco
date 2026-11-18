@@ -142,19 +142,27 @@ enum GalleryZoom {
 }
 
 enum CloudProfileFilename {
-    static func encode(captureID: UUID, profile: CaptureProfileTag) -> String {
+    static func encode(captureID: UUID, profile: CaptureProfileTag, originalExtension: String? = nil) -> String {
         var text = String(profile.name.prefix(60))
         while text.utf8.count > 72 { text.removeLast() }
         let name = Data(text.utf8).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
-        return "MTR1.\(profile.id.uuidString).\(name).\(captureID.uuidString).jpg"
+        let suffix = originalExtension.map { ".original." + $0.lowercased() } ?? ".jpg"
+        return "MTR1.\(profile.id.uuidString).\(name).\(captureID.uuidString)" + suffix
+    }
+
+    static func isOriginal(_ filename: String) -> Bool {
+        let parts = filename.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 6 && parts[4] == "original" && decode(filename) != nil
     }
 
     static func decode(_ filename: String) -> CaptureProfileTag? {
         let parts = filename.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 5, parts[0] == "MTR1", parts[4].lowercased() == "jpg",
+        let processed = parts.count == 5 && parts[4].lowercased() == "jpg"
+        let original = parts.count == 6 && parts[4] == "original" && ["jpg", "jpeg", "heic", "heif"].contains(parts[5].lowercased())
+        guard (processed || original), parts[0] == "MTR1",
               let id = UUID(uuidString: String(parts[1])), UUID(uuidString: String(parts[3])) != nil,
               parts[2].utf8.count <= 128 else { return nil }
         var encoded = String(parts[2]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")

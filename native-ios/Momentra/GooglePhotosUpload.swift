@@ -1,5 +1,36 @@
 import Foundation
 import CryptoKit
+import ImageIO
+import UniformTypeIdentifiers
+
+enum GooglePhotoFormat: String {
+    case jpeg, heic, heif
+    var mimeType: String {
+        switch self {
+        case .jpeg: return "image/jpeg"
+        case .heic: return "image/heic"
+        case .heif: return "image/heif"
+        }
+    }
+    var fileExtension: String { self == .jpeg ? "jpg" : rawValue }
+
+    init?(fileExtension: String) {
+        switch fileExtension.lowercased() {
+        case "jpg", "jpeg": self = .jpeg
+        case "heic": self = .heic
+        case "heif": self = .heif
+        default: return nil
+        }
+    }
+
+    func accepts(_ data: Data) -> Bool {
+        if self == .jpeg { return data.count >= 4 && data.prefix(3).elementsEqual([0xff, 0xd8, 0xff]) }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let identifier = CGImageSourceGetType(source),
+              let type = UTType(identifier as String) else { return false }
+        return type.conforms(to: .heic) || type.conforms(to: .heif)
+    }
+}
 
 // Callers must obtain the user's personal-use and per-photo consent before upload.
 protocol PersonalPhotoTransport {
@@ -21,10 +52,12 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
     private let session: URLSession
     private let base = "https://photoslibrary.googleapis.com/v1"
     private let albumID: String?
+    private let photoFormat: GooglePhotoFormat
 
-    init(token: String, albumID: String? = nil, configuration: URLSessionConfiguration = .ephemeral) {
+    init(token: String, albumID: String? = nil, photoFormat: GooglePhotoFormat = .jpeg, configuration: URLSessionConfiguration = .ephemeral) {
         self.token = token
         self.albumID = albumID
+        self.photoFormat = photoFormat
         configuration.timeoutIntervalForRequest = 20
         session = URLSession(configuration: configuration, delegate: NoPhotoRedirect(), delegateQueue: nil)
     }
@@ -43,7 +76,7 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         if upload {
             request.setValue("raw", forHTTPHeaderField: "X-Goog-Upload-Protocol")
-            request.setValue("image/jpeg", forHTTPHeaderField: "X-Goog-Upload-Content-Type")
+            request.setValue(photoFormat.mimeType, forHTTPHeaderField: "X-Goog-Upload-Content-Type")
         }
         request.httpBody = body
         let (bytes, response) = try await session.bytes(for: request)
@@ -85,7 +118,23 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
             (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95
         }) else { throw URLError(.badURL) }
         let data = try await request(path: "/mediaItems/" + id, method: "GET", limit: 32768)
-        return try JSONDecoder().decode(MediaItem.self, from: data).id == id
+        guard try JSONDecoder().decode(MediaItem.self, from: data).id == id else { return false }
+        guard let albumID else { return true }
+        guard GoogleAlbumCoordinator.validID(albumID) else { throw URLError(.badURL) }
+        var pageToken: String?
+        for _ in 0..<200 {
+            var payload: [String: Any] = ["albumId": albumID, "pageSize": 100]
+            if let pageToken { payload["pageToken"] = pageToken }
+            let body = try JSONSerialization.data(withJSONObject: payload)
+            let result = try await request(path: "/mediaItems:search", method: "POST", body: body,
+                                           contentType: "application/json", limit: 512 * 1024)
+            let page = try JSONDecoder().decode(AlbumMediaPage.self, from: result)
+            if (page.mediaItems ?? []).contains(where: { $0.id == id }) { return true }
+            guard let next = page.nextPageToken, !next.isEmpty else { return false }
+            guard next.utf8.count <= 2048, next != pageToken else { throw URLError(.cannotParseResponse) }
+            pageToken = next
+        }
+        return false
     }
 
     func listAppPhotos(pageToken: String? = nil) async throws -> CloudPhotoPage {
@@ -122,6 +171,10 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
     }
 
     private struct MediaItem: Decodable { let id: String }
+    private struct AlbumMediaPage: Decodable {
+        let mediaItems: [MediaItem]?
+        let nextPageToken: String?
+    }
     private struct CreateResponse: Decodable {
         struct Result: Decodable {
             struct Status: Decodable { let code: Int? }
@@ -174,10 +227,10 @@ actor PersonalPhotoUploader {
         self.accountIsCurrent = accountIsCurrent
     }
 
-    func upload(jpeg: Data, captureID: UUID, owner: String, personalConsent: Bool, filename: String? = nil) async -> PersonalUploadOutcome {
+    func upload(jpeg: Data, captureID: UUID, owner: String, personalConsent: Bool, filename: String? = nil, format: GooglePhotoFormat = .jpeg) async -> PersonalUploadOutcome {
         guard personalConsent, !owner.isEmpty, owner.utf8.count <= 512,
-              jpeg.count >= 4, jpeg.count <= 20 * 1024 * 1024,
-              jpeg.prefix(3).elementsEqual([0xff, 0xd8, 0xff]) else { return .failed }
+              jpeg.count >= 4, jpeg.count <= 200 * 1024 * 1024,
+              format.accepts(jpeg) else { return .failed }
         guard await accountIsCurrent(owner) else { return .failed }
         let hash = SHA256.hash(data: Data(owner.utf8)).map { String(format: "%02x", $0) }.joined()
         let fileHash = SHA256.hash(data: jpeg).map { String(format: "%02x", $0) }.joined()
@@ -208,7 +261,7 @@ actor PersonalPhotoUploader {
         } catch { return .failed }
         guard await accountIsCurrent(owner) else { return .uncertain }
         let id: String
-        do { id = try await transport.createItem(uploadToken: token, filename: filename ?? captureID.uuidString + ".jpg") }
+        do { id = try await transport.createItem(uploadToken: token, filename: filename ?? captureID.uuidString + "." + format.fileExtension) }
         catch { return .uncertain }
         guard Self.validID(id) else { return .uncertain }
         do {

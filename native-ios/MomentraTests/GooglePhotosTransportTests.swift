@@ -63,6 +63,18 @@ final class GooglePhotosTransportTests: XCTestCase {
         XCTAssertEqual(json["albumId"] as? String, "album1")
     }
 
+    func testOriginalHEICUploadDeclaresItsRealType() async throws {
+        PhotoURLProtocol.responseBody = Data("upload-token".utf8)
+        PhotoURLProtocol.capturedRequest = nil
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [PhotoURLProtocol.self]
+        let transport = GooglePersonalPhotoTransport(token: "test-token", photoFormat: .heic, configuration: configuration)
+        _ = try await transport.uploadBytes(Data([1, 2, 3, 4]))
+        XCTAssertEqual(PhotoURLProtocol.capturedRequest?.value(forHTTPHeaderField: "X-Goog-Upload-Content-Type"), "image/heic")
+        XCTAssertFalse(GooglePhotoFormat.heic.accepts(Data([1, 2, 3, 4])))
+        XCTAssertEqual(GooglePhotoFormat(fileExtension: "HEIC"), .heic)
+    }
+
     func testOversizedResponseIsRejected() async {
         PhotoURLProtocol.responseBody = Data(repeating: 65, count: 8193)
         do {

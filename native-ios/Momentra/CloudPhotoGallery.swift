@@ -55,7 +55,15 @@ struct CloudPhotoGallery: View {
                                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: columnCount), spacing: 3) {
                                     ForEach(group.items) { item in
                                         if let url = item.productURL {
-                                            Link(destination: url) { CloudThumbnail(url: item.thumbnailURL) }
+                                            Link(destination: url) {
+                                                CloudThumbnail(url: item.thumbnailURL)
+                                                    .overlay(alignment: .bottomLeading) {
+                                                        if CloudProfileFilename.isOriginal(item.name) {
+                                                            Text("Original").font(.caption2.bold()).padding(4)
+                                                                .background(.black.opacity(0.7), in: Capsule()).padding(4)
+                                                        }
+                                                    }
+                                            }
                                                 .accessibilityLabel("Abrir \(item.name) no Google Fotos")
                                         } else {
                                             CloudThumbnail(url: item.thumbnailURL).accessibilityLabel(item.name)
