@@ -68,4 +68,33 @@ final class CloudPairUploadCoordinatorTests: XCTestCase {
         let calls = await mock.received()
         XCTAssertTrue(calls.isEmpty)
     }
+    func testChangedFileRemainsLocalAndIsNotUploaded() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID(), owner = "person-a"
+        let a = root.appendingPathComponent("Originals"), b = root.appendingPathComponent("Processed")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        let original = a.appendingPathComponent(id.uuidString + ".jpg")
+        let stamped = b.appendingPathComponent(id.uuidString + ".jpg")
+        try Data("before".utf8).write(to: original)
+        try Data("stamped".utf8).write(to: stamped)
+        let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
+        try queue.enqueue(id: id, owner: owner, originalExtension: "jpg")
+        try queue.markReady(id: id, original: original, processed: stamped)
+        try Data("modified".utf8).write(to: original)
+        let mock = PairTransportMock()
+        let coordinator = CloudPairUploadCoordinator(queue: queue, root: root, accountIsCurrent: { $0 == owner }) {
+            _, receipt, _, _, _ in await mock.upload(receipt)
+        }
+        let result = await coordinator.send(id: id, owner: owner, personalConsent: true,
+                                            originalFilename: "original.jpg", stampedFilename: "stamped.jpg")
+        XCTAssertEqual(result, .unavailable)
+        let calls = await mock.received()
+        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(try queue.entries(for: owner).first?.phase, .ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stamped.path))
+    }
+
 }

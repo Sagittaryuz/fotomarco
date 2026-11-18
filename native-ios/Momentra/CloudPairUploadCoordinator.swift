@@ -64,7 +64,7 @@ actor CloudPairUploadCoordinator {
 
     private func safeBytes(_ url: URL, expected: CloudFileFingerprint) throws -> Data {
         guard try CloudFileFingerprint.read(url) == expected else { throw CocoaError(.fileReadCorruptFile) }
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        let data = try Data(contentsOf: url)
         guard Int64(data.count) == expected.byteCount,
               SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == expected.sha256 else {
             throw CocoaError(.fileReadCorruptFile)
