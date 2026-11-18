@@ -40,6 +40,7 @@ enum VideoStampRenderer {
             guard !Task.isCancelled else { return }
             await withCheckedContinuation { continuation in
                 exporter.exportAsynchronously { continuation.resume() }
+                if Task.isCancelled { exporter.cancelExport() }
             }
         } onCancel: {
             exporter.cancelExport()

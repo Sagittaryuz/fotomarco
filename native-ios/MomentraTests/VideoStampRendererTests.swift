@@ -4,24 +4,6 @@ import UIKit
 import CoreVideo
 @testable import Momentra
 
-private final class VideoTestDeadline: @unchecked Sendable {
-    private let lock = NSLock()
-    private var completed = false
-    private let continuation: CheckedContinuation<Void, Error>
-
-    init(_ continuation: CheckedContinuation<Void, Error>) { self.continuation = continuation }
-
-    @discardableResult
-    func resolve(_ result: Result<Void, Error>) -> Bool {
-        lock.lock()
-        let shouldResolve = !completed
-        completed = true
-        lock.unlock()
-        if shouldResolve { continuation.resume(with: result) }
-        return shouldResolve
-    }
-}
-
 final class VideoStampRendererTests: XCTestCase {
     func testExportStampsVideoAndPreservesOriginal() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -63,9 +45,10 @@ final class VideoStampRendererTests: XCTestCase {
         let exporter = try XCTUnwrap(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
         exporter.outputURL = portrait
         exporter.outputFileType = .mov
-        try await boundedFixtureExport(exporter)
+        await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+        guard exporter.status == .completed else { throw exporter.error ?? NSError(domain: "VideoOrientationTest", code: 1) }
         let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil)
-        try await boundedPortraitExport(source: portrait, destination: output, snapshot: snapshot)
+        try await VideoStampRenderer.export(source: portrait, destination: output, snapshot: snapshot, map: nil, address: nil)
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: output))
         generator.appliesPreferredTrackTransform = true
         let frame = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
@@ -115,38 +98,6 @@ final class VideoStampRendererTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
     }
 
-    private func boundedFixtureExport(_ exporter: AVAssetExportSession) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let gate = VideoTestDeadline(continuation)
-            exporter.exportAsynchronously {
-                if exporter.status == .completed { gate.resolve(.success(())) }
-                else { gate.resolve(.failure(exporter.error ?? NSError(domain: "VideoOrientationTest", code: 1))) }
-            }
-            Task.detached {
-                try? await Task.sleep(for: .seconds(90))
-                if gate.resolve(.failure(NSError(domain: "VideoOrientationTestTimeout", code: 1))) {
-                    exporter.cancelExport()
-                }
-            }
-        }
-    }
-
-    private func boundedPortraitExport(source: URL, destination: URL, snapshot: StampSnapshot) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let gate = VideoTestDeadline(continuation)
-            let work = Task {
-                do {
-                    try await VideoStampRenderer.export(source: source, destination: destination, snapshot: snapshot, map: nil, address: nil)
-                    gate.resolve(.success(()))
-                } catch { gate.resolve(.failure(error)) }
-            }
-            Task.detached {
-                try? await Task.sleep(for: .seconds(120))
-                if gate.resolve(.failure(NSError(domain: "VideoOrientationTestTimeout", code: 2))) { work.cancel() }
-            }
-        }
-    }
-
     private func makeTone(at url: URL) throws {
         let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
         let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100))
@@ -176,6 +127,24 @@ final class VideoStampRendererTests: XCTestCase {
         exporter.outputFileType = .mov
         await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
         guard exporter.status == .completed else { throw exporter.error ?? NSError(domain: "VideoAudioTest", code: 2) }
+    }
+
+    func testCancelledExportKeepsOriginalAndDoesNotPublishOutput() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let source = root.appendingPathComponent("original.mov")
+        let output = root.appendingPathComponent("stamped.mov")
+        try await makeVideo(at: source)
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil)
+        let work = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            try await VideoStampRenderer.export(source: source, destination: output, snapshot: snapshot, map: nil, address: nil)
+        }
+        do { try await work.value; XCTFail("A exportação cancelada não deve ser publicada") }
+        catch {}
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
 
     func testMissingSourceDoesNotCreateAnOutput() async {
