@@ -6,7 +6,7 @@ struct ZoomDialView: View {
     let range: ClosedRange<CGFloat>
     let presets: [CGFloat]
     let setZoom: (CGFloat) -> Void
-    let dismiss: () -> Void
+    let editingChanged: (Bool) -> Void
     @State private var dragStart: CGFloat?
     private let angularScale: CGFloat = 0.52
 
@@ -47,19 +47,19 @@ struct ZoomDialView: View {
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 2)
             .onChanged { gesture in
-                if dragStart == nil { dragStart = value }
+                if dragStart == nil { dragStart = value; editingChanged(true) }
                 let next = (dragStart ?? value) * exp(gesture.translation.width / 150)
                 setZoom(min(range.upperBound, max(range.lowerBound, next)))
             }
-            .onEnded { _ in dragStart = nil })
-        .onTapGesture { dismiss() }
+            .onEnded { _ in dragStart = nil; editingChanged(false) })
         .accessibilityElement()
         .accessibilityLabel("Zoom da câmera")
         .accessibilityValue(String(format: "%.1f vezes", value))
         .accessibilityAdjustableAction { direction in
             let factor: CGFloat = direction == .increment ? 1.1 : 1 / 1.1
             setZoom(min(range.upperBound, max(range.lowerBound, value * factor)))
+            editingChanged(false)
         }
-        .accessibilityHint("Deslize para ajustar. Toque para fechar.")
+        .accessibilityHint("Deslize para ajustar; o controle fecha após um segundo.")
     }
 }

@@ -47,7 +47,10 @@ struct CameraScreen: View {
     @AppStorage("native.profile.hamoa.logo") private var hamoaLogo = ""
     @AppStorage("native.profile.piresco.logo") private var pirescoLogo = ""
     @AppStorage("native.profile.pessoal.logo") private var pessoalLogo = ""
-    @State private var showScanner = false
+    @State private var showAspectPanel = false
+    @State private var flashNotice: String?
+    @State private var flashNoticeTask: Task<Void, Never>?
+    @State private var selectedRecognizedText: RecognizedTextSelection?
     @State private var showSettings = false
     @State private var showOriginals = false
     @State private var showMap = false
@@ -66,6 +69,7 @@ struct CameraScreen: View {
     @State private var logo: UIImage?
     @State private var galleryThumbnail: UIImage?
     @State private var showingZoomDial = false
+    @State private var zoomDismissTask: Task<Void, Never>?
     @State private var quickRecording = false
     @State private var quickReleasePending = false
     @State private var suppressQuickPhoto = false
@@ -77,33 +81,22 @@ struct CameraScreen: View {
                 Color.black.ignoresSafeArea()
                 CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
                     .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
+                    .clipped().contentShape(Rectangle())
+                    .onTapGesture { dismissZoomDial() }
                 if showGrid {
                     CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
                 }
                 VStack(spacing: 0) {
+                    Text("Momentra.").font(.headline).padding(.top, 4).padding(.bottom, 4)
                     HStack {
-                        Spacer()
-                        Text("Momentra.").font(.headline)
-                        Spacer()
-                    }.overlay(alignment: .trailing) {
-                        if scanQR || scanText {
-                            Button { showScanner = true } label: { Image(systemName: "viewfinder").frame(width: 44, height: 44) }
-                                .accessibilityLabel("Ler QR code ou texto")
-                                .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
-                        }
-                    }.padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 4)
-                    HStack {
-                        Menu {
-                            Button("Desligado") { camera.flashMode = .off }
-                            Button("Automático") { camera.flashMode = .auto }
-                            Button("Ligado") { camera.flashMode = .on }
-                        } label: {
+                        Button { cycleFlash() } label: {
                             Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
-                                .font(.title2).frame(width: 44, height: 44)
+                                .font(.title2).foregroundStyle(camera.flashMode == .off ? Color.white : Color.yellow)
+                                .frame(width: 44, height: 44)
                         }
                         .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching || countdown > 0)
                         .accessibilityLabel("Flash")
+                        .accessibilityValue(camera.flashMode == .off ? "Desativado" : camera.flashMode == .auto ? "Automático" : "Ativado")
                         Spacer(minLength: 0)
                         Menu {
                             Button("Desligado") { timerSeconds = 0 }
@@ -118,10 +111,8 @@ struct CameraScreen: View {
                         .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                         .accessibilityLabel("Temporizador")
                         Spacer(minLength: 0)
-                        Menu {
-                            ForEach(PhotoAspect.allCases, id: \.rawValue) { aspect in
-                                Button(aspect.rawValue) { photoAspect = aspect.rawValue }
-                            }
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel.toggle() }
                         } label: {
                             Text(photoAspect).font(.caption.bold()).frame(width: 44, height: 44)
                         }
@@ -138,6 +129,13 @@ struct CameraScreen: View {
                                 }
                         }.accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }.padding(.horizontal, 28).padding(.bottom, 6)
+                    if let flashNotice {
+                        Text(flashNotice)
+                            .font(.caption.weight(.medium)).foregroundStyle(.black)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(camera.flashMode == .off ? Color.white : Color.yellow, in: RoundedRectangle(cornerRadius: 6))
+                            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    }
                     if let version = updates.availableVersion {
                         Button("Atualização \(version) disponível") { showSettings = true }
                             .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
@@ -152,15 +150,19 @@ struct CameraScreen: View {
                         Spacer(minLength: 8)
                     }
                     if mode == .photo && stampEnabled && stampPosition != "top" && !showingZoomDial { liveStamp }
+                    LiveRecognitionBanner(engine: camera.recognition) { text in
+                        selectedRecognizedText = RecognizedTextSelection(text: text)
+                    }
                     if showingZoomDial {
-                        ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, dismiss: { withAnimation(.easeInOut(duration: 0.2)) { showingZoomDial = false } })
-                            .frame(height: 132).transition(.opacity.combined(with: .move(edge: .bottom)))
+                        ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, editingChanged: zoomEditingChanged)
+                            .frame(height: 132).transition(.move(edge: .bottom))
                     } else if !camera.zoomOptions.isEmpty {
                         HStack(spacing: 0) {
                             ForEach(camera.zoomOptions, id: \.self) { factor in
                                 Button {
                                     camera.setZoom(factor)
-                                    withAnimation(.easeInOut(duration: 0.2)) { showingZoomDial = true }
+                                    withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
+                                    scheduleZoomDismiss()
                                 } label: {
                                     let selected = abs(camera.zoomFactor - factor) < 0.01
                                     Text(factor == 0.5 ? "0,5" : "\(Int(factor))\(selected ? "×" : "")")
@@ -230,6 +232,11 @@ struct CameraScreen: View {
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Abrir mapa")
                     }.padding(.horizontal, max(28, geometry.size.width * 0.08)).padding(.bottom, 16)
+                    if showAspectPanel {
+                        PhotoAspectPanel(selection: $photoAspect) {
+                            withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel = false }
+                        }.transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
                     HStack(spacing: 10) {
                         Button { showOriginals = true } label: {
                             Group {
@@ -267,6 +274,7 @@ struct CameraScreen: View {
                     }
                     .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 12)
                     .background(Color.black)
+                    }
                 }.foregroundStyle(.white)
             }
         }
@@ -275,10 +283,10 @@ struct CameraScreen: View {
     private var observedCamera: some View {
         cameraContent
         .statusBarHidden()
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showScanner && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
-        .onAppear { if !addressPreviewMigrated { addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
-        .onDisappear { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onAppear { if !addressPreviewMigrated { addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshLogo(); refreshAddress(); publishCaptureContext() }
+        .onDisappear { flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }
             else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
@@ -291,6 +299,8 @@ struct CameraScreen: View {
 
     private var trackedCamera: some View {
         observedCamera
+        .onChange(of: scanQR) { _, enabled in camera.recognition.setEnabled(qr: enabled, text: scanText) }
+        .onChange(of: scanText) { _, enabled in camera.recognition.setEnabled(qr: scanQR, text: enabled) }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
         .onChange(of: addressEnabled) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
@@ -325,10 +335,7 @@ struct CameraScreen: View {
 
     var body: some View {
         trackedCamera
-        .onChange(of: showScanner) { _, showing in
-            if showing { camera.stop() } else if scenePhase == .active { camera.start() }
-        }
-        .sheet(isPresented: $showScanner) { CameraScannerView(qrEnabled: scanQR, textEnabled: scanText) }
+        .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
@@ -385,8 +392,12 @@ struct CameraScreen: View {
                         NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
                         Toggle("Escanear QR Codes", isOn: $scanQR)
                         Toggle("Mostrar Texto Detectado", isOn: $scanText)
-                        Text("Use o botão de leitura na câmera para escanear QR Codes ou selecionar texto.")
+                        Text("QR Codes e textos são reconhecidos automaticamente na prévia. Toque no resultado para abrir ou selecionar.")
                             .font(.footnote).foregroundStyle(.secondary)
+                        if !camera.recognition.available {
+                            Text("A leitura automática não está disponível com a configuração atual da câmera.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                     }
                     Section("Composição") {
                         Toggle("Grade", isOn: $showGrid)
@@ -562,6 +573,39 @@ struct CameraScreen: View {
                     Button("OK") { importMessage = nil }
                 } message: { Text(importMessage ?? "") }
             }
+    }
+
+    private func zoomEditingChanged(_ editing: Bool) {
+        zoomDismissTask?.cancel()
+        if !editing { scheduleZoomDismiss() }
+    }
+
+    private func scheduleZoomDismiss() {
+        zoomDismissTask?.cancel()
+        zoomDismissTask = Task {
+            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.22)) { showingZoomDial = false }
+        }
+    }
+
+    private func dismissZoomDial() {
+        guard showingZoomDial else { return }
+        zoomDismissTask?.cancel()
+        withAnimation(.easeIn(duration: 0.22)) { showingZoomDial = false }
+    }
+
+    private func cycleFlash() {
+        let next = FlashCycle.next(current: camera.flashMode, supported: camera.availableFlashModes)
+        camera.flashMode = next
+        let label = next == .on ? "FLASH ATIVADO" : next == .auto ? "FLASH AUTOMÁTICO" : "FLASH DESATIVADO"
+        flashNoticeTask?.cancel()
+        withAnimation(.easeOut(duration: 0.18)) { flashNotice = label }
+        flashNoticeTask = Task {
+            do { try await Task.sleep(for: .seconds(1.5)) } catch { return }
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.25)) { flashNotice = nil }
+        }
     }
 
     private func cancelCountdown() {

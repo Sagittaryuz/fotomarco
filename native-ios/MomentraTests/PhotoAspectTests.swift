@@ -7,7 +7,7 @@ final class PhotoAspectTests: XCTestCase {
         for source in [CGSize(width: 4032, height: 3024), CGSize(width: 3024, height: 4032)] {
             for aspect in PhotoAspect.allCases {
                 let crop = try XCTUnwrap(aspect.crop(in: source))
-                let expected: CGFloat = aspect == .standard ? 4.0 / 3.0 : 16.0 / 9.0
+                let expected: CGFloat = aspect == .standard ? 4.0 / 3.0 : aspect == .wide ? 16.0 / 9.0 : 1
                 let actual = source.width >= source.height ? crop.width / crop.height : crop.height / crop.width
                 XCTAssertEqual(actual, expected, accuracy: 0.002)
                 XCTAssertLessThanOrEqual(crop.maxX, source.width)
@@ -27,7 +27,7 @@ final class PhotoAspectTests: XCTestCase {
         for bounds in [CGSize(width: 390, height: 844), CGSize(width: 844, height: 390)] {
             for aspect in PhotoAspect.allCases {
                 let size = try XCTUnwrap(aspect.fittedSize(in: bounds))
-                let ratio: CGFloat = aspect == .standard ? 4.0 / 3.0 : 16.0 / 9.0
+                let ratio: CGFloat = aspect == .standard ? 4.0 / 3.0 : aspect == .wide ? 16.0 / 9.0 : 1
                 let actual = bounds.width >= bounds.height ? size.width / size.height : size.height / size.width
                 XCTAssertEqual(actual, ratio, accuracy: 0.0001)
                 XCTAssertLessThanOrEqual(size.width, bounds.width)
@@ -48,5 +48,9 @@ final class PhotoAspectTests: XCTestCase {
         let result = try XCTUnwrap(UIImage(data: output))
         XCTAssertEqual(result.size.width, 400, accuracy: 1)
         XCTAssertEqual(result.size.height, 225, accuracy: 1)
+        let squareOutput = try XCTUnwrap(StampRenderer.render(input, aspect: .square, snapshot: nil))
+        let square = try XCTUnwrap(UIImage(data: squareOutput))
+        XCTAssertEqual(square.size.width, 300, accuracy: 1)
+        XCTAssertEqual(square.size.height, 300, accuracy: 1)
     }
 }

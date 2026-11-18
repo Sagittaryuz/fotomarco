@@ -9,6 +9,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private let queue = DispatchQueue(label: "br.com.momentra.camera.session")
     private let photoOutput = AVCapturePhotoOutput()
     private let movieOutput = AVCaptureMovieFileOutput()
+    private let recognitionOutput = AVCaptureVideoDataOutput()
+    let recognition = LiveRecognitionEngine()
     private var input: AVCaptureDeviceInput?
     private var microphoneInput: AVCaptureDeviceInput?
     private var configured = false
@@ -32,6 +34,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     @Published private(set) var zoomFactor: CGFloat = 1
     @Published private(set) var zoomRange: ClosedRange<CGFloat> = 1...1
     @Published private(set) var hasFlash = false
+    @Published private(set) var availableFlashModes: [AVCaptureDevice.FlashMode] = [.off]
     @Published private(set) var activeDevice: AVCaptureDevice?
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
 
@@ -67,10 +70,21 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         session.addOutput(photoOutput)
         let supportsVideo = session.canAddOutput(movieOutput)
         if supportsVideo { session.addOutput(movieOutput) }
+        if session.canAddOutput(recognitionOutput) {
+            recognitionOutput.alwaysDiscardsLateVideoFrames = true
+            recognitionOutput.setSampleBufferDelegate(recognition, queue: recognition.queue)
+            session.addOutput(recognitionOutput)
+        } else { recognition.setUnavailable() }
         input = candidate
         configured = true
         DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo; self.activeDevice = device }
         resetZoom(for: device)
+        queue.async { self.publishFlashModes(for: device) }
+    }
+
+    private func publishFlashModes(for device: AVCaptureDevice) {
+        let modes = device.hasFlash ? photoOutput.supportedFlashModes : [.off]
+        DispatchQueue.main.async { self.availableFlashModes = modes }
     }
 
     func stop() {
@@ -82,6 +96,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = true }
             } else if self.session.isRunning { self.session.stopRunning() }
         }
+        recognition.clear()
         DispatchQueue.main.async { self.ready = false }
     }
 
@@ -128,6 +143,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.session.commitConfiguration()
                 DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.activeDevice = device }
                 self.resetZoom(for: device)
+                self.publishFlashModes(for: device)
             } else {
                 if self.session.canAddInput(previous) { self.session.addInput(previous) }
                 else {
@@ -145,7 +161,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     func updateCaptureRotation(_ angle: CGFloat) {
-        queue.async { self.captureRotation = angle }
+        queue.async {
+            self.captureRotation = angle
+            self.applyCaptureRotation(to: self.recognitionOutput.connection(with: .video))
+        }
     }
 
     private func applyCaptureRotation(to connection: AVCaptureConnection?) {

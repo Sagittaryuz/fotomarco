@@ -15,5 +15,5 @@ struct ZoomScale {
         return target >= minimum && target <= maximum ? target : nil
     }
 
-    var options: [CGFloat] { [CGFloat(0.5), 1, 2, 3].filter { deviceFactor(for: $0) != nil } }
+    var options: [CGFloat] { [CGFloat(0.5), 1, 2, 4, 8].filter { deviceFactor(for: $0) != nil } }
 }
