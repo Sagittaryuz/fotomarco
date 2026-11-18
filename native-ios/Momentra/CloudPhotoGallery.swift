@@ -115,6 +115,9 @@ struct CloudPhotoGallery: View {
                 }
             }
         }
+        .onChange(of: googlePhotos.cloudPhotos) { _, photos in
+            selectedIDs.formIntersection(Set(photos.map(\.id)))
+        }
     }
 }
 

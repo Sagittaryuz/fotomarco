@@ -166,7 +166,10 @@ struct OriginalsView: View {
             }.value
             guard reloadToken == token else { return }
             profileLookup = result.0
-            if let loaded = result.1 { files = loaded }
+            if let loaded = result.1 {
+                files = loaded
+                selectedCaptureIDs.formIntersection(Set(loaded.map(\.id)))
+            }
             else { message = "Não foi possível abrir as capturas guardadas." }
         }
     }

@@ -103,6 +103,7 @@ struct DevicePhotoGallery: View {
         var list: [DeviceAsset] = []
         result.enumerateObjects { asset, _, _ in list.append(DeviceAsset(asset: asset)) }
         assets = list
+        selectedIDs.formIntersection(Set(list.map(\.id)))
     }
 }
 
