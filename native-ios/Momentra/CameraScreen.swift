@@ -176,6 +176,10 @@ struct CameraScreen: View {
                 }
                 VStack(spacing: 0) {
                     cameraHeader
+                    if camera.processingVideos > 0 && !camera.isRecording {
+                        Text(camera.processingVideos == 1 ? "Aplicando carimbo ao vídeo…" : "Aplicando carimbo a \(camera.processingVideos) vídeos…")
+                            .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
+                    }
                     if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {

@@ -1,5 +1,6 @@
 import XCTest
 import AVFoundation
+import UIKit
 import CoreVideo
 @testable import Momentra
 
@@ -22,6 +23,13 @@ final class VideoStampRendererTests: XCTestCase {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         let frame = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
+        if let data = UIImage(cgImage: frame).pngData() {
+            print("MOMENTRA_SYNTHETIC_FRAME:" + data.base64EncodedString())
+        }
+        if let overlay = StampRenderer.overlay(size: CGSize(width: 160, height: 120), snapshot: snapshot, map: nil, address: nil),
+           let data = overlay.pngData() {
+            print("MOMENTRA_SYNTHETIC_OVERLAY:" + data.base64EncodedString())
+        }
         XCTAssertGreaterThan(try darkPixels(in: frame), 30, "O quadro deve conter o carimbo escuro")
     }
 

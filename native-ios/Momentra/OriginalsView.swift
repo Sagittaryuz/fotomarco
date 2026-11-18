@@ -116,6 +116,13 @@ struct OriginalsView: View {
                             ZStack(alignment: .bottomTrailing) {
                                 Button { selectedCapture = item.url } label: {
                                     Thumbnail(url: item.url, isVideo: item.isVideo)
+                                        .overlay(alignment: .topLeading) {
+                                            if item.isVideo {
+                                                Text(item.isProcessed ? "Com carimbo" : "Original")
+                                                    .font(.caption2.bold()).foregroundStyle(.white).padding(4)
+                                                    .background(.black.opacity(0.7), in: Capsule()).padding(4)
+                                            }
+                                        }
                                 }.buttonStyle(.plain).accessibilityLabel("Abrir captura")
                                 Menu {
                                     ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
