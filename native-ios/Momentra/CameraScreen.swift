@@ -77,6 +77,7 @@ struct CameraScreen: View {
     @State private var galleryThumbnail: UIImage?
     @State private var showingZoomDial = false
     @State private var zoomDismissTask: Task<Void, Never>?
+    @State private var zoomPresetDragStart: CGFloat?
     @State private var quickRecording = false
     @State private var quickRecordingLocked = false
     @State private var quickZoomStart: CGFloat = 1
@@ -206,6 +207,7 @@ struct CameraScreen: View {
                         }
                     }
                     VStack(spacing: 0) {
+                    Group {
                     if showingZoomDial {
                         ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, editingChanged: zoomEditingChanged)
                             .frame(height: 132).transition(.move(edge: .bottom))
@@ -233,6 +235,45 @@ struct CameraScreen: View {
                             }
                         }.padding(.bottom, 8)
                     }
+                    }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 10)
+                            .onChanged { gesture in
+                                guard zoomPresetDragStart != nil || !showingZoomDial else { return }
+                                if zoomPresetDragStart == nil {
+                                    zoomPresetDragStart = camera.zoomFactor
+                                    zoomEditingChanged(true)
+                                    withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
+                                }
+                                let start = zoomPresetDragStart ?? camera.zoomFactor
+                                camera.setZoom(min(camera.zoomRange.upperBound, max(camera.zoomRange.lowerBound,
+                                    start * exp(gesture.translation.width / 150))))
+                            }
+                            .onEnded { _ in
+                                guard zoomPresetDragStart != nil else { return }
+                                zoomPresetDragStart = nil; zoomEditingChanged(false)
+                            }
+                    )
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35).sequenced(before: DragGesture(minimumDistance: 0))
+                            .onChanged { phase in
+                                switch phase {
+                                case .first(true), .second(true, nil):
+                                    guard zoomPresetDragStart == nil, !showingZoomDial else { return }
+                                    zoomPresetDragStart = camera.zoomFactor; zoomEditingChanged(true)
+                                    withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
+                                case .second(true, let drag?):
+                                    guard let start = zoomPresetDragStart else { return }
+                                    camera.setZoom(min(camera.zoomRange.upperBound, max(camera.zoomRange.lowerBound,
+                                        start * exp(drag.translation.width / 150))))
+                                default: break
+                                }
+                            }
+                            .onEnded { _ in
+                                guard zoomPresetDragStart != nil else { return }
+                                zoomPresetDragStart = nil; zoomEditingChanged(false)
+                            }
+                    )
                     HStack {
                         Menu {
                             ForEach(stampProfiles.profiles) { item in
@@ -513,7 +554,14 @@ struct CameraScreen: View {
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
                             if directUpdate.ready {
-                                Button("Atualizar agora") { Task { await directUpdate.install(expectedVersion: version) } }
+                                Button("Atualizar agora") {
+                                    Task {
+                                        await directUpdate.install(expectedVersion: version) {
+                                            !camera.isCapturing && !camera.isSwitching && !camera.isRecording &&
+                                                !camera.isFinishingRecording && camera.processingVideos == 0 && !googlePhotos.busy
+                                        }
+                                    }
+                                }
                                     .disabled(directUpdate.busy)
                             } else {
                                 Text("Para atualizar diretamente, ative uma vez pelo link pessoal de instalação.")
@@ -575,10 +623,10 @@ struct CameraScreen: View {
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
-                    Toggle("Salvar cópia no Fotos", isOn: $saveToPhotos)
+                    Toggle("Salvar cópia no armazenamento interno", isOn: $saveToPhotos)
                         .disabled(selectedCloudHash != nil)
                     Text(selectedCloudHash == nil
-                         ? "As capturas continuam guardadas no aplicativo. Use Capturas para compartilhá-las ou salvá-las no Fotos manualmente."
+                         ? "Adiciona uma cópia à biblioteca Fotos do iPhone. A opção de armazenamento abaixo define onde o Momentra guarda as capturas."
                          : "No modo somente nuvem, novas fotos não são copiadas para o app Fotos do iPhone.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Section("Previsão meteorológica") {

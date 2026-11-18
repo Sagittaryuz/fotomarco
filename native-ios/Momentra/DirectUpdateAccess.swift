@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import UIKit
+import Darwin
 
 @MainActor
 final class DirectUpdateAccess: ObservableObject {
@@ -60,7 +61,7 @@ final class DirectUpdateAccess: ObservableObject {
         } catch { message = "Não foi possível ativar as atualizações diretas. Abra o link de instalação mais recente e tente novamente." }
     }
 
-    func install(expectedVersion: String) async {
+    func install(expectedVersion: String, canClose: @escaping @MainActor () -> Bool) async {
         guard !busy, let token = Self.readToken(),
               let issueURL = URL(string: "https://momentra-instalacao.vercel.app/api/install?stage=issue") else {
             message = "Ative as atualizações diretas pelo link pessoal de instalação."; return
@@ -77,8 +78,16 @@ final class DirectUpdateAccess: ObservableObject {
                   let manifest = Self.manifestURL(raw) else { throw URLError(.badServerResponse) }
             guard let encoded = manifest.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
                   let url = URL(string: "itms-services://?action=download-manifest&url=" + encoded) else { throw URLError(.badURL) }
+            guard canClose() else {
+                message = "Aguarde a conclusão da captura ou do envio antes de atualizar."
+                return
+            }
             let opened = await UIApplication.shared.open(url)
-            if !opened { message = "Não foi possível abrir o instalador do iPhone." }
+            if opened {
+                // Only leave after iOS accepts the installer request. The system
+                // still controls installation and may ask for confirmation.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { exit(EXIT_SUCCESS) }
+            } else { message = "Não foi possível abrir o instalador do iPhone." }
         } catch { message = "O instalador ainda não está disponível para essa versão. Tente novamente mais tarde." }
     }
 

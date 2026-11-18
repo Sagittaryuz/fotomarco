@@ -41,6 +41,8 @@ struct OriginalsView: View {
     @State private var reloadToken = UUID()
     @State private var captureColumns = 3
     @State private var selectedCapture: URL?
+    @State private var selectingCaptures = false
+    @State private var selectedCaptureIDs: Set<URL> = []
     @StateObject private var picker = GooglePickerFlow()
 
     var body: some View {
@@ -64,9 +66,14 @@ struct OriginalsView: View {
             .toolbar { Button("Concluído") { picker.cancel(); dismiss() } }
             .interactiveDismissDisabled(picker.busy || picker.waitingForSelection)
             .onAppear { reload() }
-            .quickLookPreview($selectedCapture)
+            .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } })) {
+                if let selectedCapture {
+                    CapturePager(urls: captureGroups.flatMap(\.items).map(\.url), initialURL: selectedCapture)
+                }
+            }
             .onChange(of: gallerySection) { previous, section in
                 if previous == 2 && section != 2 { picker.cancel() }
+                selectingCaptures = false; selectedCaptureIDs.removeAll()
                 reload()
             }
             .confirmationDialog("Envie somente uma foto pessoal. O arquivo local será mantido e a foto será enviada à conta Google conectada.", isPresented: $showPhotoConsent, titleVisibility: .visible) {
@@ -104,50 +111,50 @@ struct OriginalsView: View {
     }
 
     private var captures: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 0) {
                 if files.isEmpty {
                     ContentUnavailableView("Nenhuma captura disponível", systemImage: "photo")
-                }
-                ForEach(captureGroups) { group in
-                    Text(group.title).font(.headline).padding(.horizontal, 12)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: captureColumns), spacing: 3) {
-                        ForEach(group.items) { item in
-                            ZStack(alignment: .bottomTrailing) {
-                                Button { selectedCapture = item.url } label: {
-                                    Thumbnail(url: item.url, isVideo: item.isVideo)
-                                        .overlay(alignment: .topLeading) {
-                                            if item.isVideo {
-                                                Text(item.isProcessed ? "Com carimbo" : "Original")
-                                                    .font(.caption2.bold()).foregroundStyle(.white).padding(4)
-                                                    .background(.black.opacity(0.7), in: Capsule()).padding(4)
-                                            }
-                                        }
-                                }.buttonStyle(.plain).accessibilityLabel("Abrir captura")
-                                Menu {
-                                    ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
-                                    Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
-                                        .disabled(isSaving)
-                                    if googlePhotos.configured && item.isProcessed && !item.isVideo {
-                                        Button { photoForGoogle = item.url; showPhotoConsent = true } label: {
-                                            Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up")
-                                        }.disabled(googlePhotos.busy)
+                } else {
+                    GalleryGrid(groups: captureGroups, selecting: $selectingCaptures, selected: $selectedCaptureIDs, columns: $captureColumns) { item in
+                        ZStack(alignment: .bottomTrailing) {
+                            Thumbnail(url: item.url, isVideo: item.isVideo)
+                                .overlay(alignment: .topLeading) {
+                                    if item.isVideo {
+                                        Text(item.isProcessed ? "Com carimbo" : "Original")
+                                            .font(.caption2.bold()).foregroundStyle(.white).padding(4)
+                                            .background(.black.opacity(0.7), in: Capsule()).padding(4)
                                     }
-                                } label: {
-                                    Image(systemName: "ellipsis.circle.fill")
-                                        .font(.title3).foregroundStyle(.white).shadow(radius: 2).padding(6)
-                                }.accessibilityLabel("Opções da captura")
-                            }
+                                }
+                            Menu {
+                                ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
+                                Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }.disabled(isSaving)
+                                if googlePhotos.configured && item.isProcessed && !item.isVideo {
+                                    Button { photoForGoogle = item.url; showPhotoConsent = true } label: { Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up") }.disabled(googlePhotos.busy)
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle.fill").font(.title3).foregroundStyle(.white).shadow(radius: 2).padding(6)
+                            }.accessibilityLabel("Opções da captura")
                         }
-                    }
+                    } open: { item in selectedCapture = item.url }
+                }
+                if selectingCaptures {
+                    HStack {
+                        Text("\(selectedCaptureIDs.count) selecionada(s)")
+                        Spacer()
+                        if !selectedCaptureIDs.isEmpty {
+                            ShareLink(items: files.filter { selectedCaptureIDs.contains($0.url) }.map(\.url)) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
+                        }
+                        Button("Selecionar todas") { selectedCaptureIDs = Set(files.map(\.id)) }
+                    }.font(.footnote).padding()
+                }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(selectingCaptures ? "Cancelar" : "Selecionar") {
+                    selectingCaptures.toggle(); if !selectingCaptures { selectedCaptureIDs.removeAll() }
                 }
             }
         }
-        .simultaneousGesture(MagnifyGesture().onEnded { value in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                captureColumns = GalleryZoom.next(columns: captureColumns, magnification: value.magnification)
-            }
-        })
     }
 
     private func reload() {
@@ -181,6 +188,25 @@ struct OriginalsView: View {
                 }
             }
         }
+    }
+}
+
+private struct CapturePager: UIViewControllerRepresentable {
+    let urls: [URL]
+    let initialURL: URL
+    func makeCoordinator() -> Coordinator { Coordinator(urls: urls) }
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        controller.currentPreviewItemIndex = urls.firstIndex(of: initialURL) ?? 0
+        return controller
+    }
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        let urls: [URL]
+        init(urls: [URL]) { self.urls = urls }
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { urls.count }
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem { urls[index] as NSURL }
     }
 }
 

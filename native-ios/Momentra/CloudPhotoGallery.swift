@@ -8,6 +8,9 @@ struct CloudPhotoGallery: View {
     @ObservedObject var stampProfiles: StampProfilesStore
     @State private var showPickerConsent = false
     @State private var columnCount = 3
+    @State private var selecting = false
+    @State private var selectedIDs: Set<String> = []
+    @State private var selectedPhoto: CloudPhoto?
 
     private var groups: [GalleryGroup<CloudPhoto>] {
         GalleryGrouping.groups(googlePhotos.cloudPhotos, date: { $0.date }, profile: { item in
@@ -38,7 +41,7 @@ struct CloudPhotoGallery: View {
                     }
                 })
             } else {
-                ScrollView {
+                VStack(spacing: 0) {
                     VStack(spacing: 12) {
                         if picker.waitingForSelection {
                             Text("Depois de escolher a foto no Google Fotos, volte para cá.")
@@ -63,41 +66,38 @@ struct CloudPhotoGallery: View {
                         if googlePhotos.cloudLoaded && googlePhotos.cloudPhotos.isEmpty {
                             ContentUnavailableView("Nenhuma foto criada pelo Momentra", systemImage: "photo.on.rectangle")
                         }
-                        ForEach(groups) { group in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(group.title).font(.headline).padding(.horizontal, 12)
-                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: columnCount), spacing: 3) {
-                                    ForEach(group.items) { item in
-                                        if let url = item.productURL {
-                                            Link(destination: url) {
-                                                CloudThumbnail(url: item.thumbnailURL)
-                                                    .overlay(alignment: .bottomLeading) {
-                                                        if CloudProfileFilename.isOriginal(item.name) {
-                                                            Text("Original").font(.caption2.bold()).padding(4)
-                                                                .background(.black.opacity(0.7), in: Capsule()).padding(4)
-                                                        }
-                                                    }
-                                            }
-                                                .accessibilityLabel("Abrir \(item.name) no Google Fotos")
-                                        } else {
-                                            CloudThumbnail(url: item.thumbnailURL).accessibilityLabel(item.name)
-                                        }
+                    }.padding(.vertical, 8)
+                    if !groups.isEmpty {
+                        GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columnCount) { item in
+                            CloudThumbnail(url: item.thumbnailURL)
+                                .overlay(alignment: .bottomLeading) {
+                                    if CloudProfileFilename.isOriginal(item.name) {
+                                        Text("Original").font(.caption2.bold()).padding(4).background(.black.opacity(0.7), in: Capsule()).padding(4)
                                     }
-                                }
+                                }.accessibilityLabel(item.name)
+                        } open: { selectedPhoto = $0 }
+                    }
+                    HStack {
+                        if selecting {
+                            Text("\(selectedIDs.count) selecionada(s)")
+                            Spacer()
+                            Button("Selecionar todas") { selectedIDs = Set(googlePhotos.cloudPhotos.map(\.id)) }
+                        } else {
+                            Button("Atualizar") { googlePhotos.loadCloudPhotos() }.disabled(googlePhotos.busy)
+                            Spacer()
+                            if googlePhotos.cloudNextPage != nil {
+                                Button("Carregar mais") { googlePhotos.loadCloudPhotos(nextPage: true) }.disabled(googlePhotos.busy)
                             }
                         }
-                        if googlePhotos.cloudNextPage != nil {
-                            Button("Carregar mais") { googlePhotos.loadCloudPhotos(nextPage: true) }
-                                .disabled(googlePhotos.busy).padding()
+                    }.font(.footnote).padding()
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(selecting ? "Cancelar" : "Selecionar") {
+                            selecting.toggle(); if !selecting { selectedIDs.removeAll() }
                         }
-                        Button("Atualizar") { googlePhotos.loadCloudPhotos() }.disabled(googlePhotos.busy).padding()
                     }
                 }
-                .simultaneousGesture(MagnifyGesture().onEnded { value in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        columnCount = GalleryZoom.next(columns: columnCount, magnification: value.magnification)
-                    }
-                })
                 .task(id: googlePhotos.connected) {
                     if !googlePhotos.cloudLoaded && !googlePhotos.busy { googlePhotos.loadCloudPhotos() }
                 }
@@ -109,7 +109,31 @@ struct CloudPhotoGallery: View {
                     Button("OK") { picker.message = nil }
                 } message: { Text(picker.message ?? "") }
                 .sheet(item: $picker.picked) { item in PickedCloudPhotoView(item: item) }
+                .sheet(item: $selectedPhoto) { item in
+                    CloudPhotoPager(items: groups.flatMap(\.items), initialID: item.id)
+                }
             }
+        }
+    }
+}
+
+private struct CloudPhotoPager: View {
+    let items: [CloudPhoto]
+    @State private var selection: String
+    @Environment(\.dismiss) private var dismiss
+    init(items: [CloudPhoto], initialID: String) { self.items = items; _selection = State(initialValue: initialID) }
+    var body: some View {
+        NavigationStack {
+            TabView(selection: $selection) {
+                ForEach(items) { item in
+                    VStack {
+                        CloudThumbnail(url: item.thumbnailURL, fullView: true)
+                        if let url = item.productURL { Link("Abrir no Google Fotos", destination: url).padding() }
+                    }.tag(item.id)
+                }
+            }.tabViewStyle(.page(indexDisplayMode: .never))
+                .navigationTitle("Foto na nuvem").navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Concluído") { dismiss() } }
         }
     }
 }
@@ -123,40 +147,46 @@ private final class NoCloudImageRedirect: NSObject, URLSessionTaskDelegate {
 
 private struct CloudThumbnail: View {
     let url: URL?
+    var fullView = false
     @State private var image: UIImage?
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 Color.gray.opacity(0.2)
-                if let image { Image(uiImage: image).resizable().scaledToFill() }
+                if let image {
+                    if fullView { Image(uiImage: image).resizable().scaledToFit() }
+                    else { Image(uiImage: image).resizable().scaledToFill() }
+                }
                 else { Image(systemName: "photo").foregroundStyle(.secondary) }
-            }.frame(width: proxy.size.width, height: proxy.size.width).clipped()
+            }.frame(width: proxy.size.width, height: fullView ? proxy.size.height : proxy.size.width).clipped()
         }
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(fullView ? nil : 1, contentMode: .fit)
         .task(id: url) {
             image = nil
             guard let url, url.scheme == "https", let host = url.host?.lowercased(),
                   host.hasSuffix(".googleusercontent.com"), url.user == nil, url.password == nil,
                   url.port == nil, url.query == nil, url.fragment == nil else { return }
+            let remote = fullView && url.absoluteString.hasSuffix("=w360-h360-c")
+                ? URL(string: String(url.absoluteString.dropLast("=w360-h360-c".count)) + "=w1600-h1600") ?? url : url
             let config = URLSessionConfiguration.ephemeral
             config.urlCache = nil; config.httpCookieStorage = nil; config.timeoutIntervalForRequest = 15
             let session = URLSession(configuration: config, delegate: NoCloudImageRedirect(), delegateQueue: nil)
             defer { session.invalidateAndCancel() }
             do {
-                let (bytes, response) = try await session.bytes(from: url)
+                let (bytes, response) = try await session.bytes(from: remote)
                 guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode),
-                      response.expectedContentLength <= 2_000_000 else { return }
+                      response.expectedContentLength <= (fullView ? 12_000_000 : 2_000_000) else { return }
                 var data = Data()
                 for try await byte in bytes {
-                    guard data.count < 2_000_000 else { return }
+                    guard data.count < (fullView ? 12_000_000 : 2_000_000) else { return }
                     data.append(byte)
                 }
                 guard !Task.isCancelled, let source = CGImageSourceCreateWithData(data as CFData, nil),
                       let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                         kCGImageSourceCreateThumbnailFromImageAlways: true,
                         kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 360
+                        kCGImageSourceThumbnailMaxPixelSize: fullView ? 1600 : 360
                       ] as CFDictionary) else { return }
                 image = UIImage(cgImage: thumbnail)
             } catch { return }

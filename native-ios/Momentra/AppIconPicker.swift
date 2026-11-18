@@ -22,16 +22,21 @@ struct AppIconPicker: View {
     @State private var selected = UIApplication.shared.alternateIconName
     @State private var changing = false
     @State private var message: String?
+    @Environment(\.scenePhase) private var scenePhase
     private let columns = [GridItem(.adaptive(minimum: 96), spacing: 16)]
 
     var body: some View {
         ScrollView {
+            Text(choices.first(where: { $0.iconName == selected }).map { "Ícone atual: \($0.title)" } ?? "Não foi possível identificar o ícone atual.")
+                .font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(choices) { choice in
                     Button { choose(choice) } label: {
                         VStack(spacing: 7) {
                             Image(choice.preview).resizable().scaledToFit()
                                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(selected == choice.iconName ? Color.blue : Color.clear, lineWidth: 3))
                                 .overlay(alignment: .topTrailing) {
                                     if selected == choice.iconName {
                                         Image(systemName: "checkmark.circle.fill").foregroundStyle(.white, .blue)
@@ -48,6 +53,10 @@ struct AppIconPicker: View {
             }.padding()
             Text("O iPhone usa a versão clara ou escura conforme a aparência escolhida na Tela de Início.")
                 .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+        }
+        .onAppear { selected = UIApplication.shared.alternateIconName }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && !changing { selected = UIApplication.shared.alternateIconName }
         }
         .navigationTitle("Ícone do aplicativo")
         .alert("Não foi possível alterar o ícone", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {

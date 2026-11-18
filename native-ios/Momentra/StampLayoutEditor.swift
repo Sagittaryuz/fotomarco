@@ -10,6 +10,12 @@ struct StampLayoutEditor: View {
     @State private var showLimit = false
     @State private var chooseStartup = false
     @State private var confirmRemove = false
+    @State private var renameProfile = false
+    @State private var editNote = false
+    @State private var draftName = ""
+    @State private var draftNote = ""
+    @State private var editingElement: Element = .map
+    private enum Element: String, CaseIterable { case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo" }
 
     private var layout: Binding<StampLayout> {
         Binding(get: { store.selected.layout }, set: { store.setLayout($0) })
@@ -26,18 +32,10 @@ struct StampLayoutEditor: View {
     }
 
     private func sizeControl(_ title: String, value: Binding<Double>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
-            VStack(spacing: 4) {
-                HStack(spacing: 12) {
-                    Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
-                    Slider(value: value, in: 0.5...2.0, step: 0.05).tint(.white)
-                    Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
-                }
-                Text("\(Int((value.wrappedValue * 100).rounded()))%").font(.headline.monospacedDigit())
-            }
-            .padding(.horizontal, 16).padding(.vertical, 12)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        HStack(spacing: 10) {
+            Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
+            Slider(value: value, in: 0.5...2.0, step: 0.05).tint(.white).accessibilityLabel(title)
+            Text("\(Int((value.wrappedValue * 100).rounded()))%").font(.subheadline.monospacedDigit()).frame(width: 48, alignment: .trailing)
         }
     }
 
@@ -48,18 +46,18 @@ struct StampLayoutEditor: View {
             ("Inferior esquerdo", StampPoint(x: 0, y: 1), .bottomLeading),
             ("Inferior direito", StampPoint(x: 1, y: 1), .bottomTrailing)
         ]
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Posição na foto").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Posição na foto").font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 ForEach(0..<4, id: \.self) { index in
                     let corner = corners[index]
                     let selected = point.wrappedValue == corner.1
                     Button { point.wrappedValue = corner.1 } label: {
                         RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.blue : Color.secondary, lineWidth: selected ? 2 : 1)
-                            .frame(width: 48, height: 58)
+                            .frame(width: 36, height: 42)
                             .overlay(alignment: corner.2) {
                                 RoundedRectangle(cornerRadius: 2).fill(selected ? Color.blue : Color.secondary)
-                                    .frame(width: 15, height: 12).padding(5)
+                                    .frame(width: 12, height: 9).padding(4)
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 4).contentShape(Rectangle())
                     }
@@ -71,113 +69,62 @@ struct StampLayoutEditor: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Menu {
-                        ForEach(store.profiles) { item in
-                            Button { store.select(item.id) } label: {
-                                if item.id == store.selectedID { Label(item.name, systemImage: "checkmark") }
-                                else { Text(item.name) }
-                            }
-                        }
-                    } label: {
-                        Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square")
-                            .font(.headline)
-                    }
-                    Spacer()
-                    Button {
-                        let wasSingle = store.profiles.count == 1
-                        if store.create() { if wasSingle { chooseStartup = true } }
-                        else { showLimit = true }
-                    } label: {
-                        Image(systemName: "plus").font(.headline).padding(10)
-                            .background(.thinMaterial, in: Circle())
-                    }.accessibilityLabel("Criar perfil")
-                }
-                TextField("Nome do perfil", text: name)
-                    .textFieldStyle(.roundedBorder)
-                Picker("Composição", selection: layout.mode) {
-                    Text("Carimbo único").tag(StampLayout.Mode.combined)
-                    Text("Elementos separados").tag(StampLayout.Mode.separate)
-                }.pickerStyle(.segmented)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    DisclosureGroup("Mapa") {
-                        Toggle("Mostrar mapa", isOn: flag(\.showsMap))
-                        if layout.wrappedValue.mode == .separate { cornerControl(layout.map) }
-                        Picker("Visualização do mapa", selection: layout.mapStyle) {
-                            Text("Mapa").tag(StampLayout.MapAppearance.map)
-                            Text("Satélite").tag(StampLayout.MapAppearance.satellite)
-                        }.pickerStyle(.segmented)
-                        sizeControl("Tamanho do mapa", value: layout.mapSize)
-                    }
-                    DisclosureGroup("Informações") {
-                        Toggle("Mostrar informações", isOn: flag(\.showsInformation))
-                        if layout.wrappedValue.mode == .separate { cornerControl(layout.information) }
-                        Picker("Fonte", selection: layout.fontStyle) {
-                            Text("Sistema").tag("system"); Text("Serifada").tag("serif"); Text("Monoespaçada").tag("mono")
-                        }
-                        Picker("Alinhamento dos textos", selection: layout.textAlignment) {
-                            Text("Automático").tag("auto"); Text("Esquerda").tag("left"); Text("Centro").tag("center"); Text("Direita").tag("right")
-                        }
-                        Picker("Data e hora", selection: layout.dateFormat) {
-                            Text("Numérica").tag("numeric"); Text("Por extenso").tag("long")
-                        }
-                        Toggle("Texto compacto", isOn: flag(\.compact))
-                        Toggle("Incluir endereço", isOn: flag(\.showsAddress))
-                        sizeControl("Tamanho das informações", value: layout.informationSize)
-                    }
-                    DisclosureGroup("Logotipo") {
-                        Toggle("Mostrar logotipo", isOn: flag(\.showsLogo))
-                        if layout.wrappedValue.mode == .separate { cornerControl(layout.logo) }
-                        sizeControl("Tamanho do logotipo", value: layout.logoSize)
-                        PhotosPicker(selection: $selectedLogo, matching: .images) {
-                            Label("Escolher logotipo", systemImage: "photo")
-                        }.disabled(logoLoading)
-                        Button(action: importLogo) { Label("Escolher logotipo dos Arquivos", systemImage: "folder") }
-                            .disabled(logoLoading)
-                    }
-                }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
-                if layout.wrappedValue.mode == .separate {
-                    Text("Arraste os elementos sobre a foto para escolher onde aparecem.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
-
-                Group {
-                    if layout.wrappedValue.mode == .combined {
-                        Picker("Posição do carimbo", selection: layout.position) {
-                            Text("Embaixo").tag("bottom")
-                            Text("Em cima").tag("top")
-                        }
-                        Picker("Largura e posição", selection: layout.horizontal) {
-                            Text("Largura total").tag("auto")
-                            Text("Esquerda").tag("left")
-                            Text("Direita").tag("right")
+        VStack(spacing: 8) {
+            HStack {
+                Menu {
+                    ForEach(store.profiles) { item in
+                        Button { store.select(item.id) } label: {
+                            if item.id == store.selectedID { Label(item.name, systemImage: "checkmark") }
+                            else { Text(item.name) }
                         }
                     }
+                    Divider()
+                    Button("Renomear perfil") { draftName = store.selected.name; renameProfile = true }
+                    if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { confirmRemove = true } }
+                } label: {
+                    Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square").font(.headline)
                 }
-                if layout.wrappedValue.mode == .combined {
-                    sizeControl("Tamanho do carimbo", value: layout.combinedSize)
+                Spacer()
+                Button {
+                    let wasSingle = store.profiles.count == 1
+                    if store.create() { if wasSingle { chooseStartup = true } } else { showLimit = true }
+                } label: { Image(systemName: "plus").padding(8).background(.thinMaterial, in: Circle()) }
+                    .accessibilityLabel("Criar perfil")
+            }
+            Picker("Composição", selection: layout.mode) {
+                Text("Carimbo único").tag(StampLayout.Mode.combined)
+                Text("Elementos separados").tag(StampLayout.Mode.separate)
+            }.pickerStyle(.segmented)
+            StampLayoutPreview(layout: layout, logo: ProfileLogoStore.load(store.selected.logoName))
+                .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .accessibilityLabel("Pré-visualização do carimbo")
+            HStack(spacing: 4) {
+                ForEach(Element.allCases, id: \.self) { element in
+                    if element != .combined || layout.wrappedValue.mode == .combined {
+                        Button(element.rawValue) { editingElement = element }
+                            .font(.caption.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
+                            .background(editingElement == element ? Color.blue : Color.secondary.opacity(0.15), in: Capsule())
+                            .foregroundStyle(editingElement == element ? Color.white : Color.primary)
+                    }
                 }
-
-                Text("Pré-visualização").font(.headline)
-                StampLayoutPreview(layout: layout, logo: ProfileLogoStore.load(store.selected.logoName))
-                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-
-                Text("A prévia usa dados de exemplo. O carimbo final usa as informações disponíveis no momento da captura.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                TextField("Observação na foto (opcional)", text: note, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                if store.profiles.count > 1 {
-                    Button("Apagar este perfil", role: .destructive) { confirmRemove = true }
-                }
-            }.padding()
-        }
+            }
+            elementEditor.padding(10).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        }.padding(.horizontal, 12).padding(.vertical, 6)
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
+        .alert("Renomear perfil", isPresented: $renameProfile) {
+            TextField("Nome", text: $draftName)
+            Button("Salvar") { store.rename(draftName) }
+            Button("Cancelar", role: .cancel) {}
+        }
+        .alert("Observação na foto", isPresented: $editNote) {
+            TextField("Observação", text: $draftNote)
+            Button("Salvar") { store.setNote(draftNote) }
+            Button("Cancelar", role: .cancel) {}
+        }
         .alert("Limite de perfis atingido", isPresented: $showLimit) {
             Button("OK", role: .cancel) {}
         } message: { Text("Você pode criar até cinco perfis de carimbo.") }
@@ -194,6 +141,57 @@ struct StampLayoutEditor: View {
             Button("Cancelar", role: .cancel) {}
         } message: { Text("As fotos existentes não serão alteradas.") }
     }
+
+    @ViewBuilder private var elementEditor: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(editingElement.rawValue).font(.subheadline.bold())
+                Spacer()
+                switch editingElement {
+                case .combined:
+                    Menu("Posição") {
+                        Picker("Vertical", selection: layout.position) { Text("Em cima").tag("top"); Text("Embaixo").tag("bottom") }
+                        Picker("Largura e posição", selection: layout.horizontal) { Text("Largura total").tag("auto"); Text("Esquerda").tag("left"); Text("Direita").tag("right") }
+                    }
+                case .map:
+                    Menu(layout.wrappedValue.mapStyle == .map ? "Mapa" : "Satélite") {
+                        Picker("Visualização", selection: layout.mapStyle) { Text("Mapa").tag(StampLayout.MapAppearance.map); Text("Satélite").tag(StampLayout.MapAppearance.satellite) }
+                    }
+                    Toggle("Mostrar mapa", isOn: flag(\.showsMap)).labelsHidden()
+                case .information:
+                    Menu("Opções") {
+                        Picker("Fonte", selection: layout.fontStyle) { Text("Sistema").tag("system"); Text("Serifada").tag("serif"); Text("Monoespaçada").tag("mono") }
+                        Picker("Alinhamento", selection: layout.textAlignment) { Text("Automático").tag("auto"); Text("Esquerda").tag("left"); Text("Centro").tag("center"); Text("Direita").tag("right") }
+                        Picker("Data e hora", selection: layout.dateFormat) { Text("Numérica").tag("numeric"); Text("Por extenso").tag("long") }
+                        Toggle("Texto compacto", isOn: flag(\.compact))
+                        Toggle("Incluir endereço", isOn: flag(\.showsAddress))
+                        Button("Observação") { draftNote = store.selected.note; editNote = true }
+                    }
+                    Toggle("Mostrar informações", isOn: flag(\.showsInformation)).labelsHidden()
+                case .logo:
+                    Menu("Escolher") {
+                        PhotosPicker(selection: $selectedLogo, matching: .images) { Label("Fotos", systemImage: "photo") }
+                        Button(action: importLogo) { Label("Arquivos", systemImage: "folder") }
+                    }.disabled(logoLoading)
+                    Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
+                }
+            }
+            if layout.wrappedValue.mode == .separate {
+                switch editingElement {
+                case .map: cornerControl(layout.map)
+                case .information: cornerControl(layout.information)
+                case .logo: cornerControl(layout.logo)
+                case .combined: EmptyView()
+                }
+            }
+            switch editingElement {
+            case .combined: sizeControl("Tamanho do carimbo", value: layout.combinedSize)
+            case .map: sizeControl("Tamanho do mapa", value: layout.mapSize)
+            case .information: sizeControl("Tamanho das informações", value: layout.informationSize)
+            case .logo: sizeControl("Tamanho do logotipo", value: layout.logoSize)
+            }
+        }
+    }
 }
 
 private struct StampLayoutPreview: View {
@@ -204,15 +202,6 @@ private struct StampLayoutPreview: View {
         StampRenderer.positionedRect(size: size, element: element, centre: layout[keyPath: keyPath],
                                      margin: min(size.width, size.height) * 0.025)
     }
-    private func gesture(_ keyPath: WritableKeyPath<StampLayout, StampPoint>, in size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .named("stampPreview"))
-            .onChanged { value in
-                guard size.width > 0, size.height > 0 else { return }
-                layout[keyPath: keyPath] = StampPoint(x: Double(value.location.x / size.width),
-                                                    y: Double(value.location.y / size.height))
-            }
-    }
-
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
@@ -244,7 +233,7 @@ private struct StampLayoutPreview: View {
                         let side = min(space.width, space.height, size.width * 0.5, size.width * previewMapFraction * layout.mapSize)
                         let box = rect(\.map, in: size, element: CGSize(width: side, height: side))
                         previewMap.frame(width: box.width, height: box.height)
-                            .contentShape(Rectangle()).position(x: box.midX, y: box.midY).gesture(gesture(\.map, in: size))
+                            .position(x: box.midX, y: box.midY)
                     }
                     if layout.showsInformation {
                         let margin = min(size.width, size.height) * 0.025
@@ -255,7 +244,7 @@ private struct StampLayoutPreview: View {
                             initialSize: 10 * layout.informationSize, style: layout.fontStyle, paragraph: paragraph)
                         let box = rect(\.information, in: size, element: CGSize(width: width, height: measured?.height ?? 0))
                         previewText(size: measured?.font.pointSize).frame(width: box.width, height: box.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
-                            .position(x: box.midX, y: box.midY).gesture(gesture(\.information, in: size))
+                            .position(x: box.midX, y: box.midY)
                     }
                     if layout.showsLogo, let logo {
                         let space = StampRenderer.availableSize(size: size, anchor: layout.logo, margin: min(size.width, size.height) * 0.025)
@@ -264,17 +253,17 @@ private struct StampLayoutPreview: View {
                         let box = rect(\.logo, in: size, element: CGSize(width: logo.size.width * factor, height: logo.size.height * factor))
                         Image(uiImage: logo).resizable().scaledToFit()
                             .frame(width: box.width, height: box.height)
-                            .position(x: box.midX, y: box.midY).gesture(gesture(\.logo, in: size))
+                            .position(x: box.midX, y: box.midY)
                     } else if layout.showsLogo {
                         let space = StampRenderer.availableSize(size: size, anchor: layout.logo, margin: min(size.width, size.height) * 0.025)
                         let side = min(space.width, space.height, size.width * 0.35, size.width * 0.15 * layout.logoSize)
                         let box = rect(\.logo, in: size, element: CGSize(width: side, height: side))
                         Image(systemName: "photo").font(.title2).foregroundStyle(.white)
                             .shadow(radius: 3).frame(width: box.width, height: box.height)
-                            .position(x: box.midX, y: box.midY).gesture(gesture(\.logo, in: size))
+                            .position(x: box.midX, y: box.midY)
                     }
                 }
-            }.coordinateSpace(name: "stampPreview")
+            }.allowsHitTesting(false)
         }
     }
 

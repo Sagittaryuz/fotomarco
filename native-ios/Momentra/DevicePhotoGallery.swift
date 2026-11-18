@@ -17,6 +17,8 @@ struct DevicePhotoGallery: View {
     @State private var assets: [DeviceAsset] = []
     @State private var selected: DeviceAsset?
     @State private var columnCount = 3
+    @State private var selecting = false
+    @State private var selectedIDs: Set<String> = []
 
     private var groups: [GalleryGroup<DeviceAsset>] {
         GalleryGrouping.groups(assets, date: { $0.asset.creationDate }, profile: { item in
@@ -29,7 +31,7 @@ struct DevicePhotoGallery: View {
     var body: some View {
         Group {
             if authorization == .authorized || authorization == .limited {
-                ScrollView {
+                VStack(spacing: 0) {
                     if authorization == .limited {
                         Text("Acesso limitado: aparecem somente as fotos autorizadas nos Ajustes do iPhone.")
                             .font(.footnote).foregroundStyle(.secondary).padding()
@@ -37,24 +39,12 @@ struct DevicePhotoGallery: View {
                     if assets.isEmpty {
                         ContentUnavailableView("Nenhuma foto disponível", systemImage: "photo", description: Text("Confira as fotos e a permissão de acesso no iPhone."))
                     } else {
-                        LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(groups) { group in
-                                Text(group.title).font(.headline).padding(.horizontal, 12)
-                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: columnCount), spacing: 3) {
-                                    ForEach(group.items) { item in
-                                        Button { selected = item } label: { DeviceThumbnail(asset: item.asset) }
-                                            .buttonStyle(.plain).accessibilityLabel("Abrir foto")
-                                    }
-                                }
-                            }
-                        }
+                        GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columnCount,
+                                    tile: { DeviceThumbnail(asset: $0.asset).accessibilityLabel("Foto") },
+                                    open: { selected = $0 })
                     }
+                    if selecting { selectionSummary }
                 }
-                .simultaneousGesture(MagnifyGesture().onEnded { value in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        columnCount = GalleryZoom.next(columns: columnCount, magnification: value.magnification)
-                    }
-                })
             } else if authorization == .notDetermined {
                 ContentUnavailableView {
                     Label("Fotos do iPhone", systemImage: "photo.on.rectangle")
@@ -75,7 +65,27 @@ struct DevicePhotoGallery: View {
         }
         .onAppear { refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
-        .sheet(item: $selected, onDismiss: refresh) { item in DevicePhotoDetail(asset: item.asset, profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name)) }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if authorization == .authorized || authorization == .limited {
+                    Button(selecting ? "Cancelar" : "Selecionar") {
+                        selecting.toggle(); if !selecting { selectedIDs.removeAll() }
+                    }
+                }
+            }
+        }
+        .sheet(item: $selected, onDismiss: refresh) { item in
+            DevicePhotoPager(items: groups.flatMap(\.items), initialID: item.id,
+                             profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name))
+        }
+    }
+
+    private var selectionSummary: some View {
+        HStack {
+            Text("\(selectedIDs.count) selecionada(s)")
+            Spacer()
+            Button("Selecionar todas") { selectedIDs = Set(assets.map(\.id)) }
+        }.font(.footnote).padding()
     }
 
     private func requestAccess() {
@@ -93,6 +103,23 @@ struct DevicePhotoGallery: View {
         var list: [DeviceAsset] = []
         result.enumerateObjects { asset, _, _ in list.append(DeviceAsset(asset: asset)) }
         assets = list
+    }
+}
+
+private struct DevicePhotoPager: View {
+    let items: [DeviceAsset]
+    let profile: CaptureProfileTag
+    @State private var selection: String
+
+    init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag) {
+        self.items = items; self.profile = profile; _selection = State(initialValue: initialID)
+    }
+    var body: some View {
+        TabView(selection: $selection) {
+            ForEach(items) { item in
+                DevicePhotoDetail(asset: item.asset, profile: profile).tag(item.id)
+            }
+        }.tabViewStyle(.page(indexDisplayMode: .never))
     }
 }
 
