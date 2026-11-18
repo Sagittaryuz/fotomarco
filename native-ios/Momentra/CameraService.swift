@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import Photos
 import SwiftUI
 import ImageIO
@@ -30,8 +31,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
     @Published private(set) var isCapturing = false
+    let completedPhoto = PassthroughSubject<UIImage, Never>()
     @Published private(set) var isSwitching = false
-    @Published private(set) var isRecording = false
+    @Published private(set) var recordingStartedAt: ContinuousClock.Instant?
+    var isRecording: Bool { recordingStartedAt != nil }
     @Published private(set) var isFinishingRecording = false
     @Published private(set) var videoAvailable = false
     @Published private(set) var zoomOptions: [CGFloat] = []
@@ -97,7 +100,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             if self.movieOutput.isRecording || self.startingRecording {
                 self.stopRequested = true
                 if self.movieOutput.isRecording { self.movieOutput.stopRecording() }
-                DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = true }
+                DispatchQueue.main.async { self.isFinishingRecording = true; self.recordingStartedAt = nil }
             } else if self.session.isRunning { self.session.stopRunning() }
         }
         recognition.clear()
@@ -273,7 +276,6 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     self.startingRecording = true
                     self.applyCaptureRotation(to: self.movieOutput.connection(with: .video))
                     self.movieOutput.startRecording(to: file, recordingDelegate: self)
-                    DispatchQueue.main.async { self.isFinishingRecording = false; self.isRecording = true }
                 } catch {
                     self.report(error.localizedDescription)
                     DispatchQueue.main.async { self.isFinishingRecording = false }
@@ -284,8 +286,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
 
     func stopRecording() {
         guard isRecording, !isFinishingRecording else { return }
-        isRecording = false
         isFinishingRecording = true
+        recordingStartedAt = nil
         queue.async {
             self.stopRequested = true
             if self.movieOutput.isRecording { self.movieOutput.stopRecording() }
@@ -293,9 +295,17 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        let start = ContinuousClock.now
         queue.async {
             self.startingRecording = false
-            if self.stopRequested || !self.wantsSession { self.movieOutput.stopRecording() }
+            if self.stopRequested || !self.wantsSession {
+                self.movieOutput.stopRecording()
+            } else {
+                DispatchQueue.main.async {
+                    self.recordingStartedAt = start
+                    self.isFinishingRecording = false
+                }
+            }
         }
     }
 
@@ -308,7 +318,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let snapshot = self.pendingVideoSnapshot
             let saveToPhotos = self.pendingVideoSaveToPhotos
             self.pendingVideoSnapshot = nil
-            DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+            DispatchQueue.main.async { self.recordingStartedAt = nil; self.isFinishingRecording = false }
             guard completed, FileManager.default.fileExists(atPath: outputFileURL.path) else {
                 self.report("A gravação não foi concluída. O arquivo disponível permanece no aplicativo.")
                 return
@@ -437,6 +447,15 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
             DispatchQueue.main.async { self.isCapturing = false }
             return
+        }
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let preview = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+               kCGImageSourceCreateThumbnailFromImageAlways: true,
+               kCGImageSourceCreateThumbnailWithTransform: true,
+               kCGImageSourceThumbnailMaxPixelSize: 1200
+           ] as CFDictionary) {
+            let image = UIImage(cgImage: preview)
+            DispatchQueue.main.async { self.completedPhoto.send(image) }
         }
         if let cloudOwnerHash {
             do {

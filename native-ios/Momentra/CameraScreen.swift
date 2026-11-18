@@ -75,6 +75,17 @@ struct CameraScreen: View {
     @State private var logoLoading = false
     @State private var logo: UIImage?
     @State private var galleryThumbnail: UIImage?
+    @State private var galleryThumbnailRevision = UUID()
+    @State private var galleryThumbnailFrame: CGRect = .zero
+    @State private var photoFlight: PhotoFlight?
+    @State private var photoLanded = false
+    @State private var shutterOpacity = 0.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private struct PhotoFlight: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
     @State private var showingZoomDial = false
     @State private var zoomDismissTask: Task<Void, Never>?
     @State private var zoomPresetDragStart: CGFloat?
@@ -82,20 +93,19 @@ struct CameraScreen: View {
     @State private var quickRecording = false
     @State private var quickRecordingLocked = false
     @State private var quickZoomStart: CGFloat = 1
-    @State private var recordingStartedAt: Date?
     @State private var quickReleasePending = false
     @State private var suppressQuickPhoto = false
     @Environment(\.scenePhase) private var scenePhase
 
     private var cameraHeader: some View {
         Group {
-            if camera.isRecording {
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    let elapsed = max(0, Int(timeline.date.timeIntervalSince(recordingStartedAt ?? timeline.date)))
-                    Text(String(format: "%02d:%02d:%02d", elapsed / 3600, (elapsed / 60) % 60, elapsed % 60))
-                        .font(.system(.headline, design: .monospaced)).foregroundStyle(.white)
+            if let start = camera.recordingStartedAt {
+                TimelineView(.animation(minimumInterval: 0.25)) { _ in
+                    let elapsed = CaptureMotion.elapsedSeconds(from: start, to: .now)
+                    Text(CaptureMotion.timerLabel(seconds: elapsed))
+                        .font(.system(.subheadline, design: .monospaced).weight(.semibold)).foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(.red, in: RoundedRectangle(cornerRadius: 6))
+                        .background(.red, in: Capsule())
                         .accessibilityLabel("Gravando, \(elapsed) segundos")
                 }.padding(.top, 8)
             } else {
@@ -316,9 +326,15 @@ struct CameraScreen: View {
                                 if countdown > 0 { cancelCountdown() } else { schedulePhoto() }
                             }
                         } label: {
-                            Circle().fill(mode == .video || camera.isRecording ? .red : .white).padding(camera.isRecording ? 12 : 7)
+                            let diameter = min(94, geometry.size.width * 0.25)
+                            let controlSize = camera.isRecording ? diameter * 0.42 : diameter - 14
+                            RoundedRectangle(cornerRadius: camera.isRecording ? controlSize * 0.22 : controlSize / 2)
+                                .fill(mode == .video || camera.isRecording ? .red : .white)
+                                .frame(width: controlSize, height: controlSize)
+                                .frame(width: diameter, height: diameter)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
-                                .frame(width: min(94, geometry.size.width * 0.25), height: min(94, geometry.size.width * 0.25))
+                                .contentShape(Circle())
+                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: camera.isRecording)
                         }
                         .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || (camera.isFinishingRecording && !quickRecording))
                         .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : camera.isRecording ? "Parar gravação" : mode == .photo ? "Fotografar" : "Gravar vídeo")
@@ -394,6 +410,9 @@ struct CameraScreen: View {
                                         .background(.white.opacity(0.16))
                                 }
                             }.frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 11))
+                                .onGeometryChange(for: CGRect.self) { proxy in
+                                    proxy.frame(in: .named("MomentraCamera"))
+                                } action: { galleryThumbnailFrame = $0 }
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Abrir capturas")
@@ -435,6 +454,34 @@ struct CameraScreen: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                 }
+                if let flight = photoFlight {
+                    let start = CGRect(x: (geometry.size.width - previewSize.width) / 2,
+                                       y: (geometry.size.height - previewSize.height) / 2,
+                                       width: previewSize.width, height: previewSize.height)
+                    let frame = CaptureMotion.aspectFit(flight.image.size,
+                                                        in: photoLanded ? galleryThumbnailFrame : start)
+                    Image(uiImage: flight.image).resizable()
+                        .frame(width: frame.width, height: frame.height)
+                        .clipShape(RoundedRectangle(cornerRadius: photoLanded ? 8 : 0))
+                        .position(x: frame.midX, y: frame.midY)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+                Rectangle().fill(.black.opacity(shutterOpacity))
+                    .frame(width: previewSize.width, height: previewSize.height)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .coordinateSpace(name: "MomentraCamera")
+            .task(id: photoFlight?.id) {
+                guard let flight = photoFlight else { return }
+                do { try await Task.sleep(for: .milliseconds(60)) } catch { return }
+                guard photoFlight?.id == flight.id else { return }
+                withAnimation(.easeOut(duration: 0.12)) { shutterOpacity = 0 }
+                withAnimation(.easeInOut(duration: 0.34), completionCriteria: .logicallyComplete) {
+                    photoLanded = true
+                } completion: {
+                    guard photoFlight?.id == flight.id else { return }
+                    finishPhotoFlight()
+                }
             }
         }
     }
@@ -445,10 +492,10 @@ struct CameraScreen: View {
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
-        .onDisappear { flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
-            else { CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+            else { finishPhotoFlight(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
 
@@ -492,12 +539,10 @@ struct CameraScreen: View {
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
         .onChange(of: camera.isRecording) { _, recording in
             if recording {
-                recordingStartedAt = Date()
                 if quickRecording && quickReleasePending && !quickRecordingLocked {
                     camera.stopRecording(); quickRecording = false
                 }
             } else {
-                recordingStartedAt = nil
                 quickRecordingLocked = false
             }
         }
@@ -507,7 +552,8 @@ struct CameraScreen: View {
                 suppressQuickPhoto = false
             }
         }
-        .onChange(of: camera.isCapturing) { _, capturing in if !capturing { refreshGalleryThumbnail() } }
+        .onReceive(camera.completedPhoto) { showCapturedPhoto($0) }
+        .onChange(of: reduceMotion) { _, enabled in if enabled { finishPhotoFlight() } }
     }
 
     private var moreTrackedCamera: some View {
@@ -889,7 +935,28 @@ struct CameraScreen: View {
         }
     }
 
+    private func showCapturedPhoto(_ image: UIImage) {
+        finishPhotoFlight()
+        galleryThumbnailRevision = UUID()
+        guard scenePhase == .active, !showSettings, !showOriginals, !showAspectPanel,
+              !reduceMotion, !galleryThumbnailFrame.isEmpty else {
+            galleryThumbnail = image
+            return
+        }
+        shutterOpacity = 0.35
+        photoFlight = PhotoFlight(image: image)
+    }
+
+    private func finishPhotoFlight() {
+        if let flight = photoFlight { galleryThumbnail = flight.image }
+        photoFlight = nil
+        photoLanded = false
+        shutterOpacity = 0
+    }
+
     private func refreshGalleryThumbnail() {
+        let revision = UUID()
+        galleryThumbnailRevision = revision
         Task {
             let image = await Task.detached(priority: .utility) { () -> UIImage? in
                 guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false),
@@ -903,7 +970,7 @@ struct CameraScreen: View {
                       let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 160] as CFDictionary) else { return nil }
                 return UIImage(cgImage: thumb)
             }.value
-            galleryThumbnail = image
+            if galleryThumbnailRevision == revision, photoFlight == nil { galleryThumbnail = image }
         }
     }
 
