@@ -15,7 +15,7 @@ private enum OriginalStore {
     static func files() throws -> [OriginalFile] {
         let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
-        return try [("Originals", false, false), ("Processed", false, true), ("Videos", true, false)].flatMap { folder, isVideo, isProcessed -> [OriginalFile] in
+        return try [("Originals", false, false), ("Processed", false, true), ("Videos", true, false), ("ProcessedVideos", true, true)].flatMap { folder, isVideo, isProcessed -> [OriginalFile] in
             let directory = root.appendingPathComponent(folder, isDirectory: true)
             guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
             return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]).compactMap { url in
@@ -121,7 +121,7 @@ struct OriginalsView: View {
                                     ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
                                     Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
                                         .disabled(isSaving)
-                                    if googlePhotos.configured && item.isProcessed {
+                                    if googlePhotos.configured && item.isProcessed && !item.isVideo {
                                         Button { photoForGoogle = item.url; showPhotoConsent = true } label: {
                                             Label("Enviar ao Google Fotos", systemImage: "cloud.and.arrow.up")
                                         }.disabled(googlePhotos.busy)

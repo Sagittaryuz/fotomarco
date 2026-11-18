@@ -237,7 +237,7 @@ struct CameraScreen: View {
                             if camera.isRecording && (mode == .video || quickRecordingLocked) {
                                 camera.stopRecording(); quickRecording = false; quickRecordingLocked = false
                             } else if mode == .video {
-                                camera.startRecording(saveToPhotos: saveToPhotos)
+                                startVideoRecording()
                             } else {
                                 if countdown > 0 { cancelCountdown() } else { schedulePhoto() }
                             }
@@ -259,7 +259,7 @@ struct CameraScreen: View {
                                         suppressQuickPhoto = true; quickRecording = true; quickReleasePending = false
                                         quickRecordingLocked = false; quickZoomStart = camera.zoomFactor
                                         dismissZoomDial()
-                                        camera.startRecording(saveToPhotos: saveToPhotos)
+                                        startVideoRecording()
                                     }
                                     if let drag {
                                         camera.setZoom(QuickCaptureZoom.value(start: quickZoomStart,
@@ -555,8 +555,6 @@ struct CameraScreen: View {
                         }
                         if let message = googlePhotos.message { Text(message).font(.footnote) }
                     }
-                    Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
-                        .font(.footnote).foregroundStyle(.secondary)
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                     } header: {
@@ -677,6 +675,12 @@ struct CameraScreen: View {
         }
     }
 
+    private func startVideoRecording() {
+        let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
+        let profile = CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name)
+        camera.startRecording(saveToPhotos: saveToPhotos, snapshot: snapshot, profile: profile)
+    }
+
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos,
@@ -746,7 +750,7 @@ struct CameraScreen: View {
     private func handleHardwareCapture() {
         guard camera.ready, !camera.isCapturing, !camera.isSwitching, !camera.isFinishingRecording else { return }
         if mode == .video {
-            if camera.isRecording { camera.stopRecording() } else { camera.startRecording(saveToPhotos: saveToPhotos) }
+            if camera.isRecording { camera.stopRecording() } else { startVideoRecording() }
         } else if countdown > 0 {
             cancelCountdown()
         } else {
@@ -755,7 +759,7 @@ struct CameraScreen: View {
     }
 
     private var canPreviewAddress: Bool {
-        scenePhase == .active && mode == .photo && gpsEnabled && stampEnabled && stampProfiles.selected.layout.showsAddress
+        scenePhase == .active && gpsEnabled && stampEnabled && stampProfiles.selected.layout.showsAddress
     }
 
     private func refreshAddress() { addressPreview.update(location: location.location, enabled: canPreviewAddress) }

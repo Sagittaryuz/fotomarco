@@ -270,20 +270,22 @@ enum StampRenderer {
         return true
     }
 
-    static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
-        guard let sourceImage = UIImage(data: data) else { return nil }
-        let image = style.apply(to: sourceImage)
-        let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-        guard let crop = aspect.crop(in: sourceSize) else { return nil }
-        let size = crop.size
+    static func overlay(size: CGSize, snapshot: StampSnapshot, map: UIImage?, address: String?) -> UIImage? {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return nil }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        format.opaque = false
         var fits = true
-        let result = renderer.image { context in
-            image.draw(in: CGRect(x: -crop.minX, y: -crop.minY, width: sourceSize.width, height: sourceSize.height))
-            guard let snapshot else { return }
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            fits = drawStamp(snapshot: snapshot, map: map, address: address, size: size, context: context)
+        }
+        return fits ? image : nil
+    }
+
+    private static func drawStamp(snapshot: StampSnapshot, map: UIImage?, address: String?,
+                                  size: CGSize, context: UIGraphicsImageRendererContext) -> Bool {
+        var fits = true
+        func drawContents() {
             // Do not rely solely on upstream callers to filter location-derived assets.
             let map = snapshot.mapEnabled && snapshot.location != nil ? map : nil
             let address = snapshot.addressEnabled && snapshot.location != nil ? address : nil
@@ -365,6 +367,26 @@ enum StampRenderer {
                 }
                 logo.draw(in: logoRect)
             }
+        }
+        drawContents()
+        return fits
+    }
+
+    static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
+        guard let sourceImage = UIImage(data: data) else { return nil }
+        let image = style.apply(to: sourceImage)
+        let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        guard let crop = aspect.crop(in: sourceSize) else { return nil }
+        let size = crop.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        var fits = true
+        let result = renderer.image { context in
+            image.draw(in: CGRect(x: -crop.minX, y: -crop.minY, width: sourceSize.width, height: sourceSize.height))
+            guard let snapshot else { return }
+            fits = drawStamp(snapshot: snapshot, map: map, address: address, size: size, context: context)
         }
         guard fits, let outputImage = result.cgImage,
               let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }

@@ -23,6 +23,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var pendingProfileTag: CaptureProfileTag?
     private var pendingStyle: MomentraPhotoStyle = .natural
     private var pendingVideoSaveToPhotos = true
+    private var pendingVideoSnapshot: StampSnapshot?
+    @Published private(set) var processingVideos = 0
     private var captureRotation: CGFloat = 0
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
@@ -229,7 +231,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
     }
 
-    func startRecording(saveToPhotos: Bool) {
+    func startRecording(saveToPhotos: Bool, snapshot: StampSnapshot? = nil, profile: CaptureProfileTag? = nil) {
         guard ready, videoAvailable, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         // Lock immediately, including while the permission sheet is visible.
         isFinishingRecording = true
@@ -257,8 +259,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                     let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
                     let directory = base.appendingPathComponent("Videos", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-                    let file = directory.appendingPathComponent(UUID().uuidString + ".mov")
+                    let id = UUID()
+                    let file = directory.appendingPathComponent(id.uuidString + ".mov")
+                    if let profile {
+                        do { try PhotoProfileIndex.register(captureID: id, profile: profile, captureDate: Date()) }
+                        catch { self.report("O vídeo será gravado, mas não foi possível associá-lo ao perfil.") }
+                    }
                     self.stopRequested = false
+                    self.pendingVideoSnapshot = snapshot
                     self.pendingVideoSaveToPhotos = saveToPhotos
                     self.startingRecording = true
                     self.applyCaptureRotation(to: self.movieOutput.connection(with: .video))
@@ -295,27 +303,62 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             self.stopRequested = false
             if !self.wantsSession && self.session.isRunning { self.session.stopRunning() }
             let completed = (error as NSError?)?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool ?? (error == nil)
+            let snapshot = self.pendingVideoSnapshot
+            let saveToPhotos = self.pendingVideoSaveToPhotos
+            self.pendingVideoSnapshot = nil
+            DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
             guard completed, FileManager.default.fileExists(atPath: outputFileURL.path) else {
                 self.report("A gravação não foi concluída. O arquivo disponível permanece no aplicativo.")
-                DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
                 return
             }
-            guard self.pendingVideoSaveToPhotos else {
-                DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+            guard let snapshot else {
+                if saveToPhotos { self.saveVideoToPhotos(outputFileURL, captureID: UUID(uuidString: outputFileURL.deletingPathExtension().lastPathComponent)) }
                 return
             }
-            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-                guard status == .authorized || status == .limited else {
-                    self.report("O vídeo permanece no aplicativo; permita o acesso ao Fotos para salvá-lo na biblioteca.")
-                    DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
-                    return
+            DispatchQueue.main.async { self.processingVideos += 1 }
+            StampMap.load(snapshot: snapshot, queue: self.queue) { map in
+                StampAddress.load(snapshot: snapshot, queue: self.queue) { address in
+                    let root = outputFileURL.deletingLastPathComponent().deletingLastPathComponent()
+                    let destination = root.appendingPathComponent("ProcessedVideos", isDirectory: true)
+                        .appendingPathComponent(outputFileURL.lastPathComponent)
+                    Task {
+                        defer { DispatchQueue.main.async { self.processingVideos = max(0, self.processingVideos - 1) } }
+                        do {
+                            try await VideoStampRenderer.export(source: outputFileURL, destination: destination,
+                                                                snapshot: snapshot, map: map, address: address)
+                            if saveToPhotos {
+                                self.saveVideoToPhotos(destination, captureID: UUID(uuidString: destination.deletingPathExtension().lastPathComponent))
+                            }
+                            if snapshot.mapEnabled && snapshot.location != nil && map == nil {
+                                self.report("O vídeo foi salvo sem mapa porque ele estava indisponível. O original foi preservado.")
+                            } else if snapshot.addressEnabled && snapshot.location != nil && address == nil {
+                                self.report("O vídeo foi salvo sem endereço porque ele estava indisponível. O original foi preservado.")
+                            }
+                        } catch {
+                            self.report("Não foi possível aplicar o carimbo ao vídeo. O original permanece em Capturas.")
+                        }
+                    }
                 }
-                PHPhotoLibrary.shared().performChanges({
-                    PHAssetCreationRequest.forAsset().addResource(with: .video, fileURL: outputFileURL, options: nil)
-                }) { success, _ in
-                    if !success { self.report("O vídeo permanece no aplicativo, mas não foi salvo no Fotos.") }
-                    DispatchQueue.main.async { self.isRecording = false; self.isFinishingRecording = false }
+            }
+        }
+    }
+
+    private func saveVideoToPhotos(_ url: URL, captureID: UUID?) {
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else {
+                self.report("O vídeo permanece no aplicativo; permita o acesso ao Fotos para salvá-lo na biblioteca.")
+                return
+            }
+            var createdAssetID: String?
+            PHPhotoLibrary.shared().performChanges({
+                let creation = PHAssetCreationRequest.forAsset()
+                creation.addResource(with: .video, fileURL: url, options: nil)
+                createdAssetID = creation.placeholderForCreatedAsset?.localIdentifier
+            }) { success, _ in
+                if success, let captureID, let assetID = createdAssetID {
+                    try? PhotoProfileIndex.bindLocal(captureID: captureID, assetID: assetID)
                 }
+                if !success { self.report("Não foi possível salvar o vídeo no Fotos. O arquivo continua no aplicativo.") }
             }
         }
     }
