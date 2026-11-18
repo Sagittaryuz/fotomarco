@@ -26,6 +26,77 @@ final class VideoStampRendererTests: XCTestCase {
         XCTAssertGreaterThan(try brightPixels(in: frame), 15, "O quadro deve conter o texto claro do carimbo")
     }
 
+    func testStampedVideoRetainsAudibleTrack() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let silent = root.appendingPathComponent("silent.mov")
+        let audio = root.appendingPathComponent("tone.caf")
+        let source = root.appendingPathComponent("with-audio.mov")
+        let output = root.appendingPathComponent("stamped.mov")
+        try await makeVideo(at: silent)
+        try makeTone(at: audio)
+        try await combine(video: silent, audio: audio, output: source)
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil)
+        try await VideoStampRenderer.export(source: source, destination: output, snapshot: snapshot, map: nil, address: nil)
+        let exported = AVURLAsset(url: output)
+        let audioTracks = try await exported.loadTracks(withMediaType: .audio)
+        let track = try XCTUnwrap(audioTracks.first)
+        let reader = try AVAssetReader(asset: exported)
+        let audioOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ])
+        XCTAssertTrue(reader.canAdd(audioOutput))
+        reader.add(audioOutput)
+        XCTAssertTrue(reader.startReading())
+        var nonzeroBytes = 0
+        while let sample = audioOutput.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let size = CMBlockBufferGetDataLength(block)
+            var bytes = [UInt8](repeating: 0, count: size)
+            guard CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: size, destination: &bytes) == kCMBlockBufferNoErr else {
+                throw NSError(domain: "VideoAudioTest", code: 1)
+            }
+            nonzeroBytes += bytes.filter { $0 != 0 }.count
+        }
+        XCTAssertGreaterThan(nonzeroBytes, 100, "O áudio gravado deve permanecer audível")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    private func makeTone(at url: URL) throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100))
+        buffer.frameLength = 44_100
+        let channel = try XCTUnwrap(buffer.floatChannelData?[0])
+        for index in 0..<Int(buffer.frameLength) {
+            channel[index] = Float(sin(2 * Double.pi * 440 * Double(index) / 44_100) * 0.4)
+        }
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
+    }
+
+    private func combine(video: URL, audio: URL, output: URL) async throws {
+        let videoAsset = AVURLAsset(url: video), audioAsset = AVURLAsset(url: audio)
+        let videoTracks = try await videoAsset.loadTracks(withMediaType: .video)
+        let audioTracks = try await audioAsset.loadTracks(withMediaType: .audio)
+        let videoTrack = try XCTUnwrap(videoTracks.first)
+        let audioTrack = try XCTUnwrap(audioTracks.first)
+        let duration = CMTimeMinimum(try await videoAsset.load(.duration), try await audioAsset.load(.duration))
+        let composition = AVMutableComposition()
+        let outputVideo = try XCTUnwrap(composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid))
+        let outputAudio = try XCTUnwrap(composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid))
+        try outputVideo.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: videoTrack, at: .zero)
+        try outputAudio.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: audioTrack, at: .zero)
+        let exporter = try XCTUnwrap(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality))
+        exporter.outputURL = output
+        exporter.outputFileType = .mov
+        await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+        guard exporter.status == .completed else { throw exporter.error ?? NSError(domain: "VideoAudioTest", code: 2) }
+    }
+
     func testMissingSourceDoesNotCreateAnOutput() async {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
