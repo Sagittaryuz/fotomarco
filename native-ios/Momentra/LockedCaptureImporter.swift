@@ -37,8 +37,9 @@ enum LockedCaptureImporter {
             copyFiles(from: directory, to: root.appendingPathComponent("Originals", isDirectory: true), cloudQueue: queue, archive: archive)
             copyFiles(from: directory.appendingPathComponent("Processed", isDirectory: true),
                       to: root.appendingPathComponent("Processed", isDirectory: true), cloudQueue: queue, archive: archive)
-            let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: nil)
-            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: nil))
+            let previousOwner = CloudStoragePreference.selectedHash()
+            let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: previousOwner)
+            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: previousOwner))
         }.value
         if outcome.safe {
             // The system owns these session URLs; never remove a session directory directly.
