@@ -62,6 +62,7 @@ final class GooglePhotosManager: ObservableObject {
         CloudStoragePreference.disable()
         auth.signOut()
         cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false; cloudError = nil
+        pendingCloudCaptures = 0; cloudNeedsAttention = false
         objectWillChange.send()
         message = "Conta desconectada do Momentra. Fotos e permissões na conta Google não foram apagadas."
     }
