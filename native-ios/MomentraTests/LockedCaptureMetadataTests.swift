@@ -138,6 +138,8 @@ final class LockedCaptureMetadataTests: XCTestCase {
         try queue.markVerified(id: id, originalMediaID: "original-id", processedMediaID: "stamped-id")
         try queue.beginCleanup(id: id, owner: owner)
         try FileManager.default.removeItem(at: localOriginal)
+        LockedCaptureImporter.copyFiles(from: session, to: originalsDir, cloudQueue: queue)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: localOriginal.path))
         try FileManager.default.removeItem(at: localStamped)
         try queue.finishCleanup(id: id, owner: owner)
         LockedCaptureImporter.copyFiles(from: session, to: originalsDir, cloudQueue: queue)
