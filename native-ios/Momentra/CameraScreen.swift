@@ -531,8 +531,13 @@ struct CameraScreen: View {
                     }
                     Text("Vídeos não recebem carimbo nesta versão em desenvolvimento.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Section("Sobre") {
+                    Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
+                    } header: {
+                        Text("Sobre")
+                    } footer: {
+                        Text("Desenvolvido por Marcos Rodrigues Pires · 2026")
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
                 .navigationTitle("Configurações")
