@@ -1,15 +1,24 @@
 import SwiftUI
+import UIKit
 
 /// Vector-based wordmark, sized for the live camera header.
 struct MomentraWordmark: View {
+    private let fontName = "SnellRoundhand-Bold"
+    private let fontSize: CGFloat = 25
+
     var body: some View {
-        HStack(alignment: .center, spacing: 3) {
-            Text("Momentra").font(.custom("SnellRoundhand-Bold", size: 25))
+        let letterHeight = UIFont(name: fontName, size: fontSize)?.xHeight ?? 10
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text("M")
             Image(systemName: "location.circle.fill")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: letterHeight, weight: .semibold))
                 .foregroundStyle(.yellow)
-                .offset(y: 3)
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    (dimensions.height + letterHeight) / 2
+                }
+            Text("mentra")
         }
+        .font(.custom(fontName, size: fontSize))
         .foregroundStyle(.white)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Momentra")
