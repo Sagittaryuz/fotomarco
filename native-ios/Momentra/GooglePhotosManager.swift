@@ -45,6 +45,7 @@ final class GooglePhotosManager: ObservableObject {
 
     func signOut() {
         guard !busy else { return }
+        CloudStoragePreference.disable()
         auth.signOut()
         cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false; cloudError = nil
         objectWillChange.send()
@@ -99,6 +100,11 @@ final class GooglePhotosManager: ObservableObject {
                 let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                             appropriateFor: nil, create: true)
                 let queue = CloudCaptureQueue(directory: documents.appendingPathComponent("CloudPending"))
+                let previous = try queue.entries(for: owner)
+                for item in previous where item.phase == .awaitingPhoto {
+                    try? CloudCaptureStager.stage(root: documents, captureID: item.id,
+                                                 ownerHash: expectedOwnerHash, originalExtension: item.originalExtension)
+                }
                 let items = try queue.entries(for: owner).filter { $0.phase != .cleaned }
                 pendingCloudCaptures = items.count
                 guard items.contains(where: { $0.phase == .ready || $0.phase == .verified || $0.phase == .cleaning }) else { return }

@@ -29,6 +29,9 @@ struct CameraScreen: View {
     @AppStorage("native.address.autoPreviewMigrated") private var addressPreviewMigrated = false
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
+    @AppStorage("native.cloud.only.ownerHash") private var cloudOwnerHash = ""
+    @State private var showCloudOnlyConsent = false
+    @State private var lastCloudAttempt = Date.distantPast
     @AppStorage("native.stamp.size") private var stampSize = "regular"
     @AppStorage("native.stamp.position") private var stampPosition = "bottom"
     @AppStorage("native.stamp.horizontal") private var stampHorizontal = "auto"
@@ -366,7 +369,7 @@ struct CameraScreen: View {
         .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); Task { await updates.check() } }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
             else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
@@ -376,6 +379,10 @@ struct CameraScreen: View {
         .onReceive(location.$location) { fix in addressPreview.update(location: fix, enabled: canPreviewAddress) }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             if canPreviewAddress { refreshAddress() }
+            if scenePhase == .active && Date().timeIntervalSince(lastCloudAttempt) >= 30 { retryCloudCaptures() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .momentraCloudCaptureStaged).receive(on: RunLoop.main)) { _ in
+            retryCloudCaptures()
         }
     }
 
@@ -530,7 +537,10 @@ struct CameraScreen: View {
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
                     Toggle("Salvar cópia no Fotos", isOn: $saveToPhotos)
-                    Text("As capturas continuam guardadas no aplicativo. Use Capturas para compartilhá-las ou salvá-las no Fotos manualmente.")
+                        .disabled(selectedCloudHash != nil)
+                    Text(selectedCloudHash == nil
+                         ? "As capturas continuam guardadas no aplicativo. Use Capturas para compartilhá-las ou salvá-las no Fotos manualmente."
+                         : "No modo somente nuvem, novas fotos não são copiadas para o app Fotos do iPhone.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Section("Previsão meteorológica") {
                         Link("Ler termos da MET Norway", destination: URL(string: "https://docs.api.met.no/doc/TermsOfService")!)
@@ -542,8 +552,31 @@ struct CameraScreen: View {
                         Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
                     }
                     Section("Armazenamento") {
-                        Text("As fotos ficam no dispositivo. O envio ao Google Fotos é feito manualmente pela galeria.")
+                        Button {
+                            cloudOwnerHash = ""
+                        } label: {
+                            HStack {
+                                Text("No dispositivo")
+                                Spacer()
+                                if selectedCloudHash == nil { Image(systemName: "checkmark") }
+                            }
+                        }
+                        Button {
+                            if googlePhotos.connected, googlePhotos.ownerID != nil { showCloudOnlyConsent = true }
+                            else { googlePhotos.message = "Conecte o Google Fotos para escolher essa opção." }
+                        } label: {
+                            HStack {
+                                Text("Somente na nuvem")
+                                Spacer()
+                                if selectedCloudHash != nil { Image(systemName: "checkmark") }
+                            }
+                        }
+                        Text("O original e a foto carimbada ficam temporariamente no iPhone até os dois envios serem confirmados. Uma prévia reduzida permanece no aparelho. Sem internet, o envio continua quando o app estiver aberto e conectado.")
                             .font(.footnote).foregroundStyle(.secondary)
+                        if googlePhotos.pendingCloudCaptures > 0 {
+                            Text("\(googlePhotos.pendingCloudCaptures) captura(s) aguardando conclusão")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                     }
                     Section("Google Fotos pessoal") {
                         if googlePhotos.configured {
@@ -552,7 +585,7 @@ struct CameraScreen: View {
                             } else {
                                 Button("Conectar Google Fotos") { showGoogleConsent = true }.disabled(googlePhotos.busy)
                             }
-                            Text("O envio é manual e exclusivo para fotos pessoais. Conectar não envia fotos.")
+                            Text("O Google Fotos é destinado a fotos pessoais. Conectar a conta não envia fotos por si só.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         } else {
                             Text("A conexão nativa ainda não está configurada.").font(.footnote).foregroundStyle(.secondary)
@@ -570,6 +603,14 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
+                .confirmationDialog("Somente fotos pessoais. O Momentra enviará o original e a foto carimbada ao álbum Momentra. Após verificar os dois arquivos, removerá as cópias em tamanho completo do aplicativo neste iPhone.", isPresented: $showCloudOnlyConsent, titleVisibility: .visible) {
+                    Button("Confirmar somente na nuvem") {
+                        guard let owner = googlePhotos.ownerID, googlePhotos.connected else { return }
+                        cloudOwnerHash = CloudCaptureQueue.ownerHash(owner)
+                        retryCloudCaptures()
+                    }
+                    Button("Cancelar", role: .cancel) {}
+                }
                 .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
                     Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
                     Button("Cancelar", role: .cancel) {}
@@ -687,9 +728,24 @@ struct CameraScreen: View {
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
-        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard, saveToPhotos: saveToPhotos,
+        let target = selectedCloudHash
+        camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard,
+                       saveToPhotos: target == nil && saveToPhotos,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
-                       profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name))
+                       profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
+                       cloudOwnerHash: target)
+    }
+
+    private var selectedCloudHash: String? {
+        guard let saved = CloudStoragePreference.selectedHash(), saved == cloudOwnerHash else { return nil }
+        if let current = googlePhotos.ownerID, CloudCaptureQueue.ownerHash(current) != saved { return nil }
+        return saved
+    }
+
+    private func retryCloudCaptures() {
+        lastCloudAttempt = Date()
+        guard scenePhase == .active, let hash = selectedCloudHash else { return }
+        googlePhotos.drainCloudQueue(expectedOwnerHash: hash, personalConsent: true)
     }
 
     private func refreshGalleryThumbnail() {

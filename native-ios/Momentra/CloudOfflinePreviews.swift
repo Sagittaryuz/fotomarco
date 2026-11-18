@@ -10,7 +10,7 @@ private struct OfflineCloudPreview: Identifiable {
 
 /// Reduced local previews are explicitly labelled; they are not the cloud original.
 struct CloudOfflinePreviews: View {
-    let owner: String
+    let ownerHash: String
     let columnCount: Int
     let profiles: PhotoProfileLookup
     @State private var items: [OfflineCloudPreview] = []
@@ -57,11 +57,11 @@ struct CloudOfflinePreviews: View {
             }
         }
         }
-        .task(id: owner) {
-            guard !owner.isEmpty,
+        .task(id: ownerHash) {
+            guard !ownerHash.isEmpty,
                   let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                           appropriateFor: nil, create: false),
-                  let entries = try? CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending")).entries(for: owner)
+                  let entries = try? CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending")).entries(ownerHash: ownerHash)
             else { items = []; return }
             items = entries.filter { $0.phase == .cleaned || $0.phase == .cleaning }.compactMap { entry in
                 let url = root.appendingPathComponent("CloudThumbnails").appendingPathComponent(entry.id.uuidString + ".jpg")

@@ -25,7 +25,13 @@ struct CloudPhotoGallery: View {
             if !googlePhotos.configured {
                 ContentUnavailableView("Google Fotos indisponível", systemImage: "cloud", description: Text("A conexão Google ainda não foi configurada nesta versão."))
             } else if !googlePhotos.connected {
-                ContentUnavailableView("Conecte o Google Fotos", systemImage: "cloud", description: Text("Conecte sua conta em Ajustes do Momentra. A conexão não envia fotos automaticamente."))
+                ScrollView {
+                    ContentUnavailableView("Conecte o Google Fotos", systemImage: "cloud", description: Text("Conecte sua conta em Ajustes do Momentra para acessar os originais na nuvem."))
+                    if let ownerHash = CloudStoragePreference.selectedHash(),
+                       googlePhotos.ownerID == nil || googlePhotos.ownerID.map({ CloudCaptureQueue.ownerHash($0) == ownerHash }) == true {
+                        CloudOfflinePreviews(ownerHash: ownerHash, columnCount: columnCount, profiles: profileLookup)
+                    }
+                }
             } else {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -46,7 +52,7 @@ struct CloudPhotoGallery: View {
                             Text(error).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                             Button("Tentar novamente") { googlePhotos.loadCloudPhotos() }.disabled(googlePhotos.busy)
                             if let owner = googlePhotos.ownerID {
-                                CloudOfflinePreviews(owner: owner, columnCount: columnCount, profiles: profileLookup)
+                                CloudOfflinePreviews(ownerHash: CloudCaptureQueue.ownerHash(owner), columnCount: columnCount, profiles: profileLookup)
                             }
                         }
                         if googlePhotos.cloudLoaded && googlePhotos.cloudPhotos.isEmpty {
