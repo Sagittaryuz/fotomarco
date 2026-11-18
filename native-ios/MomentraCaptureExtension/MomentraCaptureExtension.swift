@@ -17,6 +17,7 @@ private struct LockedCameraScreen: View {
     @StateObject private var camera = LockedCameraModel()
     @State private var location = LockedLocation()
     @State private var context: MomentraCaptureContext?
+    @State private var contextLoaded = false
     let directory: URL
 
     var body: some View {
@@ -31,7 +32,7 @@ private struct LockedCameraScreen: View {
                 HStack {
                     Text("Momentra").font(.headline)
                     Spacer()
-                    if camera.capturing { ProgressView().tint(.white) }
+                    if camera.capturing || !contextLoaded { ProgressView().tint(.white) }
                 }.padding()
                 if context?.position == "top" { stampPreview }
                 Spacer()
@@ -51,7 +52,7 @@ private struct LockedCameraScreen: View {
                 Button { takePhoto() } label: {
                     Circle().fill(.white).frame(width: 76, height: 76)
                         .padding(5).overlay(Circle().stroke(.white, lineWidth: 3))
-                }.disabled(camera.capturing || !camera.ready).padding(.bottom, 24).accessibilityLabel("Fotografar")
+                }.disabled(camera.capturing || !camera.ready || !contextLoaded).padding(.bottom, 24).accessibilityLabel("Fotografar")
             }.foregroundStyle(.white)
         }
         }
@@ -60,6 +61,7 @@ private struct LockedCameraScreen: View {
         }
         .task {
             context = try? await MomentraCaptureIntent.appContext
+            contextLoaded = true
             location.startIfAuthorized(context?.gpsEnabled == true)
             camera.start()
         }
@@ -70,7 +72,9 @@ private struct LockedCameraScreen: View {
     }
 
     private var lockedStampLimitation: String? {
-        guard let context, context.stampEnabled else { return nil }
+        guard contextLoaded else { return nil }
+        guard let context else { return "Configuração do carimbo indisponível. Abra o Momentra." }
+        guard context.stampEnabled else { return nil }
         let layout = context.layoutData.flatMap { data in
             data.count <= 2000 ? try? JSONDecoder().decode(StampLayout.self, from: data) : nil
         }
@@ -104,6 +108,7 @@ private struct LockedCameraScreen: View {
     }
 
     private func takePhoto() {
+        guard contextLoaded else { return }
         camera.capture(directory: directory, context: context, location: location.location, heading: location.heading)
     }
 }
