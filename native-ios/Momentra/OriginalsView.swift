@@ -45,6 +45,7 @@ struct OriginalsView: View {
                     Text("Celular").tag(1)
                     Text("Nuvem").tag(2)
                 }.pickerStyle(.segmented).padding()
+                GalleryStorageSummary(cloud: gallerySection == 2)
                 if gallerySection == 0 {
                     captures
                 } else if gallerySection == 1 {
