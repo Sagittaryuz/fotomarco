@@ -2,6 +2,23 @@ import XCTest
 @testable import Momentra
 
 final class CloudArchiveJournalTests: XCTestCase {
+    func testArchiveNameCarriesCaptureDateAndProfileAcrossDevices() throws {
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 1_790_000_000)
+        let profile = CaptureProfileTag(id: UUID(), name: "Medição · Fundação")
+        let name = CloudArchiveFilename.make(captureID: id, capturedAt: date, profile: profile, originalExtension: "heic")
+        let decoded = try XCTUnwrap(CloudArchiveFilename(name))
+        XCTAssertEqual(decoded.captureID, id)
+        XCTAssertEqual(decoded.capturedAt, date)
+        XCTAssertEqual(decoded.profile, profile)
+        XCTAssertTrue(decoded.isOriginal)
+        XCTAssertLessThanOrEqual(name.utf8.count, 160)
+        XCTAssertNil(CloudArchiveFilename("\(id.uuidString)-original.jpg.exe"))
+        XCTAssertNil(CloudArchiveFilename("\(id.uuidString)-stamped.heic"))
+        XCTAssertNil(CloudArchiveFilename("\(id.uuidString).nan-stamped.jpg"))
+        XCTAssertNotNil(CloudArchiveFilename("\(id.uuidString)-stamped.jpg"))
+    }
+
     func testReopeningPreservesTheFrozenDestinationsAndVerifiedReceipts() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

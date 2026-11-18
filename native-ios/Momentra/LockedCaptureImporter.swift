@@ -164,8 +164,11 @@ enum LockedCaptureImporter {
                   sourceStampedHash == localStampedHash else { continue }
             do {
                 if let plan {
+                    let profile = metadata.profileID.flatMap { id in
+                        metadata.profileName.map { CaptureProfileTag(id: id, name: $0) }
+                    }
                     try CloudArchiveJournal(root: root).enqueue(id: id, date: metadata.capturedAt,
-                                                                originalExtension: "jpg", plan: plan)
+                                                                originalExtension: "jpg", plan: plan, profile: profile)
                 } else if let ownerHash {
                     try CloudCaptureStager.stage(root: root, captureID: id, ownerHash: ownerHash, originalExtension: "jpg")
                 }

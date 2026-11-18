@@ -55,23 +55,22 @@ struct CloudArchiveGallery: View {
     }
 }
 
-private struct ArchiveGalleryPhoto: Identifiable, Hashable {
+private struct ArchiveGalleryPhoto: Identifiable {
     let id: String
     let name: String
     let date: Date?
     let captureID: UUID
     let isOriginal: Bool
+    let profile: CaptureProfileTag?
 
     init?(id: String, name: String, date: Date?) {
-        guard name.count > 37, let captureID = UUID(uuidString: String(name.prefix(36))) else { return nil }
-        let suffix = name.dropFirst(36).lowercased()
-        guard ["-stamped.jpg", "-original.jpg", "-original.jpeg", "-original.heic", "-original.heif"]
-            .contains(suffix) else { return nil }
+        guard let metadata = CloudArchiveFilename(name) else { return nil }
         self.id = id
         self.name = name
-        self.date = date
-        self.captureID = captureID
-        isOriginal = suffix.hasPrefix("-original.")
+        self.date = metadata.capturedAt ?? date
+        self.captureID = metadata.captureID
+        isOriginal = metadata.isOriginal
+        profile = metadata.profile
     }
 
     var versionLabel: String { isOriginal ? "Original" : "Com carimbo" }
@@ -108,7 +107,7 @@ private struct ArchiveAccountGallery: View {
 
     private var groups: [GalleryGroup<ArchiveGalleryPhoto>] {
         GalleryGrouping.groups(photos, date: date, profile: { photo in
-            guard let tag = profileLookup.captures[photo.captureID] else { return nil }
+            guard let tag = profileLookup.captures[photo.captureID] ?? photo.profile else { return nil }
             let liveProfile = stampProfiles.profiles.first { $0.id == tag.id }
             return CaptureProfileTag(id: tag.id, name: liveProfile?.name ?? tag.name)
         })

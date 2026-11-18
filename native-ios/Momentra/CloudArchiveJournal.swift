@@ -13,6 +13,8 @@ struct CloudArchiveJournal {
         var reservations: [Reservation] = []
         var cleanupStarted = false
         var finished = false
+        var remoteOriginalName: String?
+        var remoteStampedName: String?
 
         struct Reservation: Codable {
             let destination: CloudDeliveryPlan.Destination
@@ -22,7 +24,8 @@ struct CloudArchiveJournal {
         }
 
         func remoteName(stamped: Bool) -> String {
-            id.uuidString + (stamped ? "-stamped.jpg" : "-original." + originalExtension)
+            if stamped { return remoteStampedName ?? id.uuidString + "-stamped.jpg" }
+            return remoteOriginalName ?? id.uuidString + "-original." + originalExtension
         }
     }
 
@@ -34,8 +37,10 @@ struct CloudArchiveJournal {
                                                appropriateFor: nil, create: true))
     }
 
-    func enqueue(id: UUID, date: Date, originalExtension: String, plan: CloudDeliveryPlan) throws {
-        guard plan.isValidNewPlan, !plan.deliveries.isEmpty, Self.validExtension(originalExtension) else {
+    func enqueue(id: UUID, date: Date, originalExtension: String, plan: CloudDeliveryPlan,
+                 profile: CaptureProfileTag? = nil) throws {
+        guard plan.isValidNewPlan, !plan.deliveries.isEmpty, Self.validExtension(originalExtension),
+              (0...253_402_300_799).contains(date.timeIntervalSince1970) else {
             throw CocoaError(.fileWriteInvalidFileName)
         }
         Self.fileLock.lock()
@@ -49,7 +54,12 @@ struct CloudArchiveJournal {
             }
             return
         }
-        try write(Capture(id: id, createdAt: date, originalExtension: originalExtension, plan: plan))
+        var capture = Capture(id: id, createdAt: date, originalExtension: originalExtension, plan: plan)
+        capture.remoteOriginalName = CloudArchiveFilename.make(captureID: id, capturedAt: date, profile: profile,
+                                                               originalExtension: originalExtension)
+        capture.remoteStampedName = CloudArchiveFilename.make(captureID: id, capturedAt: date, profile: profile,
+                                                              originalExtension: nil)
+        try write(capture)
     }
 
     func publishImportedFileIfAllowed(id: UUID, publish: () -> Void) {
@@ -86,6 +96,12 @@ struct CloudArchiveJournal {
         let item = try JSONDecoder().decode(Capture.self, from: Data(contentsOf: path(id)))
         let destinations = item.plan.deliveries.map(\.destination)
         guard id == item.id, Self.validExtension(item.originalExtension), !destinations.isEmpty,
+              let originalName = CloudArchiveFilename(item.remoteName(stamped: false)),
+              originalName.captureID == id, originalName.isOriginal,
+              item.remoteName(stamped: false).hasSuffix("." + item.originalExtension),
+              let stampedName = CloudArchiveFilename(item.remoteName(stamped: true)),
+              stampedName.captureID == id, !stampedName.isOriginal,
+              originalName.capturedAt == stampedName.capturedAt,
               Set(destinations).count == destinations.count,
               destinations.allSatisfy({
                   CloudDeliveryPlan.Destination(provider: $0.provider, accountHash: $0.accountHash) != nil

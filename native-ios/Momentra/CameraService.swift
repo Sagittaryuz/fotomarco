@@ -19,6 +19,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var startingRecording = false
     private var stopRequested = false
     private var pendingStamp: StampSnapshot?
+    private var pendingPhotoDate: Date?
     private var pendingAspect: PhotoAspect = .standard
     private var pendingPhotoSaveToPhotos = true
     private var pendingProfileTag: CaptureProfileTag?
@@ -111,6 +112,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isCapturing = true
         let selectedFlash = flashMode
+        let capturedAt = snapshot?.capturedAt ?? Date()
         queue.async {
             guard self.wantsSession, self.session.isRunning else {
                 DispatchQueue.main.async { self.isCapturing = false }
@@ -118,6 +120,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             }
             let settings = AVCapturePhotoSettings()
             self.pendingStamp = snapshot
+            self.pendingPhotoDate = capturedAt
             self.pendingAspect = aspect
             self.pendingStyle = style
             self.pendingPhotoSaveToPhotos = saveToPhotos
@@ -377,13 +380,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         guard error == nil, let data = photo.fileDataRepresentation() else {
-            queue.async { self.pendingStamp = nil }
+            queue.async { self.pendingStamp = nil; self.pendingPhotoDate = nil }
             report("Não foi possível capturar a foto.")
             DispatchQueue.main.async { self.isCapturing = false }
             return
         }
         queue.async {
             let snapshot = self.pendingStamp
+            let capturedAt = self.pendingPhotoDate ?? Date()
             let aspect = self.pendingAspect
             let style = self.pendingStyle
             let saveToPhotos = self.pendingPhotoSaveToPhotos
@@ -393,6 +397,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             self.pendingArchivePlan = nil
             let captureID = UUID()
             self.pendingStamp = nil
+            self.pendingPhotoDate = nil
             var archiveQueued = false
             do {
                 let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -404,8 +409,9 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 try data.write(to: originals.appendingPathComponent(captureID.uuidString + "." + suffix), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
                 if let archivePlan, !archivePlan.deliveries.isEmpty {
                     do {
-                        try CloudArchiveJournal(root: base).enqueue(id: captureID, date: snapshot?.capturedAt ?? Date(),
-                                                                   originalExtension: suffix, plan: archivePlan)
+                        try CloudArchiveJournal(root: base).enqueue(id: captureID, date: capturedAt,
+                                                                   originalExtension: suffix, plan: archivePlan,
+                                                                   profile: profileTag)
                         archiveQueued = true
                     } catch {
                         self.report("Não foi possível registrar o envio. A captura será mantida no iPhone. Confira o espaço disponível.")
@@ -418,7 +424,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             }
             let shouldNotifyArchive = archiveQueued
             if let profileTag {
-                do { try PhotoProfileIndex.register(captureID: captureID, profile: profileTag, captureDate: Date()) }
+                do { try PhotoProfileIndex.register(captureID: captureID, profile: profileTag, captureDate: capturedAt) }
                 catch { self.report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
             }
             guard let snapshot else {
