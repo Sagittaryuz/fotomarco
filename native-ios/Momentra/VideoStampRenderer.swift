@@ -35,9 +35,16 @@ enum VideoStampRenderer {
         exporter.outputURL = temporary
         exporter.outputFileType = .mov
         exporter.videoComposition = composition
-        await withCheckedContinuation { continuation in
-            exporter.exportAsynchronously { continuation.resume() }
+        try Task.checkCancellation()
+        await withTaskCancellationHandler {
+            guard !Task.isCancelled else { return }
+            await withCheckedContinuation { continuation in
+                exporter.exportAsynchronously { continuation.resume() }
+            }
+        } onCancel: {
+            exporter.cancelExport()
         }
+        try Task.checkCancellation()
         guard exporter.status == .completed else { throw exporter.error ?? Failure.incomplete }
         let finished = AVURLAsset(url: temporary)
         let sourceDuration = try await asset.load(.duration)
@@ -48,6 +55,7 @@ enum VideoStampRenderer {
         guard !outputVideo.isEmpty, (inputAudio.isEmpty || !outputAudio.isEmpty),
               sourceDuration.seconds.isFinite, outputDuration.seconds.isFinite,
               abs(sourceDuration.seconds - outputDuration.seconds) < 0.25 else { throw Failure.incomplete }
+        try Task.checkCancellation()
         try FileManager.default.moveItem(at: temporary, to: destination)
         try? (destination as NSURL).setResourceValue(URLFileProtection.completeUntilFirstUserAuthentication,
                                                     forKey: .fileProtectionKey)
