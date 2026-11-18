@@ -1,7 +1,7 @@
 import Foundation
 import LockedCameraCapture
 
-/// The source is intentionally retained until a future, verified cleanup flow.
+/// Session content is invalidated only after all recognized files and metadata have verified durable copies.
 @available(iOS 18.0, *)
 enum LockedCaptureImporter {
     static func watch() async {
