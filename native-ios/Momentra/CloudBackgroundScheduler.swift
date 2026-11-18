@@ -11,7 +11,7 @@ enum CloudBackgroundPolicy {
 /// iOS decides when this task runs and can interrupt it. The durable journal
 /// and local originals remain the source of truth when a pass is interrupted.
 enum CloudBackgroundScheduler {
-    static let identifier = "br.com.momentra.camera.cloud-processing"
+    static let identifier = LockedCaptureMetadata.cloudTaskIdentifier
 
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
@@ -22,6 +22,8 @@ enum CloudBackgroundScheduler {
             scheduleIfNeeded()
             let completion = CloudTaskCompletion(processing)
             let work = Task { @MainActor in
+                if #available(iOS 18.0, *) { await LockedCaptureImporter.importExisting() }
+                guard !Task.isCancelled else { completion.finish(false); return }
                 let success = await GooglePhotosManager.shared.runBackgroundCloudPass()
                 completion.finish(success)
             }

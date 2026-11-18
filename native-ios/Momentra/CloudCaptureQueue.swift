@@ -81,6 +81,17 @@ final class CloudCaptureQueue {
         }
     }
 
+    /// Serialize publication of an imported session file with cleanup transitions.
+    /// Never resurrect a capture after cloud verification/cleanup has begun.
+    func publishImportedFileIfAllowed(id: UUID, publish: () -> Void) {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        if FileManager.default.fileExists(atPath: path(for: id).path) {
+            guard let value = try? read(id),
+                  value.phase == .awaitingPhoto || value.phase == .ready || value.phase == .uncertain else { return }
+        }
+        publish()
+    }
+
     func entry(id: UUID) throws -> CloudPendingCapture {
         Self.lock.lock(); defer { Self.lock.unlock() }
         return try read(id)

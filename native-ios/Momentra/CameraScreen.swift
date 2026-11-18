@@ -390,6 +390,19 @@ struct CameraScreen: View {
         .onReceive(googlePhotos.$pendingCloudCaptures) { _ in
             refreshCloudQueueStatus()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .momentraOpenCamera).receive(on: RunLoop.main)) { _ in
+            showSettings = false
+            showOriginals = false
+            showMap = false
+            showSettingsImport = false
+            showLogoImport = false
+            showForecastTerms = false
+            showGoogleConsent = false
+            showCloudOnlyConsent = false
+            showAspectPanel = false
+            selectedRecognizedText = nil
+            camera.start()
+        }
     }
 
     private var trackedCamera: some View {
@@ -428,6 +441,9 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selectedID) { _, _ in refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onChange(of: stampProfiles.selected.logoName) { _, _ in refreshLogo() }
         .onChange(of: stampProfiles.selected.layout) { _, _ in publishCaptureContext() }
+        .onChange(of: stampProfiles.selected.name) { _, _ in publishCaptureContext() }
+        .onChange(of: stampProfiles.selected.note) { _, _ in publishCaptureContext() }
+        .onChange(of: cloudOwnerHash) { _, _ in publishCaptureContext() }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
@@ -840,10 +856,13 @@ struct CameraScreen: View {
     private func publishCaptureContext() {
         guard #available(iOS 18.0, *) else { return }
         let context = MomentraCaptureContext(stampEnabled: stampEnabled, gpsEnabled: gpsEnabled,
-            title: "", note: String(stampProfiles.selected.note.prefix(96)),
+            title: "", note: LockedCaptureMetadata.safeNote(stampProfiles.selected.note),
             compact: stampProfiles.selected.layout.compact, position: stampProfiles.selected.layout.position,
             horizontal: stampProfiles.selected.layout.horizontal, longDate: stampProfiles.selected.layout.dateFormat == "long",
-            fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect, saveToPhotos: saveToPhotos)
+            fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect,
+            saveToPhotos: selectedCloudHash == nil && saveToPhotos,
+            profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
+            cloudOwnerHash: selectedCloudHash)
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 

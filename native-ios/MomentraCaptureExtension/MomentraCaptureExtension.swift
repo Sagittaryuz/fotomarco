@@ -68,7 +68,6 @@ private struct LockedCameraScreen: View {
         if let context, context.stampEnabled {
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 VStack(alignment: .leading, spacing: 4) {
-                    if !context.title.isEmpty { Text(context.title).bold() }
                     if !context.note.isEmpty { Text(context.note) }
                     Text(timeline.date, format: .dateTime.day().month().year().hour().minute().second())
                     if context.gpsEnabled, let fix = location.location,

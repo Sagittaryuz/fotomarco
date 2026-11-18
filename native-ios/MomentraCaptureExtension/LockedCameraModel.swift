@@ -1,4 +1,5 @@
 import AVFoundation
+import BackgroundTasks
 import CoreLocation
 import Photos
 import SwiftUI
@@ -114,9 +115,26 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         do { try jpeg.write(to: directory.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic) }
         catch { DispatchQueue.main.async { self.error = "Não foi possível guardar a foto." }; return }
         let context = stampContext
+        var canScheduleCloud = false
+        if let context, let captureID = UUID(uuidString: id) {
+            do {
+                let metadataDir = directory.appendingPathComponent("Metadata", isDirectory: true)
+                try FileManager.default.createDirectory(at: metadataDir, withIntermediateDirectories: true)
+                let metadata = LockedCaptureMetadata(captureID: captureID, capturedAt: capturedAt,
+                    profileID: context.profileID, profileName: context.profileName,
+                    cloudOwnerHash: context.cloudOwnerHash)
+                guard metadata.isValid(for: captureID) else { throw CocoaError(.fileWriteInvalidFileName) }
+                try JSONEncoder().encode(metadata).write(to: metadataDir.appendingPathComponent(id).appendingPathExtension("json"), options: .atomic)
+                canScheduleCloud = metadata.cloudOwnerHash != nil
+            } catch {
+                DispatchQueue.main.async {
+                    self.error = "A foto foi preservada, mas seu perfil e envio à nuvem não puderam ser preparados."
+                }
+            }
+        }
         let snapshot: StampSnapshot?
         if let context, context.stampEnabled {
-            snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: context.title,
+            snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: "",
                 note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
                 longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading)
         } else { snapshot = nil }
@@ -131,6 +149,13 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         } catch {
             DispatchQueue.main.async { self.error = "A foto original foi salva, mas não foi possível guardar a cópia processada." }
             return
+        }
+        if canScheduleCloud {
+            let request = BGProcessingTaskRequest(identifier: LockedCaptureMetadata.cloudTaskIdentifier)
+            request.requiresNetworkConnectivity = true
+            request.requiresExternalPower = false
+            request.earliestBeginDate = Date(timeIntervalSinceNow: 60)
+            try? BGTaskScheduler.shared.submit(request)
         }
         guard context?.saveToPhotos == true else { return }
         let authorization = PHPhotoLibrary.authorizationStatus(for: .addOnly)

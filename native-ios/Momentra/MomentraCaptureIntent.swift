@@ -1,4 +1,5 @@
 import AppIntents
+import Foundation
 
 struct MomentraCaptureContext: Codable, Equatable, Sendable {
     let stampEnabled: Bool
@@ -12,6 +13,9 @@ struct MomentraCaptureContext: Codable, Equatable, Sendable {
     let fontStyle: String
     let aspect: String
     let saveToPhotos: Bool?
+    var profileID: UUID? = nil
+    var profileName: String? = nil
+    var cloudOwnerHash: String? = nil
 }
 
 /// Shared by the app, capture extension, and control widget targets.
@@ -23,7 +27,12 @@ struct MomentraCaptureIntent: CameraCaptureIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        // The app opens directly to CameraScreen after its first-run setup.
-        .result()
+        // If the app is already open, leave any presented panel and reveal the camera.
+        NotificationCenter.default.post(name: .momentraOpenCamera, object: nil)
+        return .result()
     }
+}
+
+extension Notification.Name {
+    static let momentraOpenCamera = Notification.Name("MomentraOpenCamera")
 }
