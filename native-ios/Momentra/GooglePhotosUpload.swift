@@ -20,9 +20,11 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
     private let token: String
     private let session: URLSession
     private let base = "https://photoslibrary.googleapis.com/v1"
+    private let albumID: String?
 
-    init(token: String, configuration: URLSessionConfiguration = .ephemeral) {
+    init(token: String, albumID: String? = nil, configuration: URLSessionConfiguration = .ephemeral) {
         self.token = token
+        self.albumID = albumID
         configuration.timeoutIntervalForRequest = 20
         session = URLSession(configuration: configuration, delegate: NoPhotoRedirect(), delegateQueue: nil)
     }
@@ -65,7 +67,9 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
     }
 
     func createItem(uploadToken: String, filename: String) async throws -> String {
-        let body = try JSONSerialization.data(withJSONObject: ["newMediaItems": [["simpleMediaItem": ["uploadToken": uploadToken, "fileName": filename]]]])
+        var payload: [String: Any] = ["newMediaItems": [["simpleMediaItem": ["uploadToken": uploadToken, "fileName": filename]]]]
+        if let albumID { payload["albumId"] = albumID }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let data = try await request(path: "/mediaItems:batchCreate", method: "POST", body: body,
                                      contentType: "application/json", limit: 32768)
         let response = try JSONDecoder().decode(CreateResponse.self, from: data)
@@ -92,6 +96,29 @@ final class GooglePersonalPhotoTransport: PersonalPhotoTransport {
         guard let encoded = query.percentEncodedQuery else { throw URLError(.badURL) }
         let bytes = try await request(path: "/mediaItems?" + encoded, method: "GET", limit: 512 * 1024)
         return try CloudPhotoPage.parse(bytes)
+    }
+
+    func albumPage(pageToken: String?) async throws -> GoogleAlbumPage {
+        guard (pageToken?.utf8.count ?? 0) <= 2048 else { throw URLError(.badURL) }
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "pageSize", value: "50")]
+        if let pageToken { components.queryItems?.append(URLQueryItem(name: "pageToken", value: pageToken)) }
+        guard let query = components.percentEncodedQuery else { throw URLError(.badURL) }
+        let data = try await request(path: "/albums?" + query, method: "GET", limit: 512 * 1024)
+        return try JSONDecoder().decode(GoogleAlbumPage.self, from: data)
+    }
+
+    func createAlbum(title: String) async throws -> GoogleAlbum {
+        let body = try JSONSerialization.data(withJSONObject: ["album": ["title": title]])
+        let data = try await request(path: "/albums", method: "POST", body: body,
+                                     contentType: "application/json", limit: 32768)
+        return try JSONDecoder().decode(GoogleAlbum.self, from: data)
+    }
+
+    func getAlbum(id: String) async throws -> GoogleAlbum {
+        guard GoogleAlbumCoordinator.validID(id) else { throw URLError(.badURL) }
+        let data = try await request(path: "/albums/" + id, method: "GET", limit: 32768)
+        return try JSONDecoder().decode(GoogleAlbum.self, from: data)
     }
 
     private struct MediaItem: Decodable { let id: String }

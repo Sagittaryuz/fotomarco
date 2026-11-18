@@ -36,6 +36,18 @@ final class GooglePhotosTransportTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Goog-Upload-Protocol"), "raw")
     }
 
+    func testMediaCreationTargetsTheSelectedAlbum() async throws {
+        PhotoURLProtocol.responseBody = Data(#"{"newMediaItemResults":[{"status":{},"mediaItem":{"id":"photo1"}}]}"#.utf8)
+        PhotoURLProtocol.capturedRequest = nil
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [PhotoURLProtocol.self]
+        let transport = GooglePersonalPhotoTransport(token: "test-token", albumID: "album1", configuration: configuration)
+        _ = try await transport.createItem(uploadToken: "token", filename: "photo.jpg")
+        let body = try XCTUnwrap(PhotoURLProtocol.capturedRequest?.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["albumId"] as? String, "album1")
+    }
+
     func testOversizedResponseIsRejected() async {
         PhotoURLProtocol.responseBody = Data(repeating: 65, count: 8193)
         do {

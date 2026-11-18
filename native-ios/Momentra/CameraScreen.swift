@@ -95,7 +95,7 @@ struct CameraScreen: View {
                     CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
                 }
                 VStack(spacing: 0) {
-                    Text("Momentra.").font(.headline).padding(.top, 4).padding(.bottom, 4)
+                    MomentraWordmark().padding(.top, 4).padding(.bottom, 4)
                     HStack {
                         Button { cycleFlash() } label: {
                             Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")

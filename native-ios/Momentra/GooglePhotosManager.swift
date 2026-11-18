@@ -117,10 +117,24 @@ final class GooglePhotosManager: ObservableObject {
                     message = "A sessão mudou ou expirou. O arquivo local foi preservado."
                     return
                 }
+                let isCurrent: (String) async -> Bool = { expected in
+                    await MainActor.run { GIDSignIn.sharedInstance.currentUser?.userID == expected }
+                }
+                let albumID: String
+                do {
+                    albumID = try await GoogleAlbumCoordinator.shared.resolve(
+                        directory: documents.appendingPathComponent("GooglePhotoAlbums", isDirectory: true),
+                        owner: owner, transport: GooglePersonalPhotoTransport(token: token), accountIsCurrent: isCurrent)
+                } catch {
+                    message = "Não foi possível confirmar o álbum Momentra. A foto continua no aparelho."
+                    return
+                }
+                guard await isCurrent(owner) else {
+                    message = "A conta Google mudou. O arquivo local foi preservado."
+                    return
+                }
                 let uploader = PersonalPhotoUploader(directory: documents.appendingPathComponent("GooglePhotoReceipts", isDirectory: true),
-                    transport: GooglePersonalPhotoTransport(token: token), accountIsCurrent: { expected in
-                        await MainActor.run { GIDSignIn.sharedInstance.currentUser?.userID == expected }
-                    })
+                    transport: GooglePersonalPhotoTransport(token: token, albumID: albumID), accountIsCurrent: isCurrent)
                 let outcome = await uploader.upload(jpeg: data, captureID: id, owner: owner, personalConsent: true)
                 switch outcome {
                 case .verified: message = "Foto pessoal confirmada no Google Fotos. O arquivo local foi preservado."
