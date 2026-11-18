@@ -93,7 +93,7 @@ struct AppWelcomeGate: View {
             VStack(spacing: 20) {
                 Image(systemName: "sparkles").font(.system(size: 48)).accessibilityHidden(true)
                 Text("Novidades do Momentra").font(.title.bold())
-                Text("Esta versão melhora a abertura da câmera e a instalação das atualizações.")
+                Text("Esta versão traz novos destinos de armazenamento, retorno visual de captura e ajustes nos ícones e no visor.")
                     .multilineTextAlignment(.center).foregroundStyle(.secondary)
                 Button("Continuar") { showNews = false }.buttonStyle(.borderedProminent)
             }.padding(30)
@@ -103,7 +103,7 @@ struct AppWelcomeGate: View {
     private var icon: String { ["person.crop.circle", "camera.aperture", "location.viewfinder", "photo.on.rectangle.angled"][page] }
     private var title: String { ["Bem-vindo ao Momentra", "Registre seus momentos", "Localização no carimbo", "Suas fotos, do seu jeito"][page] }
     private var description: String {
-        ["Entre com sua conta Google para começar. A conexão com o Google Fotos é uma escolha separada e não envia fotos automaticamente.",
+        ["Entre com sua conta Google se desejar. Escolha nas configurações onde guardar as novas capturas e ative cada destino que quiser usar.",
          "Use a câmera para fotografar e gravar. O iPhone pedirá acesso à câmera; o microfone será solicitado ao gravar vídeos.",
          "Ao ativar o GPS, permita a localização para incluir os dados disponíveis no carimbo. Você pode alterar essa escolha nos ajustes.",
          "O acesso ao Fotos permite escolher e salvar imagens. Você decide quais permissões conceder e pode alterá-las nos Ajustes do iPhone."][page]
