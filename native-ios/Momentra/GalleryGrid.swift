@@ -137,10 +137,11 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         func synchronizeSelection() {
             guard let collection else { return }
             let paths = Set(parent.selecting ? parent.selected.compactMap { positions[$0] } : [])
-            for path in collection.indexPathsForSelectedItems ?? [] where !paths.contains(path) {
+            let current = Set(collection.indexPathsForSelectedItems ?? [])
+            for path in current.subtracting(paths) {
                 collection.deselectItem(at: path, animated: false)
             }
-            for path in paths { collection.selectItem(at: path, animated: false, scrollPosition: []) }
+            for path in paths.subtracting(current) { collection.selectItem(at: path, animated: false, scrollPosition: []) }
             for case let cell as GallerySelectionCell in collection.visibleCells {
                 cell.selectionMode = parent.selecting
                 if let path = collection.indexPath(for: cell) { cell.showSelected(parent.selected.contains(parent.groups[path.section].items[path.item].id)) }

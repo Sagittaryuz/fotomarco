@@ -91,6 +91,10 @@ final class DirectUpdateAccess: ObservableObject {
             }
             let opened = await UIApplication.shared.open(url)
             if opened {
+                guard canClose() else {
+                    message = "A instalação foi solicitada. Aguarde a conclusão da captura ou do envio."
+                    return
+                }
                 // Only leave after iOS accepts the installer request. The system
                 // still controls installation and may ask for confirmation.
                 exit(EXIT_SUCCESS)
