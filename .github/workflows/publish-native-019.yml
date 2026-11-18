@@ -1,0 +1,18 @@
+name: Publish Momentra 0.1.9
+on:
+  push:
+    branches: [feat/native-one-tap-update]
+    paths: [.github/workflows/publish-native-019.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view native-ios-v0.1.9 >/dev/null 2>&1 && exit 0
+          gh release create native-ios-v0.1.9 --target 3d16eacef810f125e318151a67ec6fe357e7777d --title 'Momentra 0.1.9' --notes 'Melhorias na câmera, carimbo de fotos e vídeos, perfis e galerias. Instale usando o link pessoal de atualização. Recursos e preservação de dados ainda precisam ser verificados no iPhone.'
