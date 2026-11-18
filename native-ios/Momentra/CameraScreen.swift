@@ -84,6 +84,13 @@ struct CameraScreen: View {
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
+                    .overlay {
+                        if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .separate {
+                            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                                SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date))
+                            }
+                        }
+                    }
                 if showGrid {
                     CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
                 }
@@ -143,14 +150,14 @@ struct CameraScreen: View {
                             .background(.black.opacity(0.75), in: Capsule())
                             .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
                     }
-                    if mode == .photo && stampEnabled && stampPosition == "top" { liveStamp }
+                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampPosition == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if mode == .photo && stampEnabled && stampPosition != "top" && !showingZoomDial { liveStamp }
+                    if mode == .photo && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampPosition != "top" && !showingZoomDial { liveStamp }
                     LiveRecognitionBanner(engine: camera.recognition) { text in
                         selectedRecognizedText = RecognizedTextSelection(text: text)
                     }
