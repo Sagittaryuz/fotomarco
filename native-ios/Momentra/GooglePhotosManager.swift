@@ -209,7 +209,7 @@ final class GooglePhotosManager: ObservableObject {
         } onCancel: {
             work.cancel()
         }
-        return !Task.isCancelled
+        return !Task.isCancelled && pendingCloudCaptures == 0
     }
 
     func sendProcessedPhoto(_ url: URL) {
