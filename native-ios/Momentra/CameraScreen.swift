@@ -299,6 +299,10 @@ struct CameraScreen: View {
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(pressureEnabled); refreshAddress(); Task { await updates.check() } }
             else { cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
+    }
+
+    private var locationObservedCamera: some View {
+        observedCamera
         .onReceive(location.$location) { fix in addressPreview.update(location: fix, enabled: canPreviewAddress) }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             if canPreviewAddress { refreshAddress() }
@@ -306,7 +310,7 @@ struct CameraScreen: View {
     }
 
     private var trackedCamera: some View {
-        observedCamera
+        locationObservedCamera
         .onChange(of: scanQR) { _, enabled in camera.recognition.setEnabled(qr: enabled, text: scanText) }
         .onChange(of: scanText) { _, enabled in camera.recognition.setEnabled(qr: scanQR, text: enabled) }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
