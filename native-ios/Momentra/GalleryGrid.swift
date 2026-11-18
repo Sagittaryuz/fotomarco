@@ -18,6 +18,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     @Binding var selecting: Bool
     @Binding var selected: Set<Item.ID>
     @Binding var columns: Int
+    var refreshKey = 0
     let tile: (Item) -> Tile
     let open: (Item) -> Void
 
@@ -54,7 +55,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         let coordinator = context.coordinator
         let oldIDs = coordinator.parent.groups.map { $0.items.map(\.id) }
         let newIDs = groups.map { $0.items.map(\.id) }
-        let changed = oldIDs != newIDs || coordinator.parent.columns != columns || coordinator.parent.groups.map(\.title) != groups.map(\.title)
+        let changed = oldIDs != newIDs || coordinator.parent.columns != columns || coordinator.parent.refreshKey != refreshKey || coordinator.parent.groups.map(\.title) != groups.map(\.title)
         coordinator.parent = self
         view.isEditing = selecting
         if changed { coordinator.rebuildIndex(); view.collectionViewLayout.invalidateLayout(); view.reloadData() }

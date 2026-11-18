@@ -68,7 +68,8 @@ struct CloudPhotoGallery: View {
                         }
                     }.padding(.vertical, 8)
                     if !groups.isEmpty {
-                        GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columnCount) { item in
+                        GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columnCount,
+                                    refreshKey: googlePhotos.cloudPhotos.map(\.thumbnailURL).hashValue) { item in
                             CloudThumbnail(url: item.thumbnailURL)
                                 .overlay(alignment: .bottomLeading) {
                                     if CloudProfileFilename.isOriginal(item.name) {
