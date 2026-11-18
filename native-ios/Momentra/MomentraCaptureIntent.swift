@@ -16,6 +16,8 @@ struct MomentraCaptureContext: Codable, Equatable, Sendable {
     var profileID: UUID? = nil
     var profileName: String? = nil
     var cloudOwnerHash: String? = nil
+    var layoutData: Data? = nil
+    var hasLogo: Bool? = nil
 }
 
 /// Shared by the app, capture extension, and control widget targets.

@@ -36,6 +36,12 @@ private struct LockedCameraScreen: View {
                 if context?.position == "top" { stampPreview }
                 Spacer()
                 if context?.position != "top" { stampPreview }
+                if let limitation = lockedStampLimitation {
+                    Text(limitation).font(.caption2).multilineTextAlignment(.center)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(.black.opacity(0.7), in: Capsule())
+                        .padding(.horizontal)
+                }
                 HStack(spacing: 12) {
                     ForEach(camera.zoomOptions, id: \.self) { zoom in
                         Button(String(format: "%g×", Double(zoom))) { camera.setZoom(zoom) }
@@ -61,6 +67,19 @@ private struct LockedCameraScreen: View {
         .alert("Momentra", isPresented: Binding(get: { camera.error != nil }, set: { if !$0 { camera.error = nil } })) {
             Button("OK", role: .cancel) { camera.error = nil }
         } message: { Text(camera.error ?? "") }
+    }
+
+    private var lockedStampLimitation: String? {
+        guard let context, context.stampEnabled else { return nil }
+        let layout = context.layoutData.flatMap { data in
+            data.count <= 2000 ? try? JSONDecoder().decode(StampLayout.self, from: data) : nil
+        }
+        let mapUnavailable = context.gpsEnabled && (layout?.showsMap ?? false)
+        let logoUnavailable = context.hasLogo == true && (layout?.showsLogo ?? true)
+        if mapUnavailable && logoUnavailable { return "Mapa e logotipo indisponíveis com a tela bloqueada." }
+        if mapUnavailable { return "Mapa indisponível com a tela bloqueada." }
+        if logoUnavailable { return "Logotipo indisponível com a tela bloqueada." }
+        return nil
     }
 
     @ViewBuilder

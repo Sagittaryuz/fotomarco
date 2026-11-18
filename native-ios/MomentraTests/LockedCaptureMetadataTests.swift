@@ -24,10 +24,32 @@ final class LockedCaptureMetadataTests: XCTestCase {
         object.removeValue(forKey: "profileID")
         object.removeValue(forKey: "profileName")
         object.removeValue(forKey: "cloudOwnerHash")
+        object.removeValue(forKey: "layoutData")
+        object.removeValue(forKey: "hasLogo")
         let legacy = try JSONDecoder().decode(MomentraCaptureContext.self, from: JSONSerialization.data(withJSONObject: object))
         XCTAssertNil(legacy.profileID)
         XCTAssertNil(legacy.profileName)
         XCTAssertNil(legacy.cloudOwnerHash)
+        XCTAssertNil(legacy.layoutData)
+        XCTAssertNil(legacy.hasLogo)
+    }
+
+    func testLayoutFitsAndRoundTripsThroughCaptureContext() throws {
+        var layout = StampLayout()
+        layout.mode = .separate
+        layout.informationSize = 1.5
+        let layoutData = try JSONEncoder().encode(layout)
+        XCTAssertLessThanOrEqual(layoutData.count, 2000)
+        let context = MomentraCaptureContext(stampEnabled: true, gpsEnabled: false, title: "", note: "",
+            compact: false, position: "bottom", horizontal: "auto", longDate: false, fontStyle: "system",
+            aspect: "4:3", saveToPhotos: false, profileID: UUID(), profileName: "Padrão",
+            cloudOwnerHash: CloudCaptureQueue.ownerHash("person-a"), layoutData: layoutData)
+        let encoded = try JSONEncoder().encode(context)
+        XCTAssertLessThan(encoded.count, 4096)
+        let decoded = try JSONDecoder().decode(MomentraCaptureContext.self, from: encoded)
+        let recovered = try JSONDecoder().decode(StampLayout.self, from: XCTUnwrap(decoded.layoutData))
+        XCTAssertEqual(recovered.mode, .separate)
+        XCTAssertEqual(recovered.informationSize, 1.5)
     }
 
     func testMetadataRejectsInvalidAccountAndBoundsProfileName() {

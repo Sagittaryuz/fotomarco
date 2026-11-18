@@ -11,3 +11,10 @@ O Momentra ainda não aparece na lista de apps para abrir pelo Controle da Câme
 - Testar no iPhone físico a seleção em Ajustes, abertura com aparelho bloqueado e desbloqueado, disparo, salvamento e importação, bem como preservação das capturas anteriores. Testes no simulador não comprovam o funcionamento do botão físico.
 
 Fontes: [integração com o Controle da Câmera](https://developer.apple.com/documentation/avfoundation/enhancing-your-app-experience-with-the-camera-control), [experiência de captura na tela bloqueada](https://developer.apple.com/videos/play/wwdc2024/10204/), [conteúdo da sessão](https://developer.apple.com/documentation/lockedcameracapture/lockedcameracapturesession/sessioncontenturl).
+
+
+## Estado do candidato em desenvolvimento
+
+O candidato contém a intenção compartilhada, o controle WidgetKit e a extensão de captura. A câmera bloqueada registra o identificador do perfil e, quando aplicável, a conta escolhida para a nuvem, sem imprimir o nome do perfil no carimbo. O app principal importa os arquivos da sessão, compara as cópias e só pede ao sistema para invalidar uma sessão integralmente reconhecida e preservada. Se a verificação falhar, mantém a sessão.
+
+A extensão ainda não oferece a mesma interface completa, gravação de vídeo, mapa ou logotipo do app principal. A Apple restringe o acesso à rede e ao contêiner compartilhado durante a captura bloqueada; é necessário resolver esses recursos antes de afirmar paridade. A presença da extensão no IPA não assinado foi verificada, mas sua assinatura pelo Signulous, a aparição na lista e o uso do botão físico ainda não foram comprovados no iPhone.

@@ -134,9 +134,13 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         }
         let snapshot: StampSnapshot?
         if let context, context.stampEnabled {
+            let layout = context.layoutData.flatMap { data in
+                data.count <= 2000 ? try? JSONDecoder().decode(StampLayout.self, from: data) : nil
+            } ?? StampLayout()
             snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: "",
                 note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
-                longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading)
+                longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading,
+                layout: layout)
         } else { snapshot = nil }
         let aspect = PhotoAspect(rawValue: context?.aspect ?? "4:3") ?? .standard
         guard let stamped = StampRenderer.render(jpeg, aspect: aspect, snapshot: snapshot) else {

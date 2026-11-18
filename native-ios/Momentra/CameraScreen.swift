@@ -862,7 +862,9 @@ struct CameraScreen: View {
             fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect,
             saveToPhotos: selectedCloudHash == nil && saveToPhotos,
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
-            cloudOwnerHash: selectedCloudHash)
+            cloudOwnerHash: selectedCloudHash,
+            layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout)).flatMap { $0.count <= 2000 ? $0 : nil },
+            hasLogo: !stampProfiles.selected.logoName.isEmpty)
         Task { try? await MomentraCaptureIntent.updateAppContext(context) }
     }
 
