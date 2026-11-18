@@ -122,13 +122,17 @@ jobs:
           xcrun simctl bootstatus "$MOMENTRA_SIM_ID" -b
           xcrun simctl install "$MOMENTRA_SIM_ID" "$APP"
           xcrun simctl privacy "$MOMENTRA_SIM_ID" grant all br.com.momentra.camera
-          xcrun simctl launch "$MOMENTRA_SIM_ID" br.com.momentra.camera -welcomeCompletedV1 YES -lastPresentedVersion "$VERSION" -native.gps.enabled NO
-          sleep 3
-          xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-camera.png"
+          mkdir -p "$RUNNER_TEMP/Momentra-simulator-previews"
+          for aspect in 4:3 16:9 1:1; do
+            xcrun simctl terminate "$MOMENTRA_SIM_ID" br.com.momentra.camera || true
+            xcrun simctl launch "$MOMENTRA_SIM_ID" br.com.momentra.camera -welcomeCompletedV1 YES -lastPresentedVersion "$VERSION" -native.gps.enabled NO -native.camera.grid YES -native.photo.aspect "$aspect"
+            sleep 3
+            xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-simulator-previews/Camera-${aspect/:/x}.png"
+          done
       - uses: actions/upload-artifact@v4
         if: inputs.signing_candidate
         with:
           name: momentra-camera-simulator
-          path: ${{ runner.temp }}/Momentra-camera.png
+          path: ${{ runner.temp }}/Momentra-simulator-previews/*.png
           if-no-files-found: error
           retention-days: 3

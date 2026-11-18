@@ -34,6 +34,8 @@ struct CameraScreen: View {
     @State private var archiveStatus = CloudArchiveDelivery.Summary()
     @State private var archiveNotice: String?
     @State private var connectingArchive = false
+    @State private var pendingArchivePolicy: CloudDeliveryPlan?
+    @State private var captureContextTask: Task<Bool, Never>?
     @State private var lastCloudAttempt = Date.distantPast
     @State private var localCloudPendingCount = 0
     @State private var localCloudNeedsAttention = false
@@ -712,19 +714,19 @@ struct CameraScreen: View {
                         Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
                     }
                     Section("Armazenamento e contas") {
-                        Toggle("Armazenamento local", isOn: $keepArchiveLocal)
-                            .disabled(keepArchiveLocal && archiveDestinations.isEmpty)
+                        Toggle("Armazenamento local", isOn: Binding(get: { effectiveLocalStorage }, set: {
+                            applyArchivePolicy(keepLocal: $0)
+                        }))
+                            .disabled(pendingArchivePolicy != nil || (keepArchiveLocal && archiveDestinations.isEmpty))
                         ForEach(archiveAccounts.accounts, id: \.id) { account in
                             Toggle(isOn: Binding(get: { account.enabled }, set: { enabled in
-                                if !enabled && !keepArchiveLocal && archiveDestinations.count == 1 { keepArchiveLocal = true }
-                                do { try archiveAccounts.setEnabled(enabled, for: account.id) }
-                                catch { archiveNotice = "Não foi possível alterar o destino." }
+                                applyArchivePolicy(keepLocal: keepArchiveLocal, destination: account.id, enabled: enabled)
                             })) {
                                 VStack(alignment: .leading) {
                                     Text(account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
                                     Text(account.label).font(.caption).foregroundStyle(.secondary)
                                 }
-                            }
+                            }.disabled(pendingArchivePolicy != nil)
                         }
                         Button("Adicionar conta Google Drive") { connectArchive(.googleDrive) }.disabled(connectingArchive)
                         Button("Adicionar conta OneDrive") { connectArchive(.oneDrive) }.disabled(connectingArchive)
@@ -911,6 +913,36 @@ struct CameraScreen: View {
         CloudDeliveryPlan(keepLocal: effectiveLocalStorage, destinations: archiveDestinations)
     }
 
+    private func applyArchivePolicy(keepLocal: Bool, destination: CloudDeliveryPlan.Destination? = nil,
+                                    enabled: Bool = false) {
+        guard pendingArchivePolicy == nil else { return }
+        var destinations = archiveDestinations
+        if let destination {
+            destinations.removeAll { $0 == destination }
+            if enabled { destinations.append(destination) }
+        }
+        guard let proposed = CloudDeliveryPlan(keepLocal: keepLocal || destinations.isEmpty,
+                                               destinations: destinations) else { return }
+        pendingArchivePolicy = proposed
+        archiveNotice = nil
+        let sync = publishCaptureContext()
+        Task { @MainActor in
+            if let sync, !(await sync.value) {
+                pendingArchivePolicy = nil
+                archiveNotice = "Não foi possível atualizar os destinos da câmera bloqueada. Tente novamente."
+                return
+            }
+            do {
+                if let destination { try archiveAccounts.setEnabled(enabled, for: destination) }
+                keepArchiveLocal = proposed.keepLocal
+            } catch {
+                archiveNotice = "Não foi possível alterar o destino."
+            }
+            pendingArchivePolicy = nil
+            publishCaptureContext()
+        }
+    }
+
     private func connectArchive(_ provider: CloudDeliveryPlan.Provider) {
         guard let window = Self.presentingController()?.view.window else {
             archiveNotice = "Não foi possível abrir a autenticação."
@@ -1021,20 +1053,33 @@ struct CameraScreen: View {
             location: location.location, heading: location.heading, layout: stampProfiles.selected.layout)
     }
 
-    private func publishCaptureContext() {
-        guard #available(iOS 18.0, *) else { return }
+    @discardableResult
+    private func publishCaptureContext() -> Task<Bool, Never>? {
+        guard #available(iOS 18.0, *) else { return nil }
+        let plan = pendingArchivePolicy ?? currentArchivePlan
         let context = MomentraCaptureContext(stampEnabled: stampEnabled, gpsEnabled: gpsEnabled,
             title: "", note: LockedCaptureMetadata.safeNote(stampProfiles.selected.note),
             compact: stampProfiles.selected.layout.compact, position: stampProfiles.selected.layout.position,
             horizontal: stampProfiles.selected.layout.horizontal, longDate: stampProfiles.selected.layout.dateFormat == "long",
             fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect,
-            saveToPhotos: effectiveLocalStorage && saveToPhotos,
+            saveToPhotos: (plan?.keepLocal ?? true) && saveToPhotos,
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
             cloudOwnerHash: nil,
             layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout)).flatMap { $0.count <= 2000 ? $0 : nil },
             hasLogo: !stampProfiles.selected.logoName.isEmpty,
-            archivePlan: currentArchivePlan)
-        Task { try? await MomentraCaptureIntent.updateAppContext(context) }
+            archivePlan: plan)
+        let previous = captureContextTask
+        let publish = Task { @MainActor in
+            if let previous { _ = await previous.value }
+            do {
+                try await MomentraCaptureIntent.updateAppContext(context)
+                return true
+            } catch {
+                return false
+            }
+        }
+        captureContextTask = publish
+        return publish
     }
 
     private func handleHardwareCapture() {

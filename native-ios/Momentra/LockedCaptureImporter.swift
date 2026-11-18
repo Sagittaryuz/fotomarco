@@ -37,9 +37,8 @@ enum LockedCaptureImporter {
             copyFiles(from: directory, to: root.appendingPathComponent("Originals", isDirectory: true), cloudQueue: queue, archive: archive)
             copyFiles(from: directory.appendingPathComponent("Processed", isDirectory: true),
                       to: root.appendingPathComponent("Processed", isDirectory: true), cloudQueue: queue, archive: archive)
-            let previousOwner = CloudStoragePreference.selectedHash()
-            let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: previousOwner)
-            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: previousOwner))
+            let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: nil, preserveLegacy: true)
+            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: nil, preserveLegacy: true))
         }.value
         if outcome.safe {
             // The system owns these session URLs; never remove a session directory directly.
@@ -53,7 +52,8 @@ enum LockedCaptureImporter {
 
     /// Conservatively accept only a fully known, complete session whose files
     /// match durable copies. Unknown files and partial imports keep the session.
-    static func sessionIsSafelyImported(_ directory: URL, root: URL, allowedCloudOwnerHash: String?) -> Bool {
+    static func sessionIsSafelyImported(_ directory: URL, root: URL, allowedCloudOwnerHash: String?,
+                                        preserveLegacy: Bool = false) -> Bool {
         let fm = FileManager.default
         guard let top = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]),
               !top.isEmpty else { return false }
@@ -102,7 +102,7 @@ enum LockedCaptureImporter {
             }
             if let profileID = metadata.profileID, let name = metadata.profileName, !name.isEmpty,
                profiles.captures[id]?.id != profileID { return false }
-            if let ownerHash = metadata.cloudOwnerHash, ownerHash == allowedCloudOwnerHash {
+            if let ownerHash = metadata.cloudOwnerHash, preserveLegacy || ownerHash == allowedCloudOwnerHash {
                 guard let item = try? queue.entry(id: id), item.ownerHash == ownerHash,
                       item.originalFingerprint == originalHash, item.processedFingerprint == stampedHash,
                       item.phase == .ready || item.phase == .verified || item.phase == .cleaning || item.phase == .uncertain else { return false }
@@ -128,7 +128,8 @@ enum LockedCaptureImporter {
     /// Metadata is trusted only after the copied original (and, for upload,
     /// processed image) matches the corresponding capture-session file.
     @discardableResult
-    static func importMetadata(from directory: URL, to root: URL, allowedCloudOwnerHash: String?) -> Int {
+    static func importMetadata(from directory: URL, to root: URL, allowedCloudOwnerHash: String?,
+                               preserveLegacy: Bool = false) -> Int {
         let fm = FileManager.default
         let metadataDir = directory.appendingPathComponent("Metadata", isDirectory: true)
         guard let dirInfo = try? metadataDir.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
@@ -156,7 +157,7 @@ enum LockedCaptureImporter {
                     captureDate: metadata.capturedAt, root: root)
             }
             let plan = metadata.archivePlan.flatMap { $0.deliveries.isEmpty ? nil : $0 }
-            let ownerHash = metadata.cloudOwnerHash.flatMap { $0 == allowedCloudOwnerHash ? $0 : nil }
+            let ownerHash = metadata.cloudOwnerHash.flatMap { preserveLegacy || $0 == allowedCloudOwnerHash ? $0 : nil }
             guard plan != nil || ownerHash != nil else { continue }
             let sourceStamped = directory.appendingPathComponent("Processed").appendingPathComponent(name)
             let localStamped = root.appendingPathComponent("Processed").appendingPathComponent(name)
