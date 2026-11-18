@@ -14,3 +14,12 @@ Pesquisa de 17/11/2026. Esta especificação não significa que o envio automát
 - A API do Fotos não informa isoladamente o uso de armazenamento do Fotos. O Drive fornece quota agregada e parcela do Drive; “outros serviços” não deve ser rotulado como Fotos. [Google](https://developers.google.com/workspace/drive/api/reference/rest/v3/about)
 
 Validação obrigatória antes de habilitar limpeza: testes offline, interrupção entre todas as etapas, respostas ambíguas, expiração de autenticação, troca de conta, arquivo alterado durante o envio, restauração de recibos, pouco espaço, álbum indisponível e verificação em um iPhone com fotos de teste autorizadas. Testar tanto original como cópia, sem usar fotos reais insubstituíveis.
+
+
+## Estado do desenvolvimento — candidato em teste
+
+Na branch de desenvolvimento, o modo para fotos pessoais prepara o original e a versão processada em diretórios protegidos, cria recibos independentes para as duas versões e preserva os arquivos se uma etapa falhar. A fila é vinculada à conta escolhida. A limpeza no sandbox do app exige verificar novamente os dois itens no álbum e manter uma prévia reduzida; não apaga itens da biblioteca Fotos do iPhone. A retomada da limpeza é registrada no disco.
+
+Esse fluxo ainda não foi validado ponta a ponta com uma conta real, com suspensão do app ou no iPhone do usuário, nem foi publicado como atualização oficial. A implementação atual tenta novamente enquanto o app está ativo, em intervalos de aproximadamente 30 segundos; não implementa transferência em segundo plano garantida nem espera exponencial. Se a criação de um item tiver resposta ambígua, o recibo impede reenviar automaticamente, e o arquivo permanece no aparelho. Esses limites devem ser resolvidos ou apresentados claramente antes de tratar a funcionalidade como concluída.
+
+Os testes usam serviços simulados: sucesso nos testes não comprova autorização, política de conta, quota, entrega ou retenção no Google Fotos. O modo Google Fotos é restrito a fotos pessoais; conteúdo profissional exige outro destino adequado.
