@@ -80,6 +80,8 @@ struct CameraScreen: View {
     @State private var galleryThumbnail: UIImage?
     @State private var galleryThumbnailRevision = UUID()
     @State private var galleryThumbnailFrame: CGRect = .zero
+    @State private var wordmarkBottom: CGFloat = 0
+    @State private var shutterTop: CGFloat = 0
     @State private var photoFlight: PhotoFlight?
     @State private var photoLanded = false
     @State private var shutterOpacity = 0.0
@@ -119,7 +121,11 @@ struct CameraScreen: View {
 
     private var normalCameraHeader: some View {
         VStack(spacing: 0) {
-                    MomentraWordmark().padding(.top, 4).padding(.bottom, 4)
+                    MomentraWordmark()
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .named("MomentraCamera")).maxY
+                        } action: { wordmarkBottom = $0 }
+                        .padding(.vertical, 4)
                     HStack {
                         Button { cycleFlash() } label: {
                             Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
@@ -179,14 +185,15 @@ struct CameraScreen: View {
 
     private var cameraContent: some View {
         GeometryReader { geometry in
-            let previewSize = mode == .photo && !camera.isRecording
-                ? (PhotoAspect(rawValue: photoAspect) ?? .standard).fittedSize(in: geometry.size) ?? geometry.size
-                : geometry.size
+            let previewFrame = mode == .photo && !camera.isRecording
+                ? (PhotoAspect(rawValue: photoAspect) ?? .standard)
+                    .previewFrame(in: geometry.size, top: wordmarkBottom, bottom: shutterTop)
+                : CGRect(origin: .zero, size: geometry.size)
             ZStack {
                 Color.black.ignoresSafeArea().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
                 CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
-                    .frame(width: previewSize.width, height: previewSize.height)
+                    .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
                     .overlay {
@@ -196,9 +203,11 @@ struct CameraScreen: View {
                             }
                         }
                     }
+                    .position(x: previewFrame.midX, y: previewFrame.midY)
                     .animation(.easeInOut(duration: 0.2), value: photoAspect)
                 if showGrid {
-                    CameraGrid().frame(width: previewSize.width, height: previewSize.height)
+                    CameraGrid().frame(width: previewFrame.width, height: previewFrame.height)
+                        .position(x: previewFrame.midX, y: previewFrame.midY)
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
                 VStack(spacing: 0) {
@@ -329,6 +338,9 @@ struct CameraScreen: View {
                                 .frame(width: controlSize, height: controlSize)
                                 .frame(width: diameter, height: diameter)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
+                                .onGeometryChange(for: CGFloat.self) { proxy in
+                                    proxy.frame(in: .named("MomentraCamera")).minY
+                                } action: { shutterTop = $0 - 1.5 }
                                 .contentShape(Circle())
                                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: camera.isRecording)
                         }
@@ -451,11 +463,8 @@ struct CameraScreen: View {
                         }
                 }
                 if let flight = photoFlight {
-                    let start = CGRect(x: (geometry.size.width - previewSize.width) / 2,
-                                       y: (geometry.size.height - previewSize.height) / 2,
-                                       width: previewSize.width, height: previewSize.height)
                     let frame = CaptureMotion.aspectFit(flight.image.size,
-                                                        in: photoLanded ? galleryThumbnailFrame : start)
+                                                        in: photoLanded ? galleryThumbnailFrame : previewFrame)
                     Image(uiImage: flight.image).resizable()
                         .frame(width: frame.width, height: frame.height)
                         .clipShape(RoundedRectangle(cornerRadius: photoLanded ? 8 : 0))
@@ -463,7 +472,8 @@ struct CameraScreen: View {
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
                 Rectangle().fill(.black.opacity(shutterOpacity))
-                    .frame(width: previewSize.width, height: previewSize.height)
+                    .frame(width: previewFrame.width, height: previewFrame.height)
+                    .position(x: previewFrame.midX, y: previewFrame.midY)
                     .allowsHitTesting(false).accessibilityHidden(true)
             }
             .coordinateSpace(name: "MomentraCamera")
