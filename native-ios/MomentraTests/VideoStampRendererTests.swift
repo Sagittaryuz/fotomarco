@@ -26,6 +26,38 @@ final class VideoStampRendererTests: XCTestCase {
         XCTAssertGreaterThan(try brightPixels(in: frame), 15, "O quadro deve conter o texto claro do carimbo")
     }
 
+    func testPortraitTransformKeepsVideoAndStampUpright() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let landscape = root.appendingPathComponent("landscape.mov")
+        let portrait = root.appendingPathComponent("portrait.mov")
+        let output = root.appendingPathComponent("stamped.mov")
+        try await makeVideo(at: landscape)
+        let asset = AVURLAsset(url: landscape)
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(tracks.first)
+        let duration = try await asset.load(.duration)
+        let composition = AVMutableComposition()
+        let rotated = try XCTUnwrap(composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid))
+        try rotated.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: track, at: .zero)
+        rotated.preferredTransform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 120, ty: 0)
+        let exporter = try XCTUnwrap(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
+        exporter.outputURL = portrait
+        exporter.outputFileType = .mov
+        await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+        guard exporter.status == .completed else { throw exporter.error ?? NSError(domain: "VideoOrientationTest", code: 1) }
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil)
+        try await VideoStampRenderer.export(source: portrait, destination: output, snapshot: snapshot, map: nil, address: nil)
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: output))
+        generator.appliesPreferredTrackTransform = true
+        let frame = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
+        XCTAssertEqual(frame.width, 120)
+        XCTAssertEqual(frame.height, 160)
+        XCTAssertGreaterThan(try brightPixels(in: frame), 15)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: portrait.path))
+    }
+
     func testStampedVideoRetainsAudibleTrack() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
