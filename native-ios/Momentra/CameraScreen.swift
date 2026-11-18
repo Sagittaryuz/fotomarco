@@ -164,10 +164,13 @@ struct CameraScreen: View {
 
     private var cameraContent: some View {
         GeometryReader { geometry in
+            let previewSize = mode == .photo && !camera.isRecording
+                ? (PhotoAspect(rawValue: photoAspect) ?? .standard).fittedSize(in: geometry.size) ?? geometry.size
+                : geometry.size
             ZStack {
                 Color.black.ignoresSafeArea()
                 CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .frame(width: previewSize.width, height: previewSize.height)
                     .clipped().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
                     .overlay {
@@ -177,8 +180,10 @@ struct CameraScreen: View {
                             }
                         }
                     }
+                    .animation(.easeInOut(duration: 0.2), value: photoAspect)
                 if showGrid {
-                    CameraGrid().allowsHitTesting(false).accessibilityHidden(true)
+                    CameraGrid().frame(width: previewSize.width, height: previewSize.height)
+                        .allowsHitTesting(false).accessibilityHidden(true)
                 }
                 VStack(spacing: 0) {
                     cameraHeader
@@ -317,9 +322,7 @@ struct CameraScreen: View {
                     if camera.isRecording {
                         Color.black.frame(height: 84)
                     } else if showAspectPanel {
-                        PhotoAspectPanel(selection: $photoAspect) {
-                            withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel = false }
-                        }.transition(.move(edge: .bottom).combined(with: .opacity))
+                        Color.clear.frame(height: 190)
                     } else {
                     HStack(spacing: 10) {
                         Button { showOriginals = true } label: {
@@ -360,6 +363,19 @@ struct CameraScreen: View {
                     .background(Color.black)
                     }
                 }.foregroundStyle(.white)
+                if showAspectPanel && !camera.isRecording {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel = false }
+                        }
+                        .overlay(alignment: .bottom) {
+                            PhotoAspectPanel(selection: $photoAspect) {
+                                withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel = false }
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                }
             }
         }
     }
