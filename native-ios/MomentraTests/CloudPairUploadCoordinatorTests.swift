@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Momentra
 
 private actor PairTransportMock {
@@ -145,6 +146,60 @@ final class CloudPairUploadCoordinatorTests: XCTestCase {
         XCTAssertEqual(creations, 2)
         XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: stamped.path))
+    }
+
+    func testEndToEndPairKeepsFilesUntilBothAreVerifiedAndPreviewExists() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID(), owner = "person-a"
+        let a = root.appendingPathComponent("Originals"), b = root.appendingPathComponent("Processed")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        let original = a.appendingPathComponent(id.uuidString + ".jpg")
+        let stamped = b.appendingPathComponent(id.uuidString + ".jpg")
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 60, height: 40))
+        let photo = renderer.image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 60, height: 40))
+        }
+        let bytes = try XCTUnwrap(photo.jpegData(compressionQuality: 0.9))
+        try bytes.write(to: original)
+        try bytes.write(to: stamped)
+        let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
+        try CloudCaptureStager.stage(root: root, captureID: id, ownerHash: CloudCaptureQueue.ownerHash(owner),
+                                     originalExtension: "jpg")
+        let transport = PairReceiptTransport()
+        let uploader = PersonalPhotoUploader(directory: root.appendingPathComponent("Receipts"), transport: transport,
+                                              accountIsCurrent: { $0 == owner })
+        let coordinator = CloudPairUploadCoordinator(queue: queue, root: root, accountIsCurrent: { $0 == owner }) {
+            data, receipt, user, filename, format in
+            await uploader.upload(jpeg: data, captureID: receipt, owner: user, personalConsent: true,
+                                  filename: filename, format: format)
+        }
+        let pending = await coordinator.send(id: id, owner: owner, personalConsent: true,
+                                            originalFilename: "original.jpg", stampedFilename: "stamped.jpg")
+        XCTAssertEqual(pending, .pending)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stamped.path))
+        await transport.allowVerification()
+        let complete = await coordinator.send(id: id, owner: owner, personalConsent: true,
+                                             originalFilename: "original.jpg", stampedFilename: "stamped.jpg")
+        XCTAssertEqual(complete, .verified(original: "media-1", stamped: "media-2"))
+        let cleanup = CloudCaptureCleanup(queue: queue, root: root, accountIsCurrent: { $0 == owner }) { mediaID in
+            (try? await transport.verifyItem(id: mediaID)) == true
+        }
+        let disabled = await cleanup.clean(id: id, owner: owner, cloudOnlyEnabled: false)
+        XCTAssertEqual(disabled, .retained)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
+        let cleaned = await cleanup.clean(id: id, owner: owner, cloudOnlyEnabled: true)
+        XCTAssertEqual(cleaned, .cleaned)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stamped.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CloudThumbnails")
+            .appendingPathComponent(id.uuidString + ".jpg").path))
+        XCTAssertEqual(try queue.entry(id: id).phase, .cleaned)
+        let creations = await transport.creationCount()
+        XCTAssertEqual(creations, 2)
     }
 
 }
