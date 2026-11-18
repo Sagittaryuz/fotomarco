@@ -100,7 +100,7 @@ final class GoogleDriveArchive {
     }
 
     func upload(file: URL, id: String, folderID: String, name: String, mimeType: String,
-                fingerprint: CloudFileFingerprint, appProperties: [String: String] = [:],
+                fingerprint: CloudFileFingerprint,
                 accessToken: String) async throws -> String {
         guard Self.validID(id), Self.validID(folderID), !name.isEmpty, name.utf8.count <= 255,
               ["image/jpeg", "image/heic", "image/heif"].contains(mimeType) else {
@@ -116,8 +116,10 @@ final class GoogleDriveArchive {
         }
 
         let boundary = "Momentra-\(UUID().uuidString)"
-        var metadata: [String: Any] = ["id": id, "name": name, "mimeType": mimeType, "parents": [folderID]]
-        if !appProperties.isEmpty { metadata["appProperties"] = appProperties }
+        let metadata: [String: Any] = [
+            "id": id, "name": name, "mimeType": mimeType, "parents": [folderID],
+            "appProperties": ["momentraArchivePhoto": "1"]
+        ]
         let multipart = try makeMultipart(file: file, metadata: metadata, mimeType: mimeType, boundary: boundary)
         defer { try? FileManager.default.removeItem(at: multipart) }
 
@@ -134,10 +136,11 @@ final class GoogleDriveArchive {
         return id
     }
 
-    func list(folderID: String, pageToken: String? = nil, accessToken: String) async throws -> Page {
-        guard Self.validID(folderID) else { throw ArchiveError.invalidRequest }
-        return try await find("'\(folderID)' in parents and trashed = false",
-                              pageToken: pageToken, accessToken: accessToken)
+    func list(pageToken: String? = nil, accessToken: String) async throws -> Page {
+        // A gallery read does not create folders. The marker also keeps captures
+        // visible if multiple devices provision a Momentra folder concurrently.
+        try await find("trashed = false and appProperties has { key='momentraArchivePhoto' and value='1' }",
+                       pageToken: pageToken, accessToken: accessToken)
     }
 
     func download(id: String, accessToken: String) async throws -> Data {

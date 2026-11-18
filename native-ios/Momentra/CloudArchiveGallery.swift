@@ -187,13 +187,12 @@ private struct ArchiveAccountGallery: View {
             let page: (items: [ArchiveGalleryPhoto], nextPage: String?)
             switch destination.provider {
             case .googleDrive:
-                let folder = try await images.drive.folder(accessToken: token)
-                let result = try await images.drive.list(folderID: folder, pageToken: current.pageToken, accessToken: token)
+                let result = try await images.drive.list(pageToken: current.pageToken, accessToken: token)
                 let fractional = ISO8601DateFormatter()
                 fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                 let standard = ISO8601DateFormatter()
                 page = (result.files.compactMap { item in
-                    guard item.mimeType.hasPrefix("image/"), item.parents?.contains(folder) == true,
+                    guard item.mimeType.hasPrefix("image/"), item.appProperties?["momentraArchivePhoto"] == "1",
                           item.trashed == false else { return nil }
                     let date = item.createdTime.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
                     return ArchiveGalleryPhoto(id: item.id, name: item.name, date: date)
