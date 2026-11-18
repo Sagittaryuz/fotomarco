@@ -32,6 +32,11 @@ struct CloudPhotoGallery: View {
                         CloudOfflinePreviews(ownerHash: ownerHash, columnCount: columnCount, profiles: profileLookup)
                     }
                 }
+                .simultaneousGesture(MagnifyGesture().onEnded { value in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        columnCount = GalleryZoom.next(columns: columnCount, magnification: value.magnification)
+                    }
+                })
             } else {
                 ScrollView {
                     VStack(spacing: 12) {
