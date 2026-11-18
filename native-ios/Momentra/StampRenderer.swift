@@ -145,11 +145,20 @@ enum PhotoAspect: String, CaseIterable {
         }
     }
 
-    func fittedSize(in bounds: CGSize) -> CGSize? {
+    func fittedSize(in bounds: CGSize, landscape: Bool? = nil) -> CGSize? {
         guard bounds.width.isFinite, bounds.height.isFinite, bounds.width > 0, bounds.height > 0 else { return nil }
-        let ratio = bounds.width >= bounds.height ? landscapeRatio : 1 / landscapeRatio
+        let ratio = (landscape ?? (bounds.width >= bounds.height)) ? landscapeRatio : 1 / landscapeRatio
         let width = min(bounds.width, bounds.height * ratio)
         return CGSize(width: width, height: width / ratio)
+    }
+
+    func previewFrame(in screen: CGSize, top: CGFloat, bottom: CGFloat) -> CGRect {
+        let start = max(0, top)
+        let end = min(screen.height, bottom)
+        let available = CGSize(width: screen.width, height: end - start)
+        guard let size = fittedSize(in: available, landscape: screen.width >= screen.height) else { return .zero }
+        return CGRect(x: (screen.width - size.width) / 2, y: start + (available.height - size.height) / 2,
+                      width: size.width, height: size.height)
     }
 
     func crop(in size: CGSize) -> CGRect? {
