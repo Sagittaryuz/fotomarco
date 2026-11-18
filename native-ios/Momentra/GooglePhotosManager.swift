@@ -6,6 +6,7 @@ import UIKit
 final class GooglePhotosManager: ObservableObject {
     static let shared = GooglePhotosManager()
     private var cloudDrainTask: Task<Void, Never>?
+    private var lastCloudPassSucceeded = false
     @Published private(set) var busy = false
     @Published private(set) var pendingCloudCaptures = 0
     @Published private(set) var cloudNeedsAttention = false
@@ -112,6 +113,7 @@ final class GooglePhotosManager: ObservableObject {
               CloudCaptureQueue.ownerHash(owner) == expectedOwnerHash,
               CloudStoragePreference.enabled(for: owner) else { return }
         busy = true
+        lastCloudPassSucceeded = false
         cloudDrainTask = Task {
             defer { busy = false; cloudDrainTask = nil }
             do {
@@ -127,7 +129,10 @@ final class GooglePhotosManager: ObservableObject {
                 let items = try queue.entries(for: owner).filter { $0.phase != .cleaned }
                 pendingCloudCaptures = items.count
                 cloudNeedsAttention = items.contains { $0.phase == .uncertain }
-                guard items.contains(where: { $0.phase == .ready || $0.phase == .verified || $0.phase == .cleaning }) else { return }
+                guard items.contains(where: { $0.phase == .ready || $0.phase == .verified || $0.phase == .cleaning }) else {
+                    lastCloudPassSucceeded = items.isEmpty
+                    return
+                }
                 let token: String? = await withCheckedContinuation { continuation in
                     auth.freshToken(for: owner) { continuation.resume(returning: $0) }
                 }
@@ -184,6 +189,7 @@ final class GooglePhotosManager: ObservableObject {
                         pendingCloudCaptures = max(0, pendingCloudCaptures - 1)
                     }
                 }
+                lastCloudPassSucceeded = !Task.isCancelled && pendingCloudCaptures == 0
             } catch {
                 // The queue and local files remain available for a future pass.
                 return
@@ -209,7 +215,7 @@ final class GooglePhotosManager: ObservableObject {
         } onCancel: {
             work.cancel()
         }
-        return !Task.isCancelled && pendingCloudCaptures == 0
+        return !Task.isCancelled && lastCloudPassSucceeded
     }
 
     func sendProcessedPhoto(_ url: URL) {
