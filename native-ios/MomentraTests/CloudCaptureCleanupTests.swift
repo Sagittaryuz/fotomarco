@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Momentra
 
 final class CloudCaptureCleanupTests: XCTestCase {
@@ -10,7 +11,12 @@ final class CloudCaptureCleanupTests: XCTestCase {
         let original = a.appendingPathComponent(id.uuidString + ".jpg")
         let stamped = b.appendingPathComponent(id.uuidString + ".jpg")
         try Data("original".utf8).write(to: original)
-        try Data("stamped".utf8).write(to: stamped)
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 48))
+        let image = renderer.image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 48))
+        }
+        try XCTUnwrap(image.jpegData(compressionQuality: 0.9)).write(to: stamped)
         let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
         try queue.enqueue(id: id, owner: "person-a", originalExtension: "jpg")
         try queue.markReady(id: id, original: original, processed: stamped)
@@ -46,6 +52,8 @@ final class CloudCaptureCleanupTests: XCTestCase {
         XCTAssertEqual(resumed, .cleaned)
         XCTAssertEqual(try queue.entry(id: id).phase, .cleaned)
         XCTAssertFalse(FileManager.default.fileExists(atPath: stamped.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CloudThumbnails")
+            .appendingPathComponent(id.uuidString + ".jpg").path))
     }
 
     func testChangedLocalCopyBlocksCleanup() async throws {

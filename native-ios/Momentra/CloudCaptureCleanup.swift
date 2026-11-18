@@ -35,6 +35,9 @@ actor CloudCaptureCleanup {
         let stamped = root.appendingPathComponent("Processed", isDirectory: true)
             .appendingPathComponent(id.uuidString + ".jpg")
         do {
+            // Keep an offline preview before freeing the full-resolution copies.
+            try CloudThumbnailCache.ensure(root: root, captureID: id, source: stamped)
+            guard await accountIsCurrent(owner) else { return .retained }
             if item.phase == .verified { try queue.beginCleanup(id: id, owner: owner) }
             guard await accountIsCurrent(owner) else { return .retained }
             if FileManager.default.fileExists(atPath: original.path) {
