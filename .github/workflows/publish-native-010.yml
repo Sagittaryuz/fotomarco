@@ -1,0 +1,18 @@
+name: Publish Momentra 0.1.10
+on:
+  push:
+    branches: [feat/native-one-tap-update]
+    paths: [.github/workflows/publish-native-010.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view native-ios-v0.1.10 >/dev/null 2>&1 && exit 0
+          gh release create native-ios-v0.1.10 --target 85c81f6c45c08965af89510a14568fa77652056e --title 'Momentra 0.1.10' --notes 'Prévia com proporção ao vivo, fechamento de painéis ao tocar fora e editor de carimbos com cantos fixos e margens. A apresentação e as capturas ainda precisam ser verificadas no iPhone.'
