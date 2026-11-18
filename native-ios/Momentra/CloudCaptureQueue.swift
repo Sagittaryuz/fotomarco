@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-enum CloudCapturePhase: String, Codable { case awaitingPhoto, ready, uncertain, verified }
+enum CloudCapturePhase: String, Codable { case awaitingPhoto, ready, uncertain, verified, cleaning, cleaned }
 
 struct CloudPendingCapture: Codable, Equatable, Identifiable {
     let id: UUID
@@ -21,6 +21,7 @@ final class CloudCaptureQueue {
     private static let lock = NSLock()
 
     init(directory: URL) { self.directory = directory }
+    var rootDirectory: URL { directory.deletingLastPathComponent().standardizedFileURL }
 
     static func ownerHash(_ owner: String) -> String {
         SHA256.hash(data: Data(owner.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -83,6 +84,38 @@ final class CloudCaptureQueue {
     func entry(id: UUID) throws -> CloudPendingCapture {
         Self.lock.lock(); defer { Self.lock.unlock() }
         return try read(id)
+    }
+
+    /// Enter cleanup only while both local copies still match the verified receipt.
+    func beginCleanup(id: UUID, owner: String) throws {
+        try update(id: id) { value in
+            guard value.phase == .verified, value.ownerHash == Self.ownerHash(owner),
+                  value.originalMediaID != nil, value.processedMediaID != nil,
+                  let originalFingerprint = value.originalFingerprint,
+                  let processedFingerprint = value.processedFingerprint else { throw QueueError.invalidTransition }
+            let root = directory.deletingLastPathComponent().standardizedFileURL
+            let original = root.appendingPathComponent("Originals", isDirectory: true)
+                .appendingPathComponent(id.uuidString + "." + value.originalExtension)
+            let stamped = root.appendingPathComponent("Processed", isDirectory: true)
+                .appendingPathComponent(id.uuidString + ".jpg")
+            guard try CloudFileFingerprint.read(original) == originalFingerprint,
+                  try CloudFileFingerprint.read(stamped) == processedFingerprint else { throw QueueError.invalidTransition }
+            value.phase = .cleaning
+        }
+    }
+
+    func finishCleanup(id: UUID, owner: String) throws {
+        try update(id: id) { value in
+            guard value.phase == .cleaning, value.ownerHash == Self.ownerHash(owner) else { throw QueueError.invalidTransition }
+            let root = directory.deletingLastPathComponent().standardizedFileURL
+            let original = root.appendingPathComponent("Originals", isDirectory: true)
+                .appendingPathComponent(id.uuidString + "." + value.originalExtension)
+            let stamped = root.appendingPathComponent("Processed", isDirectory: true)
+                .appendingPathComponent(id.uuidString + ".jpg")
+            guard !FileManager.default.fileExists(atPath: original.path),
+                  !FileManager.default.fileExists(atPath: stamped.path) else { throw QueueError.invalidTransition }
+            value.phase = .cleaned
+        }
     }
 
     /// A true result only confirms the local files still match the verified receipt.

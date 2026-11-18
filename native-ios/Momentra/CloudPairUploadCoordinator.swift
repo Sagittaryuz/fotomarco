@@ -28,7 +28,7 @@ actor CloudPairUploadCoordinator {
 
     func send(id: UUID, owner: String, personalConsent: Bool, originalFilename: String,
               stampedFilename: String) async -> Result {
-        guard personalConsent, !owner.isEmpty, await accountIsCurrent(owner),
+        guard personalConsent, root == queue.rootDirectory, !owner.isEmpty, await accountIsCurrent(owner),
               let item = try? queue.entries(for: owner).first(where: { $0.id == id }),
               item.phase == .ready,
               let originalHash = item.originalFingerprint, let stampedHash = item.processedFingerprint,
