@@ -6,6 +6,7 @@ import UIKit
 final class GooglePhotosManager: ObservableObject {
     @Published private(set) var busy = false
     @Published private(set) var pendingCloudCaptures = 0
+    @Published private(set) var cloudNeedsAttention = false
     @Published var message: String?
     @Published private(set) var cloudPhotos: [CloudPhoto] = []
     @Published private(set) var cloudNextPage: String?
@@ -120,6 +121,7 @@ final class GooglePhotosManager: ObservableObject {
                 }
                 let items = try queue.entries(for: owner).filter { $0.phase != .cleaned }
                 pendingCloudCaptures = items.count
+                cloudNeedsAttention = items.contains { $0.phase == .uncertain }
                 guard items.contains(where: { $0.phase == .ready || $0.phase == .verified || $0.phase == .cleaning }) else { return }
                 let token: String? = await withCheckedContinuation { continuation in
                     auth.freshToken(for: owner) { continuation.resume(returning: $0) }
@@ -161,6 +163,10 @@ final class GooglePhotosManager: ObservableObject {
                                                       originalFilename: originalName, stampedFilename: stampedName) {
                         case .verified(_, let stampedID):
                             try? PhotoProfileIndex.bindCloud(captureID: item.id, owner: owner, mediaID: stampedID)
+                        case .uncertain:
+                            try? queue.markUncertain(id: item.id)
+                            cloudNeedsAttention = true
+                            continue
                         case .pending, .unavailable:
                             continue
                         }

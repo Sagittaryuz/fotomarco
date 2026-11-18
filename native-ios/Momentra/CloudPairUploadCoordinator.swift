@@ -7,6 +7,7 @@ actor CloudPairUploadCoordinator {
     enum Result: Equatable {
         case verified(original: String, stamped: String)
         case pending
+        case uncertain
         case unavailable
     }
 
@@ -43,9 +44,11 @@ actor CloudPairUploadCoordinator {
             .appendingPathComponent(id.uuidString + ".jpg")
         guard let first = await sendVariant(original, expected: originalHash, receipt: Self.receiptID(capture: id, variant: "original"),
                                              owner: owner, filename: originalFilename, format: format) else { return .unavailable }
+        if case .uncertain = first { return .uncertain }
         guard case .verified(let firstID) = first else { return .pending }
         guard let second = await sendVariant(stamped, expected: stampedHash, receipt: Self.receiptID(capture: id, variant: "stamped"),
                                               owner: owner, filename: stampedFilename, format: .jpeg) else { return .unavailable }
+        if case .uncertain = second { return .uncertain }
         guard case .verified(let secondID) = second else { return .pending }
 
         // Verify local originals did not change while the network operation was running.

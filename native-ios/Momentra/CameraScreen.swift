@@ -577,6 +577,10 @@ struct CameraScreen: View {
                             Text("\(googlePhotos.pendingCloudCaptures) captura(s) aguardando conclusão")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
+                        if googlePhotos.cloudNeedsAttention {
+                            Text("Um envio não pôde ser confirmado. As fotos continuam no iPhone; confira o álbum Momentra no Google Fotos.")
+                                .font(.footnote).foregroundStyle(.orange)
+                        }
                     }
                     Section("Google Fotos pessoal") {
                         if googlePhotos.configured {
