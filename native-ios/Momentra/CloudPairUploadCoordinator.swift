@@ -41,15 +41,11 @@ actor CloudPairUploadCoordinator {
             .appendingPathComponent(id.uuidString + "." + item.originalExtension)
         let stamped = root.appendingPathComponent("Processed", isDirectory: true)
             .appendingPathComponent(id.uuidString + ".jpg")
-        guard let firstBytes = try? safeBytes(original, expected: originalHash),
-              await accountIsCurrent(owner) else { return .unavailable }
-        let first = await upload(firstBytes, Self.receiptID(capture: id, variant: "original"),
-                                 owner, originalFilename, format)
+        guard let first = await sendVariant(original, expected: originalHash, receipt: Self.receiptID(capture: id, variant: "original"),
+                                             owner: owner, filename: originalFilename, format: format) else { return .unavailable }
         guard case .verified(let firstID) = first else { return .pending }
-        guard await accountIsCurrent(owner), let secondBytes = try? safeBytes(stamped, expected: stampedHash),
-              await accountIsCurrent(owner) else { return .unavailable }
-        let second = await upload(secondBytes, Self.receiptID(capture: id, variant: "stamped"),
-                                  owner, stampedFilename, .jpeg)
+        guard let second = await sendVariant(stamped, expected: stampedHash, receipt: Self.receiptID(capture: id, variant: "stamped"),
+                                              owner: owner, filename: stampedFilename, format: .jpeg) else { return .unavailable }
         guard case .verified(let secondID) = second else { return .pending }
 
         // Verify local originals did not change while the network operation was running.
@@ -60,6 +56,14 @@ actor CloudPairUploadCoordinator {
             try queue.markVerified(id: id, originalMediaID: firstID, processedMediaID: secondID)
             return .verified(original: firstID, stamped: secondID)
         } catch { return .unavailable }
+    }
+
+    /// Scope each full-resolution buffer to one transfer instead of retaining both.
+    private func sendVariant(_ url: URL, expected: CloudFileFingerprint, receipt: UUID, owner: String,
+                             filename: String, format: GooglePhotoFormat) async -> PersonalUploadOutcome? {
+        guard await accountIsCurrent(owner), let bytes = try? safeBytes(url, expected: expected),
+              await accountIsCurrent(owner) else { return nil }
+        return await upload(bytes, receipt, owner, filename, format)
     }
 
     private func safeBytes(_ url: URL, expected: CloudFileFingerprint) throws -> Data {
