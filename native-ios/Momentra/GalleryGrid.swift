@@ -12,6 +12,12 @@ enum GallerySelectionRange {
     }
 }
 
+enum GalleryEndRefresh {
+    static func reached(offset: CGFloat, maximum: CGFloat, fingerMovement: CGPoint) -> Bool {
+        offset - maximum >= 54 && -fingerMovement.y > abs(fingerMovement.x)
+    }
+}
+
 /// A collection view supports pinch-to-resize and selection after entering Select mode.
 struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where Item.ID: Hashable {
     let groups: [GalleryGroup<Item>]
@@ -25,6 +31,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     let tile: (Item) -> Tile
     let open: (Item) -> Void
     var longPress: ((Item) -> Void)? = nil
+    var reachedEnd: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -99,6 +106,22 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         private var orderedIDs: [Item.ID] = []
         private var pathOffsets: [IndexPath: Int] = [:]
         private var scrolledRequest: Int?
+        private var refreshedThisDrag = false
+
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            refreshedThisDrag = false
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard !parent.selecting, !refreshedThisDrag, scrollView.isDragging,
+                  let refresh = parent.reachedEnd else { return }
+            let maximum = max(-scrollView.adjustedContentInset.top,
+                              scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom)
+            let movement = scrollView.panGestureRecognizer.translation(in: scrollView)
+            guard GalleryEndRefresh.reached(offset: scrollView.contentOffset.y, maximum: maximum, fingerMovement: movement) else { return }
+            refreshedThisDrag = true
+            refresh()
+        }
 
         func scrollToLastIfRequested(_ request: Int) {
             guard scrolledRequest != request, let collection, let path = orderedPaths.last else { return }

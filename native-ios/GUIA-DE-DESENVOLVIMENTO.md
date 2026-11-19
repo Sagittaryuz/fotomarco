@@ -41,6 +41,7 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 - Em Capturas, mostre arquivos do Momentra e cópias do Fotos com vínculo confirmado pelo índice do aplicativo. Os filtros mudam a projeção da galeria. Itens com envio pendente mantêm as proteções do arquivo e da fila.
 - Reúna o armazenamento em uma faixa compacta acima da grade. Mostre cada origem em uma cápsula com ícone, trilho e percentual real. Para várias contas, use rolagem horizontal de altura fixa. A lixeira local conserva o item por 30 dias. Use os dados reais do provedor para indicar a expiração de itens remotos.
 - Mostre a última capacidade válida de cada conta e do iPhone enquanto consulta os valores em segundo plano. A linha fina sob a faixa aparece durante a sincronização e some quando as consultas terminam.
+- Em Capturas, arrastar para além da última fileira pede uma nova consulta de catálogo e capacidade. Limite a um pedido por gesto e preserve a grade durante a atualização.
 
 ## Processamento e validação
 

@@ -23,6 +23,7 @@ struct OriginalsView: View {
     @State private var cloudRefresh = 0
     @State private var cloudActivation = 0
     @State private var cloudSyncing = false
+    @State private var quotaSyncing = false
     @State private var tab: Tab = .captures
     @State private var origin: GalleryOrigin?
     @State private var profile: UUID?
@@ -89,7 +90,8 @@ struct OriginalsView: View {
         VStack(spacing: 0) {
             header(total: items.count, latest: items.last?.date)
             GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true,
-                                   syncingCatalog: cloudSyncing, refresh: cloudActivation)
+                                   syncingCatalog: cloudSyncing, syncingQuota: $quotaSyncing,
+                                   refresh: cloudActivation + cloudRefresh)
                 .frame(height: tab == .captures ? storageBandHeight : 0)
                 .clipped()
                 .accessibilityHidden(tab != .captures)
@@ -108,7 +110,8 @@ struct OriginalsView: View {
             } else {
                 GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
                             contentVersion: projectionVersion, newestScrollRequest: scrollRequest, tile: tile,
-                            open: open, longPress: tab == .trash ? nil : { quickShare = $0 })
+                            open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
+                            reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil)
                     .accessibilityIdentifier("momentra-gallery-grid")
             }
             if selecting {
@@ -383,6 +386,11 @@ struct OriginalsView: View {
     }
 
     private func resetSelection() { selecting = false; selected.removeAll() }
+
+    private func refreshFromEnd() {
+        guard !cloudSyncing, !quotaSyncing, cloudRefresh == lastCatalogRefresh else { return }
+        cloudRefresh += 1
+    }
 
     private struct CatalogRequest: Equatable {
         let trash: Bool

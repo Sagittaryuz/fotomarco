@@ -6,6 +6,7 @@ struct GalleryCapacitySummary: View {
     let accounts: [CloudArchiveAccounts.Account]
     let compact: Bool
     let syncingCatalog: Bool
+    @Binding var syncingQuota: Bool
     let refresh: Int
     private let cache: GalleryCapacityCache
     private typealias CloudQuota = GalleryCapacityCache.Quota
@@ -19,13 +20,15 @@ struct GalleryCapacitySummary: View {
         let generation: Int
     }
 
-    init(section: Int, accounts: [CloudArchiveAccounts.Account], compact: Bool, syncingCatalog: Bool, refresh: Int) {
+    init(section: Int, accounts: [CloudArchiveAccounts.Account], compact: Bool,
+         syncingCatalog: Bool, syncingQuota: Binding<Bool>, refresh: Int) {
         let cache = GalleryCapacityCache()
         self.cache = cache
         self.section = section
         self.accounts = accounts
         self.compact = compact
         self.syncingCatalog = syncingCatalog
+        _syncingQuota = syncingQuota
         self.refresh = refresh
         _local = State(initialValue: cache.local(includeAppBytes: section == 0 && !compact))
         _quotas = State(initialValue: Dictionary(uniqueKeysWithValues: accounts.compactMap { account in
@@ -83,6 +86,7 @@ struct GalleryCapacitySummary: View {
                 }
             }
         }
+        .onChange(of: loading.isEmpty, initial: true) { _, idle in syncingQuota = !idle }
     }
 
     @ViewBuilder
