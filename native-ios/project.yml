@@ -37,7 +37,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera
         PRODUCT_NAME: Momentra
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: 'MomentraIcon1 MomentraIcon2 MomentraIcon3 MomentraIcon4 MomentraIcon5 MomentraIcon6 MomentraIcon7 MomentraIcon8'
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: 'MomentraIcon1 MomentraIcon2 MomentraIcon3 MomentraIcon4 MomentraIcon5 MomentraIcon6 MomentraIcon7 MomentraIcon8 MomentraIconOriginal'
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSCameraUsageDescription: 'A câmera é necessária para fotografar e gravar vídeos.'
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 'O microfone é necessário para gravar áudio nos vídeos.'

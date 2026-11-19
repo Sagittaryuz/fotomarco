@@ -18,7 +18,7 @@ struct MomentraWordmark: View {
                 }
             Text("mentra")
         }
-        .font(.custom(fontName, size: fontSize))
+        .font(.custom(fontName, fixedSize: fontSize))
         .foregroundStyle(.white)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Momentra")
