@@ -143,8 +143,9 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(first.waitForExistence(timeout: 8))
         XCTAssertFalse(first.buttons["Opções da captura"].exists)
         first.press(forDuration: 0.7)
-        let copy = app.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@ OR label BEGINSWITH[c] %@", "Copy", "Copiar")).firstMatch
-        XCTAssertTrue(copy.waitForExistence(timeout: 12))
+        let activities = app.collectionViews["activityCollectionView"]
+        XCTAssertTrue(activities.waitForExistence(timeout: 12))
+        XCTAssertTrue(activities.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "Copy", "Copiar")).firstMatch.exists)
         snapshot("Compartilhamento rápido", app: app)
     }
 

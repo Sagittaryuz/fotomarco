@@ -5,6 +5,10 @@ on:
       signing_candidate:
         type: boolean
         default: false
+      test_method:
+        description: Optional single GalleryInteractionTests method
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -37,8 +41,11 @@ jobs:
           xcrun simctl addmedia "$DEVICE" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg"
       - name: Exercise gallery and support panel
         working-directory: native-ios
+        env:
+          TEST_METHOD: ${{ inputs.test_method }}
         run: |
-          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO -only-testing:MomentraUITests/GalleryInteractionTests CODE_SIGNING_ALLOWED=NO -quiet test-without-building
+          TEST_TARGET="MomentraUITests/GalleryInteractionTests${TEST_METHOD:+/$TEST_METHOD}"
+          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "-only-testing:$TEST_TARGET" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence
         if: always()
         run: |
