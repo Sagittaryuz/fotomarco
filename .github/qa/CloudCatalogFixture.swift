@@ -17,7 +17,8 @@ struct CloudCatalogFixture: ViewModifier {
                 let destination = CloudDeliveryPlan.Destination(provider: .googleDrive,
                     accountHash: String(repeating: "a", count: 64))!
                 if arguments.contains("-seedGalleryCloudFixture") {
-                    let entry = CloudGalleryCatalog.Entry(id: "fixture", name: "00000000-0000-0000-0000-000000000010-stamped.jpg",
+                    let id = arguments.contains("-duplicateGalleryCloudFixture") ? "003" : "010"
+                    let entry = CloudGalleryCatalog.Entry(id: "fixture", name: "00000000-0000-0000-0000-000000000\(id)-stamped.jpg",
                                                          date: .now, revision: "1")
                     let existing = await CloudGalleryCatalog.shared.snapshot(for: destination)
                     await CloudGalleryCatalog.shared.replace([entry], for: destination, replacing: existing?.revision)

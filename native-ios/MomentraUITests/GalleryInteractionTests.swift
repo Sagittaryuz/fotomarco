@@ -314,6 +314,43 @@ final class GalleryInteractionTests: XCTestCase {
         snapshot("Interruptores nativos", app: app)
     }
 
+    func testGalleryGroupsCopyBadgesOnOneThumbnail() {
+        let app = launch(extraArguments: ["-galleryCloudFixture", "-seedGalleryCloudFixture", "-duplicateGalleryCloudFixture"])
+        XCTAssertTrue(app.staticTexts["cloud-catalog-fixture"].waitForExistence(timeout: 8))
+        app.buttons["Abrir capturas"].tap()
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        let badge = grid.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "No iPhone · Momentra, Google Drive · Conta de teste")).firstMatch
+        XCTAssertTrue(badge.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["28 itens"].exists)
+        snapshot("Uma miniatura com duas origens", app: app)
+    }
+
+    func testRetappingGalleryTabsReturnsToNewestDate() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        let today = grid.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Hoje · ")).firstMatch
+        let visible = NSPredicate { object, _ in
+            guard let element = object as? XCUIElement else { return false }
+            return element.exists && element.isHittable
+        }
+        for name in ["Capturas", "Favoritos", "Lixeira", "Capturas"] {
+            let tab = app.buttons[name]
+            tab.tap()
+            let shown = XCTNSPredicateExpectation(predicate: visible, object: today)
+            XCTAssertEqual(XCTWaiter.wait(for: [shown], timeout: 10), .completed, name)
+            grid.swipeDown(velocity: .fast)
+            if today.exists && today.isHittable { grid.swipeDown(velocity: .fast) }
+            XCTAssertFalse(today.exists && today.isHittable, "A rolagem deve revelar as fotos antigas em \(name).")
+            tab.tap()
+            let returned = XCTNSPredicateExpectation(predicate: visible, object: today)
+            XCTAssertEqual(XCTWaiter.wait(for: [returned], timeout: 10), .completed, name)
+        }
+        snapshot("Última fileira ao tocar na aba", app: app)
+    }
+
     func testCameraThumbnailSharesOnlyTheDisplayedPhoto() {
         let app = launch()
         let thumbnail = app.buttons["Abrir capturas"]

@@ -6,7 +6,7 @@ on:
         type: boolean
         default: false
       test_method:
-        description: GalleryInteractionTests method or the sharing group
+        description: GalleryInteractionTests method, sharing, or cameraGallery
         type: string
         default: ''
       baseline_gallery:
@@ -62,7 +62,7 @@ jobs:
           p.write_text(source.replace(previous, previous + "\n        .modifier(GalleryBenchmarkFixture())", 1))
           PYTHON
       - name: Add simulator-only offline cloud catalog fixture
-        if: inputs.test_method == 'testCloudCatalogSurvivesAppRelaunch'
+        if: inputs.test_method == 'testCloudCatalogSurvivesAppRelaunch' || inputs.test_method == 'cameraGallery'
         run: |
           cp .github/qa/CloudCatalogFixture.swift native-ios/Momentra/CloudCatalogFixture.swift
           python3 - <<'PYTHON'
@@ -131,6 +131,41 @@ jobs:
             cp "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg"               "$CONTAINER/Documents/Processed/00000000-0000-0000-0000-000000000003.jpg"
             exit 0
           fi
+          if [ "$TEST_METHOD" = cameraGallery ]; then
+            python3 - "$CONTAINER" <<'PYTHON'
+          import json
+          import os
+          import plistlib
+          import shutil
+          import sys
+          import time
+          from pathlib import Path
+
+          container = Path(sys.argv[1])
+          originals = container / "Documents" / "Originals"
+          source = originals / "00000000-0000-0000-0000-000000000003.jpg"
+          now = time.time()
+          for index in range(4, 28):
+              old = originals / f"00000000-0000-0000-0000-{index:012d}.jpg"
+              shutil.copyfile(source, old)
+              os.utime(old, (now - 3 * 86400, now - 3 * 86400))
+          processed = container / "Documents" / "Processed"
+          processed.mkdir()
+          shutil.copyfile(source, processed / source.name)
+          trash = container / "Documents" / "CaptureTrash" / "Originals" / f"{int(now)}-qa"
+          trash.mkdir(parents=True)
+          keys = []
+          for photo in originals.glob("*.jpg"):
+              shutil.copy2(photo, trash / photo.name)
+              keys.append(f"Originals/{photo.name}")
+          prefs = container / "Library" / "Preferences" / "br.com.momentra.camera.plist"
+          prefs.parent.mkdir(parents=True, exist_ok=True)
+          values = plistlib.loads(prefs.read_bytes()) if prefs.exists() else {}
+          values["native.gallery.favoriteCaptureKeys"] = json.dumps(keys).encode()
+          prefs.write_bytes(plistlib.dumps(values, fmt=plistlib.FMT_BINARY))
+          PYTHON
+            exit 0
+          fi
           if [ "$TEST_METHOD" = sharing ]; then exit 0; fi
           mkdir -p "$RUNNER_TEMP/camera-roll"
           for number in $(seq 1 24); do
@@ -160,9 +195,16 @@ jobs:
               "-only-testing:$TEST_SUITE/testCompletedBatchShareExitsSelectionMode"
             )
           fi
+          if [ "$TEST_METHOD" = cameraGallery ]; then
+            TEST_TARGETS=(
+              "-only-testing:$TEST_SUITE/testCameraThumbnailSharesOnlyTheDisplayedPhoto"
+              "-only-testing:$TEST_SUITE/testGalleryGroupsCopyBadgesOnOneThumbnail"
+              "-only-testing:$TEST_SUITE/testRetappingGalleryTabsReturnsToNewestDate"
+            )
+          fi
           SKIP_BENCHMARK=()
           if [ -z "$TEST_METHOD" ]; then
-            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch -skip-testing:MomentraUITests/GalleryInteractionTests/testCameraThumbnailSharesOnlyTheDisplayedPhoto)
+            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch -skip-testing:MomentraUITests/GalleryInteractionTests/testCameraThumbnailSharesOnlyTheDisplayedPhoto -skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryGroupsCopyBadgesOnOneThumbnail -skip-testing:MomentraUITests/GalleryInteractionTests/testRetappingGalleryTabsReturnsToNewestDate)
           fi
           xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "${TEST_TARGETS[@]}" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence
