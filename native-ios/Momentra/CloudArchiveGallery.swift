@@ -3,14 +3,11 @@ import SwiftUI
 
 struct CloudArchiveGallery: View {
     @ObservedObject var accounts: CloudArchiveAccounts
-    @ObservedObject var googlePhotos: GooglePhotosManager
-    @ObservedObject var picker: GooglePickerFlow
     let profileLookup: PhotoProfileLookup
     @ObservedObject var stampProfiles: StampProfilesStore
 
     private enum Source: Hashable {
         case account(CloudDeliveryPlan.Destination)
-        case legacy
         case none
     }
 
@@ -18,7 +15,6 @@ struct CloudArchiveGallery: View {
 
     private var source: Source {
         switch requestedSource {
-        case .legacy: return .legacy
         case .account(let id) where accounts.accounts.contains(where: { $0.id == id }): return requestedSource
         default: return accounts.accounts.first.map { .account($0.id) } ?? .none
         }
@@ -32,7 +28,6 @@ struct CloudArchiveGallery: View {
                     let service = account.id.provider == .googleDrive ? "Google Drive" : "OneDrive"
                     Text("\(service) · \(account.label)").tag(Source.account(account.id))
                 }
-                Text("Google Fotos · arquivo anterior").tag(Source.legacy)
             }
             .pickerStyle(.menu).padding(.horizontal).padding(.bottom, 8)
 
@@ -40,18 +35,12 @@ struct CloudArchiveGallery: View {
             case .account(let destination):
                 ArchiveAccountGallery(destination: destination, profileLookup: profileLookup, stampProfiles: stampProfiles)
                     .id(destination)
-            case .legacy:
-                GalleryStorageSummary(cloud: true)
-                CloudPhotoGallery(googlePhotos: googlePhotos, picker: picker,
-                                  profileLookup: profileLookup, stampProfiles: stampProfiles)
             case .none:
                 ContentUnavailableView("Nenhuma conta de armazenamento", systemImage: "cloud",
                     description: Text("Adicione uma conta Google Drive ou OneDrive nos Ajustes do Momentra."))
             }
         }
-        .onChange(of: source) { previous, _ in
-            if previous == .legacy { picker.cancel() }
-        }
+
     }
 }
 
@@ -344,22 +333,33 @@ private struct ArchiveGalleryPager: View {
     }
 
     var body: some View {
-        NavigationStack {
+        let index = items.firstIndex { $0.id == selection }
+        VStack(spacing: 0) {
+            GalleryDetailHeader(date: index.flatMap { items[$0].date }, position: (index ?? 0) + 1,
+                                count: items.count, close: { dismiss() }) {
+                if let index {
+                    Text(items[index].isOriginal ? "Orig." : "Carimbo")
+                        .font(.caption2).lineLimit(1).minimumScaleFactor(0.7)
+                        .accessibilityLabel(items[index].versionLabel)
+                }
+            }
             TabView(selection: $selection) {
                 ForEach(items) { photo in
-                    VStack(spacing: 8) {
+                    Group {
                         if photo.id == selection {
                             ArchiveGalleryImage(photo: photo, images: images, fullView: true)
                         } else {
-                            Color.secondary.opacity(0.15)
+                            Color.clear
                         }
-                        Text(photo.versionLabel).font(.footnote).foregroundStyle(.secondary).padding(.bottom)
                     }.tag(photo.id)
                 }
+            }.tabViewStyle(.page(indexDisplayMode: .never))
+            GalleryFilmstrip(items: items, selection: $selection) { photo in
+                ArchiveGalleryImage(photo: photo, images: images)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .navigationTitle("Foto na nuvem").navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Concluído") { dismiss() } }
         }
+        .background(.black)
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.hidden)
     }
 }

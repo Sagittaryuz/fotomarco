@@ -1,7 +1,7 @@
 import SwiftUI
 import Photos
 import ImageIO
-import QuickLook
+import AVKit
 
 private struct OriginalFile: Identifiable {
     let url: URL
@@ -28,7 +28,6 @@ private enum OriginalStore {
 }
 
 struct OriginalsView: View {
-    @ObservedObject var googlePhotos: GooglePhotosManager
     @ObservedObject var stampProfiles: StampProfilesStore
     @Environment(\.dismiss) private var dismiss
     @State private var files: [OriginalFile] = []
@@ -41,7 +40,6 @@ struct OriginalsView: View {
     @State private var selectedCapture: URL?
     @State private var selectingCaptures = false
     @State private var selectedCaptureIDs: Set<URL> = []
-    @StateObject private var picker = GooglePickerFlow()
     @StateObject private var archiveAccounts = CloudArchiveAccounts.shared
 
     var body: some View {
@@ -58,28 +56,26 @@ struct OriginalsView: View {
                 } else if gallerySection == 1 {
                     DevicePhotoGallery(profileLookup: profileLookup, stampProfiles: stampProfiles)
                 } else {
-                    CloudArchiveGallery(accounts: archiveAccounts, googlePhotos: googlePhotos, picker: picker,
+                    CloudArchiveGallery(accounts: archiveAccounts,
                                         profileLookup: profileLookup, stampProfiles: stampProfiles)
                 }
             }
             .navigationTitle("Galeria")
-            .toolbar { Button("Concluído") { picker.cancel(); dismiss() } }
-            .interactiveDismissDisabled(picker.busy || picker.waitingForSelection)
+            .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { reload() }
             .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } })) {
                 if let selectedCapture {
-                    CapturePager(urls: captureGroups.flatMap(\.items).map(\.url), initialURL: selectedCapture)
+                    CapturePager(items: captureGroups.flatMap(\.items), initialURL: selectedCapture,
+                                 message: $message, save: save)
+                        .presentationDragIndicator(.hidden)
                 }
             }
-            .onChange(of: gallerySection) { previous, section in
-                if previous == 2 && section != 2 { picker.cancel() }
+            .onChange(of: gallerySection) { _, _ in
                 selectingCaptures = false; selectedCaptureIDs.removeAll()
                 reload()
             }
-            .onChange(of: googlePhotos.message) { _, value in
-                if let value { message = value; googlePhotos.message = nil; reload() }
-            }
-            .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+            .alert("Momentra", isPresented: Binding(get: { selectedCapture == nil && message != nil },
+                                                     set: { if !$0, selectedCapture == nil { message = nil } })) {
                 Button("OK") { message = nil }
             } message: { Text(message ?? "") }
         }
@@ -184,22 +180,100 @@ struct OriginalsView: View {
     }
 }
 
-private struct CapturePager: UIViewControllerRepresentable {
-    let urls: [URL]
-    let initialURL: URL
-    func makeCoordinator() -> Coordinator { Coordinator(urls: urls) }
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let controller = QLPreviewController()
-        controller.dataSource = context.coordinator
-        controller.currentPreviewItemIndex = urls.firstIndex(of: initialURL) ?? 0
-        return controller
+private struct CapturePager: View {
+    let items: [OriginalFile]
+    let save: (OriginalFile) -> Void
+    @Binding var message: String?
+    @State private var selection: URL
+    @Environment(\.dismiss) private var dismiss
+
+    init(items: [OriginalFile], initialURL: URL, message: Binding<String?>, save: @escaping (OriginalFile) -> Void) {
+        self.items = items
+        self.save = save
+        _message = message
+        _selection = State(initialValue: initialURL)
     }
-    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        let urls: [URL]
-        init(urls: [URL]) { self.urls = urls }
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { urls.count }
-        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem { urls[index] as NSURL }
+
+    var body: some View {
+        let index = items.firstIndex { $0.id == selection }
+        let current = index.map { items[$0] }
+        VStack(spacing: 0) {
+            GalleryDetailHeader(date: current?.date, position: (index ?? 0) + 1,
+                                count: items.count, close: { dismiss() }) {
+                if let current {
+                    Menu {
+                        ShareLink(item: current.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
+                        Button { save(current) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.body.weight(.bold))
+                            .frame(width: 44, height: 44)
+                            .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
+                    }.accessibilityLabel("Opções da captura")
+                }
+            }
+            TabView(selection: $selection) {
+                ForEach(items) { item in
+                    CapturePage(item: item, active: item.id == selection).tag(item.id)
+                }
+            }.tabViewStyle(.page(indexDisplayMode: .never))
+            GalleryFilmstrip(items: items, selection: $selection) { item in
+                Thumbnail(url: item.url, isVideo: item.isVideo)
+            }
+        }
+        .background(.black)
+        .preferredColorScheme(.dark)
+        .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+            Button("OK") { message = nil }
+        } message: { Text(message ?? "") }
+    }
+}
+
+private struct CapturePage: View {
+    let item: OriginalFile
+    let active: Bool
+    @State private var preview: UIImage?
+    @State private var player: AVPlayer?
+    @State private var failed = false
+    @GestureState private var magnification: CGFloat = 1
+
+    var body: some View {
+        GeometryReader { proxy in
+            Group {
+                if let player {
+                    VideoPlayer(player: player)
+                } else if let preview {
+                    Image(uiImage: preview).resizable().scaledToFit()
+                        .scaleEffect(magnification)
+                        .gesture(MagnifyGesture().updating($magnification) { value, scale, _ in
+                            scale = min(5, max(1, value.magnification))
+                        })
+                } else if failed {
+                    ContentUnavailableView("Não foi possível abrir a captura", systemImage: "photo.badge.exclamationmark")
+                } else if active {
+                    ProgressView("Abrindo captura…")
+                } else {
+                    Color.clear
+                }
+            }.frame(width: proxy.size.width, height: proxy.size.height).clipped()
+        }
+        .task(id: active) {
+            guard active else { player?.pause(); return }
+            if item.isVideo {
+                if player == nil { player = AVPlayer(url: item.url) }
+            } else if preview == nil {
+                let url = item.url
+                let image = await Task.detached(priority: .userInitiated) {
+                    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                          let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                            kCGImageSourceCreateThumbnailFromImageAlways: true,
+                            kCGImageSourceCreateThumbnailWithTransform: true,
+                            kCGImageSourceThumbnailMaxPixelSize: 2600
+                          ] as CFDictionary) else { return nil as UIImage? }
+                    return UIImage(cgImage: image)
+                }.value
+                if !Task.isCancelled { preview = image; failed = image == nil }
+            }
+        }.onDisappear { player?.pause() }
     }
 }
 

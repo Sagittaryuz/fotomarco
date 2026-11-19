@@ -19,6 +19,36 @@ struct ZoomScale {
     var options: [CGFloat] { [CGFloat(0.5), 1, 2, 4, 8].filter { deviceFactor(for: $0) != nil } }
 }
 
+/// Horizontal drag adjusts immediately, then keeps moving at a rate set by the deflection.
+struct ContinuousCameraZoom {
+    private(set) var value: CGFloat
+    private var lastTranslation: CGFloat = 0
+    private var deflection: CGFloat = 0
+
+    init(value: CGFloat) { self.value = value }
+
+    mutating func move(to translation: CGFloat, range: ClosedRange<CGFloat>) {
+        let delta = translation - lastTranslation
+        guard abs(delta) >= 1 else { return }
+        lastTranslation = translation
+        if (delta > 0) != (deflection > 0) { deflection = 0 }
+        deflection = min(80, max(-80, deflection + delta))
+        multiply(by: exp(delta / 210), range: range)
+    }
+
+    @discardableResult
+    mutating func advance(seconds: Double, range: ClosedRange<CGFloat>) -> CGFloat {
+        let intensity = max(0, abs(deflection) - 6) / 74
+        let direction: CGFloat = deflection < 0 ? -1 : 1
+        multiply(by: exp(direction * intensity * intensity * 1.65 * CGFloat(seconds)), range: range)
+        return value
+    }
+
+    private mutating func multiply(by factor: CGFloat, range: ClosedRange<CGFloat>) {
+        value = min(range.upperBound, max(range.lowerBound, value * factor))
+    }
+}
+
 /// Vertical movement while holding the shutter maps smoothly to optical zoom.
 enum QuickCaptureZoom {
     static func value(start: CGFloat, verticalTranslation: CGFloat, range: ClosedRange<CGFloat>) -> CGFloat {

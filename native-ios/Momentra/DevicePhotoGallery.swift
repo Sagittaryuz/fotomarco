@@ -115,12 +115,26 @@ private struct DevicePhotoPager: View {
     init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag) {
         self.items = items; self.profile = profile; _selection = State(initialValue: initialID)
     }
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        TabView(selection: $selection) {
-            ForEach(items) { item in
-                DevicePhotoDetail(asset: item.asset, profile: profile).tag(item.id)
+        let index = items.firstIndex { $0.id == selection }
+        VStack(spacing: 0) {
+            GalleryDetailHeader(date: index.flatMap { items[$0].asset.creationDate },
+                                position: (index ?? 0) + 1, count: items.count,
+                                close: { dismiss() }) { EmptyView() }
+            TabView(selection: $selection) {
+                ForEach(items) { item in
+                    DevicePhotoDetail(asset: item.asset, profile: profile).tag(item.id)
+                }
+            }.tabViewStyle(.page(indexDisplayMode: .never))
+            GalleryFilmstrip(items: items, selection: $selection) { item in
+                DeviceThumbnail(asset: item.asset)
             }
-        }.tabViewStyle(.page(indexDisplayMode: .never))
+        }
+        .background(.black)
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.hidden)
     }
 }
 
@@ -153,7 +167,6 @@ private struct DeviceThumbnail: View {
 private struct DevicePhotoDetail: View {
     let asset: PHAsset
     let profile: CaptureProfileTag
-    @Environment(\.dismiss) private var dismiss
     @State private var data: Data?
     @State private var preview: UIImage?
     @State private var originalDateText: String?
@@ -163,8 +176,7 @@ private struct DevicePhotoDetail: View {
     @State private var requestID: PHImageRequestID?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: 16) {
                     if let preview { Image(uiImage: preview).resizable().scaledToFit() }
                     else if loading { ProgressView("Abrindo foto…").padding(50) }
@@ -179,15 +191,11 @@ private struct DevicePhotoDetail: View {
                     if saving { ProgressView("Criando cópia…") }
                 }.padding()
             }
-            .navigationTitle("Foto")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { load() }
             .onDisappear { if let requestID { PHImageManager.default().cancelImageRequest(requestID) } }
             .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }
             } message: { Text(message ?? "") }
-        }
     }
 
     private func load() {

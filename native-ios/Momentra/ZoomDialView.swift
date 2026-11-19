@@ -7,7 +7,6 @@ struct ZoomDialView: View {
     let presets: [CGFloat]
     let setZoom: (CGFloat) -> Void
     let editingChanged: (Bool) -> Void
-    @State private var dragStart: CGFloat?
     private let angularScale: CGFloat = 0.52
 
     var body: some View {
@@ -43,13 +42,6 @@ struct ZoomDialView: View {
             context.draw(Text(title).font(.system(size: 17, weight: .medium)).foregroundColor(.yellow), at: CGPoint(x: center.x, y: 50))
         }
         .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 2)
-            .onChanged { gesture in
-                if dragStart == nil { dragStart = value; editingChanged(true) }
-                let next = (dragStart ?? value) * exp(gesture.translation.width / 150)
-                setZoom(min(range.upperBound, max(range.lowerBound, next)))
-            }
-            .onEnded { _ in dragStart = nil; editingChanged(false) })
         .accessibilityElement()
         .accessibilityLabel("Zoom da câmera")
         .accessibilityValue(String(format: "%.1f vezes", value))

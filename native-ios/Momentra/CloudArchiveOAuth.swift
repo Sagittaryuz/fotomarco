@@ -8,6 +8,7 @@ import UIKit
 final class CloudArchiveOAuth {
     enum Failure: LocalizedError {
         case notConfigured, busy, cancelled, invalidResponse, denied, disconnected, expired, wrongAccount, keychain, random
+        case oneDriveFolderUnavailable
 
         var errorDescription: String? {
             switch self {
@@ -20,6 +21,7 @@ final class CloudArchiveOAuth {
             case .wrongAccount: return "A conta retornada não corresponde ao destino escolhido."
             case .keychain: return "Não foi possível acessar as credenciais. Desbloqueie o iPhone e tente novamente."
             case .random: return "Não foi possível iniciar uma conexão segura."
+            case .oneDriveFolderUnavailable: return "A Microsoft autenticou a conta, mas a pasta do Momentra não está acessível no OneDrive. Confira se o OneDrive está ativo nessa conta e tente de novo."
             }
         }
     }
@@ -106,9 +108,21 @@ final class CloudArchiveOAuth {
         let email: String?
     }
 
-    private struct OneDriveFolder: Decodable {
-        struct Parent: Decodable { let driveId: String }
-        let parentReference: Parent
+    struct OneDriveFolder: Decodable {
+        struct Parent: Decodable { let driveId: String? }
+        let id: String?
+        let parentReference: Parent?
+
+        func bindings(for subject: String) -> [String] {
+            let prefix = "\(subject.utf8.count):\(subject)"
+            let drive = parentReference?.driveId.flatMap { validIdentifier($0) ? prefix + $0 : nil }
+            let folder = id.flatMap { validIdentifier($0) ? "folder:" + prefix + $0 : nil }
+            return [drive, folder].compactMap { $0 }
+        }
+
+        private func validIdentifier(_ value: String) -> Bool {
+            !value.isEmpty && value.utf8.count <= 512
+        }
     }
 
     private final class NoRedirects: NSObject, URLSessionTaskDelegate {
@@ -122,7 +136,8 @@ final class CloudArchiveOAuth {
 
     private let network = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
 
-    func connect(_ configuration: Configuration, presenting: UIWindow) async throws -> AuthorizedAccount {
+    func connect(_ configuration: Configuration, presenting: UIWindow,
+                 knownDestinations: Set<CloudDeliveryPlan.Destination>) async throws -> AuthorizedAccount {
         let verifier = try Self.randomParameter()
         let state = try Self.randomParameter()
         let challenge = Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
@@ -149,14 +164,15 @@ final class CloudArchiveOAuth {
             "grant_type": "authorization_code", "code": code, "code_verifier": verifier,
             "redirect_uri": configuration.callback.absoluteString
         ], configuration: configuration, previous: nil)
-        return try await resolve(credentials, configuration: configuration)
+        return try await resolve(credentials, configuration: configuration, knownDestinations: knownDestinations)
     }
 
-    func refresh(_ previous: Credential, configuration: Configuration) async throws -> AuthorizedAccount {
+    func refresh(_ previous: Credential, configuration: Configuration,
+                 destination: CloudDeliveryPlan.Destination) async throws -> AuthorizedAccount {
         let credentials = try await redeem([
             "grant_type": "refresh_token", "refresh_token": previous.refreshToken
         ], configuration: configuration, previous: previous)
-        return try await resolve(credentials, configuration: configuration)
+        return try await resolve(credentials, configuration: configuration, knownDestinations: [destination])
     }
 
     static func authorizationCode(from callback: URL, expected: URL, state: String) throws -> String {
@@ -204,24 +220,34 @@ final class CloudArchiveOAuth {
                           expiresAt: Date().addingTimeInterval(token.expires_in))
     }
 
-    private func resolve(_ credential: Credential, configuration: Configuration) async throws -> AuthorizedAccount {
+    private func resolve(_ credential: Credential, configuration: Configuration,
+                         knownDestinations: Set<CloudDeliveryPlan.Destination>) async throws -> AuthorizedAccount {
         let identity: Identity = try await get(configuration.identityURL, token: credential.accessToken)
         guard !identity.sub.isEmpty, identity.sub.utf8.count <= 512 else { throw Failure.invalidResponse }
-        let binding: String
+        let bindings: [String]
         switch configuration.provider {
         case .googleDrive:
-            binding = identity.sub
+            bindings = [identity.sub]
         case .oneDrive:
             let rootURL = URL(string: "https://graph.microsoft.com/v1.0/me/drive/special/approot")!
-            let folder: OneDriveFolder = try await get(rootURL, token: credential.accessToken)
-            let drive = folder.parentReference.driveId
-            guard !drive.isEmpty, drive.utf8.count <= 512 else { throw Failure.invalidResponse }
-            binding = "\(identity.sub.utf8.count):\(identity.sub)\(drive)"
+            do {
+                let folder: OneDriveFolder = try await get(rootURL, token: credential.accessToken)
+                bindings = folder.bindings(for: identity.sub)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw Failure.oneDriveFolderUnavailable
+            }
+            guard !bindings.isEmpty else { throw Failure.oneDriveFolderUnavailable }
         }
-        let hash = SHA256.hash(data: Data(binding.utf8)).map { String(format: "%02x", $0) }.joined()
-        guard let destination = CloudDeliveryPlan.Destination(provider: configuration.provider, accountHash: hash) else {
+        let candidates = bindings.compactMap { binding in
+            let hash = SHA256.hash(data: Data(binding.utf8)).map { String(format: "%02x", $0) }.joined()
+            return CloudDeliveryPlan.Destination(provider: configuration.provider, accountHash: hash)
+        }
+        guard let destination = candidates.first(where: knownDestinations.contains) ?? candidates.first else {
             throw Failure.invalidResponse
         }
+        let hash = destination.accountHash
         let rawLabel = identity.email ?? identity.name ?? String(hash.prefix(8))
         let label = rawLabel.components(separatedBy: .controlCharacters).joined().prefix(240)
         return AuthorizedAccount(destination: destination, label: label.isEmpty ? String(hash.prefix(8)) : String(label),

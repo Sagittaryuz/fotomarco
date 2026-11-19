@@ -74,7 +74,8 @@ final class CloudArchiveAccounts: ObservableObject {
         connecting = true
         defer { connecting = false }
         let configuration = try CloudArchiveOAuth.Configuration(provider: provider)
-        let authorized = try await oauth.connect(configuration, presenting: presenting)
+        let authorized = try await oauth.connect(configuration, presenting: presenting,
+                                                knownDestinations: Set(entries.map(\.destination)))
         let destination = authorized.destination
         var next = entries
         let index = next.firstIndex { $0.destination == destination }
@@ -110,7 +111,7 @@ final class CloudArchiveAccounts: ObservableObject {
         if let refresh = refreshes[destination] { return try await refresh.value }
         let refresh = Task { @MainActor in
             defer { self.refreshes[destination] = nil }
-            let authorized = try await self.oauth.refresh(entry.credential, configuration: configuration)
+            let authorized = try await self.oauth.refresh(entry.credential, configuration: configuration, destination: destination)
             guard authorized.destination == destination else { throw CloudArchiveOAuth.Failure.wrongAccount }
             var next = self.entries
             guard let index = next.firstIndex(where: { $0.destination == destination }),

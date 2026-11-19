@@ -29,6 +29,21 @@ final class CloudArchiveOAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testMicrosoftAppFolderCanResolveWithoutParentReference() throws {
+        let folder = try JSONDecoder().decode(CloudArchiveOAuth.OneDriveFolder.self,
+            from: Data(#"{"id":"app-folder-id","specialFolder":{"name":"approot"}}"#.utf8))
+        XCTAssertEqual(folder.bindings(for: "subject"), ["folder:7:subjectapp-folder-id"])
+    }
+
+    @MainActor
+    func testMicrosoftKeepsExistingDriveBindingWhenParentReferenceIsPresent() throws {
+        let folder = try JSONDecoder().decode(CloudArchiveOAuth.OneDriveFolder.self,
+            from: Data(#"{"id":"app-folder-id","parentReference":{"driveId":"drive-id"}}"#.utf8))
+        XCTAssertEqual(folder.bindings(for: "subject"), ["7:subjectdrive-id", "folder:7:subjectapp-folder-id"])
+        XCTAssertNotEqual(folder.bindings(for: "other"), folder.bindings(for: "subject"))
+    }
+
+    @MainActor
     func testCallbackRejectsWrongPathStateAndRepeatedAuthorizationCode() throws {
         let scheme = "com.googleusercontent.apps.123-abc"
         let callback = URL(string: scheme + ":/oauth2callback")!

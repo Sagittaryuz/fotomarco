@@ -16,7 +16,6 @@ struct CameraScreen: View {
     @StateObject private var weather = ForecastService()
     @StateObject private var updates = UpdateService()
     @StateObject private var directUpdate = DirectUpdateAccess.shared
-    @StateObject private var googlePhotos = GooglePhotosManager.shared
     @StateObject private var stampProfiles = StampProfilesStore()
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
@@ -37,9 +36,6 @@ struct CameraScreen: View {
     @State private var pendingArchivePolicy: CloudDeliveryPlan?
     @State private var captureContextTask: Task<Bool, Never>?
     @State private var lastCloudAttempt = Date.distantPast
-    @State private var localCloudPendingCount = 0
-    @State private var localCloudNeedsAttention = false
-    @State private var cloudStatusGeneration = 0
     @AppStorage("native.stamp.size") private var stampSize = "regular"
     @AppStorage("native.stamp.position") private var stampPosition = "bottom"
     @AppStorage("native.stamp.horizontal") private var stampHorizontal = "auto"
@@ -70,7 +66,6 @@ struct CameraScreen: View {
     @State private var showSettingsImport = false
     @State private var showLogoImport = false
     @State private var showForecastTerms = false
-    @State private var showGoogleConsent = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
@@ -95,7 +90,9 @@ struct CameraScreen: View {
     }
     @State private var showingZoomDial = false
     @State private var zoomDismissTask: Task<Void, Never>?
-    @State private var zoomPresetDragStart: CGFloat?
+    @State private var zoomDrag: ContinuousCameraZoom?
+    @State private var zoomMotionTask: Task<Void, Never>?
+    @GestureState private var zoomTouchActive = false
     @State private var suppressZoomPresetTap = false
     @State private var quickRecording = false
     @State private var quickRecordingLocked = false
@@ -248,7 +245,7 @@ struct CameraScreen: View {
                         }
                     }
                     VStack(spacing: 0) {
-                    Group {
+                    ZStack {
                     if showingZoomDial {
                         ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, editingChanged: zoomEditingChanged)
                             .frame(height: 132).transition(.move(edge: .bottom))
@@ -279,46 +276,22 @@ struct CameraScreen: View {
                     }
                     }
                     .simultaneousGesture(
-                        DragGesture(minimumDistance: 10)
-                            .onChanged { gesture in
-                                guard zoomPresetDragStart != nil || !showingZoomDial else { return }
-                                if zoomPresetDragStart == nil {
-                                    zoomPresetDragStart = camera.zoomFactor
-                                    suppressZoomPresetTap = true
-                                    zoomEditingChanged(true)
-                                    withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
-                                }
-                                let start = zoomPresetDragStart ?? camera.zoomFactor
-                                camera.setZoom(min(camera.zoomRange.upperBound, max(camera.zoomRange.lowerBound,
-                                    start * exp(gesture.translation.width / 150))))
-                            }
-                            .onEnded { _ in
-                                guard zoomPresetDragStart != nil else { return }
-                                zoomPresetDragStart = nil; zoomEditingChanged(false)
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { suppressZoomPresetTap = false }
-                            }
+                        DragGesture(minimumDistance: 8)
+                            .updating($zoomTouchActive) { _, active, _ in active = true }
+                            .onChanged { gesture in updateZoomDrag(gesture.translation.width) }
+                            .onEnded { _ in finishZoomDrag() }
                     )
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35).sequenced(before: DragGesture(minimumDistance: 0))
-                            .onChanged { phase in
-                                switch phase {
-                                case .first(true), .second(true, nil):
-                                    guard zoomPresetDragStart == nil, !showingZoomDial else { return }
-                                    zoomPresetDragStart = camera.zoomFactor; suppressZoomPresetTap = true; zoomEditingChanged(true)
-                                    withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
-                                case .second(true, let drag?):
-                                    guard let start = zoomPresetDragStart else { return }
-                                    camera.setZoom(min(camera.zoomRange.upperBound, max(camera.zoomRange.lowerBound,
-                                        start * exp(drag.translation.width / 150))))
-                                default: break
-                                }
-                            }
-                            .onEnded { _ in
-                                guard zoomPresetDragStart != nil else { return }
-                                zoomPresetDragStart = nil; zoomEditingChanged(false)
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { suppressZoomPresetTap = false }
-                            }
-                    )
+                    .onChange(of: zoomTouchActive) { _, active in
+                        if !active { finishZoomDrag() }
+                    }
+                    .onLongPressGesture(minimumDuration: 0.35, maximumDistance: 8, perform: {
+                        guard camera.ready, zoomDrag == nil else { return }
+                        suppressZoomPresetTap = true
+                        withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
+                        zoomEditingChanged(true)
+                    }, onPressingChanged: { pressing in
+                        if !pressing, zoomDrag == nil, suppressZoomPresetTap { scheduleZoomDismiss() }
+                    })
                     HStack {
                         Menu {
                             ForEach(stampProfiles.profiles) { item in
@@ -508,13 +481,13 @@ struct CameraScreen: View {
     private var observedCamera: some View {
         cameraContent
         .statusBarHidden()
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms && !showGoogleConsent, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
-        .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); zoomDismissTask?.cancel(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
-            else { finishPhotoFlight(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+            else { finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
 
@@ -528,9 +501,6 @@ struct CameraScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .momentraCloudCaptureStaged).receive(on: RunLoop.main)) { _ in
             retryCloudCaptures()
         }
-        .onReceive(googlePhotos.$pendingCloudCaptures) { _ in
-            refreshCloudQueueStatus()
-        }
         .onReceive(NotificationCenter.default.publisher(for: .momentraOpenCamera).receive(on: RunLoop.main)) { _ in
             showSettings = false
             showOriginals = false
@@ -538,7 +508,6 @@ struct CameraScreen: View {
             showSettingsImport = false
             showLogoImport = false
             showForecastTerms = false
-            showGoogleConsent = false
             showAspectPanel = false
             selectedRecognizedText = nil
             camera.start()
@@ -609,7 +578,7 @@ struct CameraScreen: View {
     var body: some View {
         moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
-        .sheet(isPresented: $showOriginals) { OriginalsView(googlePhotos: googlePhotos, stampProfiles: stampProfiles) }
+        .sheet(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {
@@ -644,7 +613,7 @@ struct CameraScreen: View {
                                         await directUpdate.install(expectedVersion: version) {
                                             UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
                                                 recording: camera.isRecording, finishing: camera.isFinishingRecording,
-                                                processingVideos: camera.processingVideos, cloudBusy: googlePhotos.busy)
+                                                processingVideos: camera.processingVideos, cloudBusy: connectingArchive)
                                         }
                                     }
                                 }
@@ -666,11 +635,6 @@ struct CameraScreen: View {
                             GoogleAccountMark().frame(width: 48, height: 48)
                                 .clipShape(Circle()).accessibilityHidden(true)
                             LabeledContent("Conta", value: GIDSignIn.sharedInstance.currentUser?.profile?.email ?? "Não conectada")
-                        }
-                        if !googlePhotos.connected && googlePhotos.configured {
-                            GoogleWelcomeButton { showGoogleConsent = true }.frame(height: 48).disabled(googlePhotos.busy)
-                        } else if googlePhotos.connected {
-                            Text("Google Fotos conectado").foregroundStyle(.secondary)
                         }
                     }
                     Section("Ajustes da câmera") {
@@ -736,6 +700,8 @@ struct CameraScreen: View {
                                 VStack(alignment: .leading) {
                                     Text(account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
                                     Text(account.label).font(.caption).foregroundStyle(.secondary)
+                                    Text(account.enabled ? "Conectada · envio ativo" : "Conectada · envio desativado")
+                                        .font(.caption2).foregroundStyle(.secondary)
                                 }
                             }.disabled(pendingArchivePolicy != nil)
                         }
@@ -755,28 +721,6 @@ struct CameraScreen: View {
                         }
                         if let archiveNotice { Text(archiveNotice).font(.footnote) }
                     }
-                    Section("Google Fotos · arquivo anterior") {
-                        if googlePhotos.configured {
-                            if googlePhotos.connected {
-                                Button("Desconectar conta") { googlePhotos.signOut() }.disabled(googlePhotos.busy)
-                            } else {
-                                Button("Conectar Google Fotos") { showGoogleConsent = true }.disabled(googlePhotos.busy)
-                            }
-                            Text(localCloudPendingCount > 0
-                                 ? "\(localCloudPendingCount) captura(s) da fila anterior preservada(s)."
-                                 : "Use a conta anterior para consultar a galeria do Google Fotos.")
-                                .font(.footnote)
-                            if localCloudNeedsAttention {
-                                Text("Há envios antigos com confirmação pendente.")
-                                    .font(.footnote).foregroundStyle(.orange)
-                            }
-                            Text("A fila anterior permanece no aparelho. Novas fotos usam os destinos acima.")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        } else {
-                            Text("A conexão nativa ainda não está configurada.").font(.footnote).foregroundStyle(.secondary)
-                        }
-                        if let message = googlePhotos.message { Text(message).font(.footnote) }
-                    }
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                     } header: {
@@ -790,13 +734,6 @@ struct CameraScreen: View {
                 .toolbar { Button("Concluído") { showSettings = false } }
                 .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
                     Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
-                    Button("Cancelar", role: .cancel) {}
-                }
-                .confirmationDialog("Somente fotos pessoais. O Google pedirá permissão para adicionar fotos e ler itens criados pelo Momentra. Nenhuma foto será enviada ao conectar.", isPresented: $showGoogleConsent, titleVisibility: .visible) {
-                    Button("Declaro uso pessoal e conecto") {
-                        if let controller = Self.presentingController() { googlePhotos.connect(presenting: controller) }
-                        else { googlePhotos.message = "Não foi possível abrir o login. Tente novamente." }
-                    }
                     Button("Cancelar", role: .cancel) {}
                 }
                 .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
@@ -852,16 +789,62 @@ struct CameraScreen: View {
         zoomDismissTask = Task {
             do { try await Task.sleep(for: .seconds(1)) } catch { return }
             guard !Task.isCancelled else { return }
+            suppressZoomPresetTap = false
             withAnimation(.easeIn(duration: 0.22)) { showingZoomDial = false }
         }
     }
 
+    private func updateZoomDrag(_ translation: CGFloat) {
+        if zoomDrag == nil {
+            guard camera.ready, !camera.isSwitching else { return }
+            zoomDrag = ContinuousCameraZoom(value: camera.zoomFactor)
+            suppressZoomPresetTap = true
+            zoomEditingChanged(true)
+            if !showingZoomDial {
+                withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
+            }
+            zoomMotionTask = Task { @MainActor in
+                let clock = ContinuousClock()
+                var previous = clock.now
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .milliseconds(33)) } catch { return }
+                    let now = clock.now
+                    let elapsed = previous.duration(to: now).components
+                    previous = now
+                    guard var drag = zoomDrag else { return }
+                    let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+                    let next = drag.advance(seconds: min(seconds, 0.1), range: camera.zoomRange)
+                    if next != zoomDrag?.value { camera.setZoom(next) }
+                    zoomDrag = drag
+                }
+            }
+        }
+        if var drag = zoomDrag {
+            let previous = drag.value
+            drag.move(to: translation, range: camera.zoomRange)
+            if drag.value != previous { camera.setZoom(drag.value) }
+            zoomDrag = drag
+        }
+    }
+
+    private func finishZoomDrag() {
+        guard zoomDrag != nil else { return }
+        zoomMotionTask?.cancel()
+        zoomMotionTask = nil
+        zoomDrag = nil
+        zoomEditingChanged(false)
+        DispatchQueue.main.async {
+            if zoomDrag == nil { suppressZoomPresetTap = false }
+        }
+    }
+
     private func dismissZoomDial() {
-        guard showingZoomDial else { return }
+        finishZoomDrag()
         zoomDismissTask?.cancel()
-        zoomPresetDragStart = nil
         suppressZoomPresetTap = false
-        withAnimation(.easeIn(duration: 0.22)) { showingZoomDial = false }
+        if showingZoomDial {
+            withAnimation(.easeIn(duration: 0.22)) { showingZoomDial = false }
+        }
     }
 
     private func cycleFlash() {
@@ -963,34 +946,19 @@ struct CameraScreen: View {
         archiveNotice = nil
         Task {
             defer { connectingArchive = false }
-            do { try await archiveAccounts.connect(provider, presenting: window) }
+            do {
+                try await archiveAccounts.connect(provider, presenting: window)
+                archiveNotice = provider == .oneDrive ? "Conta OneDrive conectada." : "Conta Google Drive conectada."
+            }
             catch { archiveNotice = error.localizedDescription }
         }
     }
 
     private func retryCloudCaptures() {
         lastCloudAttempt = Date()
-        refreshCloudQueueStatus()
         guard scenePhase == .active else { return }
         Task {
             if let status = await CloudArchiveDelivery.shared.drain() { archiveStatus = status }
-        }
-    }
-
-    private func refreshCloudQueueStatus() {
-        cloudStatusGeneration &+= 1
-        let generation = cloudStatusGeneration
-        Task {
-            let status = await Task.detached(priority: .utility) { () -> (Int, Bool)? in
-                guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                                                               appropriateFor: nil, create: false),
-                      let entries = try? CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
-                        .allEntries() else { return nil }
-                return (entries.filter { $0.phase != .cleaned }.count, entries.contains { $0.phase == .uncertain })
-            }.value
-            guard cloudStatusGeneration == generation, let status else { return }
-            localCloudPendingCount = status.0
-            localCloudNeedsAttention = status.1
         }
     }
 
