@@ -81,6 +81,16 @@ jobs:
               }
           }
           """)
+          summary = Path("native-ios/Momentra/GalleryStorageSummary.swift")
+          source = summary.read_text()
+          anchor = "    private static func fetchQuota(for destination: CloudDeliveryPlan.Destination) async -> CloudQuota? {"
+          assert source.count(anchor) == 1
+          summary.write_text(source.replace(anchor, anchor + """
+                  if ProcessInfo.processInfo.arguments.contains("-galleryCloudFixture") {
+                      try? await Task.sleep(for: .seconds(8))
+                      return nil
+                  }
+          """, 1))
           PYTHON
       - name: Generate project and start simulator
         working-directory: native-ios
@@ -100,6 +110,8 @@ jobs:
           xcrun simctl bootstatus "$DEVICE" -b
       - name: Install fixture captures
         working-directory: native-ios
+        env:
+          TEST_METHOD: ${{ inputs.test_method }}
         run: |
           xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" CODE_SIGNING_ALLOWED=NO -only-testing:MomentraUITests -quiet build-for-testing
           xcrun simctl install "$DEVICE" "$RUNNER_TEMP/gallery/Build/Products/Debug-iphonesimulator/Momentra.app"
@@ -110,6 +122,10 @@ jobs:
           for number in 1 2 3; do
             sips -s format jpeg "Momentra/Assets.xcassets/AppIcon.appiconset/Light.png" --out "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-00000000000$number.jpg" >/dev/null
           done
+          if [ "$TEST_METHOD" = testCloudCatalogSurvivesAppRelaunch ]; then
+            mkdir -p "$CONTAINER/Documents/CloudThumbnails"
+            cp "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000001.jpg" "$CONTAINER/Documents/CloudThumbnails/00000000-0000-0000-0000-000000000010.jpg"
+          fi
           mkdir -p "$RUNNER_TEMP/camera-roll"
           for number in $(seq 1 24); do
             sips -Z "$((256 + number * 8))" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" --out "$RUNNER_TEMP/camera-roll/$number.jpg" >/dev/null

@@ -57,19 +57,40 @@ final class GalleryInteractionTests: XCTestCase {
     func testCloudCatalogSurvivesAppRelaunch() {
         let app = launch(extraArguments: ["-galleryCloudFixture", "-seedGalleryCloudFixture"])
         XCTAssertTrue(app.staticTexts["cloud-catalog-fixture"].waitForExistence(timeout: 8))
-        app.buttons["Abrir capturas"].tap()
-        let count = app.staticTexts["4 itens"]
-        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        openFixtureGallery(app)
+        let sync = app.descendants(matching: .any)["gallery-sync-line"].firstMatch
+        XCTAssertTrue(sync.waitForExistence(timeout: 4), "A linha deve aparecer durante a consulta simulada.")
+        let quota = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Google Drive · Conta de teste")).firstMatch
+        XCTAssertTrue(quota.exists)
+        XCTAssertEqual(quota.value as? String, "31%")
+        XCTAssertTrue(app.staticTexts["4 itens"].exists)
+        snapshot("Catálogo e capacidade local durante a sincronização", app: app)
+        XCTAssertTrue(sync.waitForNonExistence(timeout: 12))
+        XCTAssertEqual(quota.value as? String, "31%")
+
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        openFixtureGallery(app)
+        XCTAssertTrue(app.staticTexts["4 itens"].exists)
         app.terminate()
 
         let reopened = launch(extraArguments: ["-galleryCloudFixture"])
         XCTAssertTrue(reopened.staticTexts["cloud-catalog-fixture"].waitForExistence(timeout: 8))
-        reopened.buttons["Abrir capturas"].tap()
-        XCTAssertTrue(reopened.staticTexts["4 itens"].waitForExistence(timeout: 8))
+        openFixtureGallery(reopened)
         snapshot("Catálogo da nuvem reaberto sem conta autenticada", app: reopened)
+    }
+
+    private func openFixtureGallery(_ app: XCUIApplication) {
+        let count = app.staticTexts["4 itens"]
+        let entry = app.buttons["Abrir capturas"]
+        let cameraAlert = app.alerts.buttons["OK"].firstMatch
+        for _ in 0..<3 {
+            if cameraAlert.exists { cameraAlert.tap() }
+            if count.exists { return }
+            if entry.isHittable { entry.tap() }
+            if count.waitForExistence(timeout: 2) { return }
+        }
+        XCTAssertTrue(count.waitForExistence(timeout: 8), "As três capturas e o item de nuvem devem aparecer.")
     }
 
     func testAppCapturesExcludeUntrackedPhotosEvenAfterVisitingFavorites() {

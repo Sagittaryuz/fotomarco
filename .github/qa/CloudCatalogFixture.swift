@@ -21,6 +21,7 @@ struct CloudCatalogFixture: ViewModifier {
                                                          date: .now, revision: "1")
                     let existing = await CloudGalleryCatalog.shared.snapshot(for: destination)
                     await CloudGalleryCatalog.shared.replace([entry], for: destination, replacing: existing?.revision)
+                    GalleryCapacityCache().store(.init(total: 100, used: 31), for: destination)
                 }
                 CloudArchiveAccounts.shared.installCloudCatalogFixture(destination)
                 ready = true
