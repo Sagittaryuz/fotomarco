@@ -638,7 +638,7 @@ struct CameraScreen: View {
     var body: some View {
         moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
-        .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles, returnToCamera: { showOriginals = false }) }
+        .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {

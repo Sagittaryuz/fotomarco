@@ -3,7 +3,6 @@ import Photos
 
 struct OriginalsView: View {
     @ObservedObject var stampProfiles: StampProfilesStore
-    let returnToCamera: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .caption2) private var storageBandHeight = 44.0
@@ -33,7 +32,6 @@ struct OriginalsView: View {
     @State private var trashItem: GalleryItem?
     @State private var quickShare: GalleryItem?
     @State private var shared: GalleryShareBatch?
-    @State private var leavingToCamera = false
     @State private var confirmBatch = false
     @State private var busy = false
     @State private var loading = false
@@ -149,7 +147,7 @@ struct OriginalsView: View {
         .onChange(of: profile) { _, _ in resetSelection(); scrollRequest += 1; updateProjection() }
         .onChange(of: captureFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
-        .fullScreenCover(item: $detail, onDismiss: detailDismissed) { item in
+        .fullScreenCover(item: $detail, onDismiss: { reloadVersion += 1 }) { item in
             MomentraGalleryDetail(items: detailItems(fallback: item), initial: item,
                                   profiles: stampProfiles.profiles,
                                   isFavorite: isFavorite, favorite: toggleFavorite,
@@ -161,8 +159,7 @@ struct OriginalsView: View {
                                       updateProjection()
                                       if item.origin != .local { cloudRefresh += 1 }
                                   },
-                                  onSavedCopy: { reloadVersion += 1 },
-                                  returnToCamera: { leavingToCamera = true; detail = nil })
+                                  onSavedCopy: { reloadVersion += 1 })
         }
         .fullScreenCover(item: $quickShare) { item in
             GalleryQuickShare(load: { try await item.input() }, isVideo: item.isVideo)
@@ -375,13 +372,6 @@ struct OriginalsView: View {
             pendingSearchResult = nil
             open(item)
         }
-    }
-
-    private func detailDismissed() {
-        if leavingToCamera {
-            leavingToCamera = false
-            returnToCamera()
-        } else { reloadVersion += 1 }
     }
 
     private func resetSelection() { selecting = false; selected.removeAll() }

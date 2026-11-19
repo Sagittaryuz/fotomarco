@@ -13,7 +13,6 @@ struct MomentraGalleryDetail: View {
     let favorite: (GalleryItem) async throws -> Void
     let onTrash: (GalleryItem) -> Void
     let onSavedCopy: () -> Void
-    let returnToCamera: () -> Void
     @State private var items: [GalleryItem]
     @State private var selection: GalleryItem.ID
     @State private var favoriteStates: [GalleryItem.ID: Bool] = [:]
@@ -27,14 +26,12 @@ struct MomentraGalleryDetail: View {
 
     init(items: [GalleryItem], initial: GalleryItem, profiles: [StampProfile],
          isFavorite: @escaping (GalleryItem) -> Bool, favorite: @escaping (GalleryItem) async throws -> Void,
-         onTrash: @escaping (GalleryItem) -> Void, onSavedCopy: @escaping () -> Void,
-         returnToCamera: @escaping () -> Void) {
+         onTrash: @escaping (GalleryItem) -> Void, onSavedCopy: @escaping () -> Void) {
         self.profiles = profiles
         self.isFavorite = isFavorite
         self.favorite = favorite
         self.onTrash = onTrash
         self.onSavedCopy = onSavedCopy
-        self.returnToCamera = returnToCamera
         _items = State(initialValue: items)
         _selection = State(initialValue: initial.id)
     }
@@ -84,7 +81,7 @@ struct MomentraGalleryDetail: View {
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .modifier(GalleryCameraSwipe(action: { if !busy && !zoomed { returnToCamera() } }))
+        .modifier(GalleryCameraSwipe(action: { if !busy && !zoomed { dismiss() } }))
         .onChange(of: selection) { _, _ in zoomed = false }
         .sheet(item: $panel) { route in
             if let current { sheet(route, item: current) }
