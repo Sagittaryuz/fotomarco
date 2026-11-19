@@ -14,9 +14,10 @@ final class DirectUpdateAccessTests: XCTestCase {
 
     func testAcceptsOnlyScopedManifestOnInstallerHost() {
         let ticket = "1234567890123." + String(repeating: "a", count: 32) + "." + String(repeating: "b", count: 64)
-        let valid = "https://momentra-instalacao.vercel.app/api/install?stage=manifest&ticket=" + ticket
+        let host = DirectUpdateAccess.configuredInstallerHost(Bundle.main.object(forInfoDictionaryKey: "MomentraInstallerHost") as? String)
+        let valid = "https://\(host)/api/install?stage=manifest&ticket=" + ticket
         XCTAssertNotNil(DirectUpdateAccess.manifestURL(valid))
-        XCTAssertNil(DirectUpdateAccess.manifestURL(valid.replacingOccurrences(of: "momentra-instalacao.vercel.app", with: "example.com")))
+        XCTAssertNil(DirectUpdateAccess.manifestURL(valid.replacingOccurrences(of: host, with: "example.com")))
         XCTAssertNil(DirectUpdateAccess.manifestURL(valid.replacingOccurrences(of: "https:", with: "http:")))
         XCTAssertNil(DirectUpdateAccess.manifestURL(valid + "&extra=1"))
         XCTAssertNil(DirectUpdateAccess.manifestURL(valid.replacingOccurrences(of: "manifest", with: "package")))

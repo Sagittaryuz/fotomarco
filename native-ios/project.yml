@@ -11,8 +11,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    MARKETING_VERSION: '0.1.23'
-    CURRENT_PROJECT_VERSION: '44'
+    MARKETING_VERSION: '0.1.24'
+    CURRENT_PROJECT_VERSION: '45'
 targets:
   Momentra:
     type: application
@@ -37,7 +37,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera
         PRODUCT_NAME: Momentra
-        MOMENTRA_INSTALLER_HOST: momentra-instalacao.vercel.app
+        MOMENTRA_INSTALLER_HOST: momentra-atualizacoes.mrpires72.workers.dev
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: 'MomentraIcon1 MomentraIcon2 MomentraIcon3 MomentraIcon4 MomentraIcon5 MomentraIcon6 MomentraIcon7 MomentraIcon8 MomentraIconOriginal'
         GENERATE_INFOPLIST_FILE: YES
