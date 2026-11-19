@@ -5,12 +5,8 @@ import UIKit
 enum VideoStampRenderer {
     enum Failure: Error { case missingVideo, invalidSize, overlay, exporter, outputExists, incomplete }
 
-    /// The source is never removed. A completed output is published only after
-    /// checking duration, video and audio track presence.
-    static func export(source: URL, destination: URL, snapshot: StampSnapshot,
-                       map: UIImage?, address: String?) async throws {
-        guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.outputExists }
-        let asset = AVURLAsset(url: source)
+    static func previewComposition(asset: AVAsset, snapshot: StampSnapshot,
+                                   map: UIImage?, address: String?) async throws -> AVVideoComposition {
         guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw Failure.missingVideo }
         let natural = try await track.load(.naturalSize)
         let transform = try await track.load(.preferredTransform)
@@ -20,11 +16,20 @@ enum VideoStampRenderer {
         guard let image = StampRenderer.overlay(size: size, snapshot: snapshot, map: map, address: address),
               let cgImage = image.cgImage else { throw Failure.overlay }
         let stamp = CIImage(cgImage: cgImage)
-        let composition = AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { request in
+        return AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { request in
             let extent = request.sourceImage.extent
             let overlay = stamp.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
             request.finish(with: overlay.composited(over: request.sourceImage).cropped(to: extent), context: nil)
         })
+    }
+
+    /// The source is never removed. A completed output is published only after
+    /// checking duration, video and audio track presence.
+    static func export(source: URL, destination: URL, snapshot: StampSnapshot,
+                       map: UIImage?, address: String?) async throws {
+        guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.outputExists }
+        let asset = AVURLAsset(url: source)
+        let composition = try await previewComposition(asset: asset, snapshot: snapshot, map: map, address: address)
         guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality),
               exporter.supportedFileTypes.contains(.mov) else { throw Failure.exporter }
         let directory = destination.deletingLastPathComponent()

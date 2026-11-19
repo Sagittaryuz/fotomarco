@@ -14,6 +14,12 @@ final class VideoStampRendererTests: XCTestCase {
         try await makeVideo(at: source)
         let snapshot = StampSnapshot(capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
                                      gpsEnabled: false, location: nil, heading: nil)
+        let previewAsset = AVURLAsset(url: source)
+        let preview = AVAssetImageGenerator(asset: previewAsset)
+        preview.videoComposition = try await VideoStampRenderer.previewComposition(
+            asset: previewAsset, snapshot: snapshot, map: nil, address: nil)
+        let previewFrame = try await preview.image(at: CMTime(seconds: 0.25, preferredTimescale: 600)).image
+        XCTAssertGreaterThan(try brightPixels(in: previewFrame), 15, "A prévia do editor deve mostrar o carimbo.")
         try await VideoStampRenderer.export(source: source, destination: output, snapshot: snapshot, map: nil, address: nil)
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: output.path))

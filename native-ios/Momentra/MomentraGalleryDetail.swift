@@ -9,6 +9,7 @@ struct MomentraGalleryDetail: View {
     }
 
     let profiles: [StampProfile]
+    let activeProfileID: UUID
     let isFavorite: (GalleryItem) -> Bool
     let favorite: (GalleryItem) async throws -> Void
     let onTrash: (GalleryItem) -> Void
@@ -24,10 +25,11 @@ struct MomentraGalleryDetail: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(items: [GalleryItem], initial: GalleryItem, profiles: [StampProfile],
+    init(items: [GalleryItem], initial: GalleryItem, profiles: [StampProfile], activeProfileID: UUID,
          isFavorite: @escaping (GalleryItem) -> Bool, favorite: @escaping (GalleryItem) async throws -> Void,
          onTrash: @escaping (GalleryItem) -> Void, onSavedCopy: @escaping () -> Void) {
         self.profiles = profiles
+        self.activeProfileID = activeProfileID
         self.isFavorite = isFavorite
         self.favorite = favorite
         self.onTrash = onTrash
@@ -98,8 +100,10 @@ struct MomentraGalleryDetail: View {
                 Button { saveToPhotos(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
             }
             Button { panel = .information } label: { Label("Informações", systemImage: "info.circle") }
+            Button { panel = .edit } label: {
+                Label(item.isVideo ? "Editar vídeo" : "Editar foto", systemImage: "slider.horizontal.3")
+            }
             if !item.isVideo {
-                Button { panel = .edit } label: { Label("Editar foto", systemImage: "slider.horizontal.3") }
                 Button { panel = .stamp } label: { Label("Adicionar carimbo", systemImage: "seal") }
                 Button { panel = .text } label: { Label("Ler texto", systemImage: "text.viewfinder") }
             }
@@ -118,7 +122,7 @@ struct MomentraGalleryDetail: View {
                         tint: starred ? .yellow : .primary) { markFavorite(item, starred: starred) }
                     .disabled(!item.canFavorite)
                 grouped("info.circle", label: "Informações") { panel = .information }
-                grouped("slider.horizontal.3", label: "Editar foto") { panel = .edit }.disabled(item.isVideo)
+                grouped("slider.horizontal.3", label: item.isVideo ? "Editar vídeo" : "Editar foto") { panel = .edit }
             }
             .padding(.horizontal, 4).modifier(GalleryControlSurface(rounded: true, interactive: false))
             Spacer(minLength: 1)
@@ -159,13 +163,25 @@ struct MomentraGalleryDetail: View {
                     .toolbar { Button("Concluído") { panel = nil } }
             }
         case .edit:
-            MomentraPhotoEditor(load: { try await item.input() }, date: item.date,
-                                profile: item.profile, stampProfiles: profiles) { url in
-                let original = OriginalFile(url: url, isVideo: false, isProcessed: true, date: item.date)
-                let copy = GalleryItem(source: .capture(original), date: item.date, profile: item.profile)
-                items.append(copy)
-                selection = copy.id
-                onSavedCopy()
+            if item.isVideo {
+                GalleryVideoStampEditor(item: item, profiles: profiles, activeProfileID: activeProfileID) { url, profile in
+                    let file = OriginalFile(url: url, isVideo: true, isProcessed: true, date: item.date)
+                    let tag = CaptureProfileTag(id: profile.id, name: profile.name)
+                    let copy = GalleryItem(source: .capture(file), date: item.date, profile: tag)
+                    items.append(copy)
+                    selection = copy.id
+                    panel = nil
+                    onSavedCopy()
+                }
+            } else {
+                MomentraPhotoEditor(load: { try await item.input() }, date: item.date,
+                                    profile: item.profile, stampProfiles: profiles) { url in
+                    let file = OriginalFile(url: url, isVideo: false, isProcessed: true, date: item.date)
+                    let copy = GalleryItem(source: .capture(file), date: item.date, profile: item.profile)
+                    items.append(copy)
+                    selection = copy.id
+                    onSavedCopy()
+                }
             }
         case .stamp:
             NavigationStack {

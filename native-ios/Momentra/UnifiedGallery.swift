@@ -198,7 +198,7 @@ struct OriginalsView: View {
         .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .fullScreenCover(item: $detail, onDismiss: { reloadVersion += 1 }) { item in
             MomentraGalleryDetail(items: detailItems(fallback: item), initial: item,
-                                  profiles: stampProfiles.profiles,
+                                  profiles: stampProfiles.profiles, activeProfileID: stampProfiles.selected.id,
                                   isFavorite: isFavorite, favorite: toggleFavorite,
                                   onTrash: { item in
                                       local.removeAll { $0.storageID == item.storageID }
