@@ -1,6 +1,5 @@
 import SwiftUI
 import PhotosUI
-import MapKit
 
 struct StampLayoutEditor: View {
     @ObservedObject var store: StampProfilesStore
@@ -89,7 +88,7 @@ struct StampLayoutEditor: View {
                 Text("Carimbo único").tag(StampLayout.Mode.combined)
                 Text("Elementos separados").tag(StampLayout.Mode.separate)
             }.pickerStyle(.segmented)
-            StampLayoutPreview(layout: layout, logo: ProfileLogoStore.load(store.selected.logoName))
+            StampLayoutPreview(layout: layout)
                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -191,7 +190,6 @@ struct StampLayoutEditor: View {
 
 private struct StampLayoutPreview: View {
     @Binding var layout: StampLayout
-    let logo: UIImage?
 
     private func rect(_ keyPath: WritableKeyPath<StampLayout, StampPoint>, in size: CGSize, element: CGSize) -> CGRect {
         StampRenderer.positionedRect(size: size, element: element, centre: layout[keyPath: keyPath],
@@ -211,8 +209,8 @@ private struct StampLayoutPreview: View {
                         }
                         if layout.showsInformation { previewText }
                         Spacer(minLength: 0)
-                        if layout.showsLogo, let logo {
-                            Image(uiImage: logo).resizable().scaledToFit()
+                        if layout.showsLogo {
+                            previewLogo
                                 .frame(width: min(size.width * 0.35, size.width * 0.15 * layout.logoSize * layout.combinedSize))
                         }
                     }
@@ -241,20 +239,11 @@ private struct StampLayoutPreview: View {
                         previewText(size: measured?.font.pointSize).frame(width: box.width, height: box.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
                             .position(x: box.midX, y: box.midY)
                     }
-                    if layout.showsLogo, let logo {
-                        let space = StampRenderer.availableSize(size: size, anchor: layout.logo, margin: min(size.width, size.height) * 0.025)
-                        let side = min(space.width, space.height, size.width * 0.35, size.width * 0.15 * layout.logoSize)
-                        let factor = min(side / max(1, logo.size.width), side / max(1, logo.size.height))
-                        let box = rect(\.logo, in: size, element: CGSize(width: logo.size.width * factor, height: logo.size.height * factor))
-                        Image(uiImage: logo).resizable().scaledToFit()
-                            .frame(width: box.width, height: box.height)
-                            .position(x: box.midX, y: box.midY)
-                    } else if layout.showsLogo {
+                    if layout.showsLogo {
                         let space = StampRenderer.availableSize(size: size, anchor: layout.logo, margin: min(size.width, size.height) * 0.025)
                         let side = min(space.width, space.height, size.width * 0.35, size.width * 0.15 * layout.logoSize)
                         let box = rect(\.logo, in: size, element: CGSize(width: side, height: side))
-                        Image(systemName: "photo").font(.title2).foregroundStyle(.white)
-                            .shadow(radius: 3).frame(width: box.width, height: box.height)
+                        previewLogo.frame(width: box.width, height: box.height)
                             .position(x: box.midX, y: box.midY)
                     }
                 }
@@ -278,11 +267,19 @@ private struct StampLayoutPreview: View {
     }
 
     private var previewMap: some View {
-        let coordinate = CLLocationCoordinate2D(latitude: -17.908894, longitude: -51.744607)
-        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: true, mapEnabled: true,
-                                     location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
-                                     heading: nil, layout: layout)
-        return StampMapPreview(snapshot: snapshot, markerSize: 9)
+        Image(layout.mapStyle == .satellite ? "StampSampleAerial" : "StampSampleMap")
+            .resizable().scaledToFit()
+            .overlay {
+                Circle().fill(.blue).frame(width: 9, height: 9)
+                    .overlay { Circle().strokeBorder(.white, lineWidth: 1.5) }
+            }
+            .accessibilityLabel(layout.mapStyle == .satellite ? "Imagem aérea de exemplo" : "Mapa de exemplo")
+    }
+
+    private var previewLogo: some View {
+        Image(systemName: "building.2.crop.circle.fill").resizable().scaledToFit()
+            .foregroundStyle(.white).shadow(radius: 3)
+            .accessibilityLabel("Logotipo de exemplo")
     }
     private var textAlignment: TextAlignment {
         switch layout.textAlignment {
@@ -294,8 +291,8 @@ private struct StampLayoutPreview: View {
     }
 
     private var previewString: String {
-        (layout.showsAddress ? "Endereço de exemplo\nJataí GO, Brasil\n" : "") +
-             "Lat: -17,908894  Lon: -51,744607\n" +
+        (layout.showsAddress ? "Central Park · Nova York\n" : "") +
+             "Lat: 40,7812  Lon: -73,9665\n" +
              (layout.dateFormat == "long" ? "17 de novembro de 2026, 08:50" : "17/11/2026 08:50")
     }
 

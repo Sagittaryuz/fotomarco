@@ -208,12 +208,12 @@ struct CameraScreen: View {
             !camera.isSwitching && countdown == 0
         return SlidingCapsule(selectedRight: mode == .photo, canSelectLeft: available && camera.videoAvailable,
             canSelectRight: available, selectionChanged: { mode = $0 ? .photo : .video },
-            height: 48, compact: false) { proposedRight in
+            height: 48) { proposedRight in
             HStack(spacing: 0) {
                 ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
                     Button { mode = value } label: {
                         Text(value.rawValue).font(.subheadline.weight(.medium))
-                            .foregroundStyle(proposedRight == (value == .photo) ? Color.yellow : Color.white)
+                            .foregroundStyle(proposedRight == (value == .photo) ? Color.white : Color.white.opacity(0.65))
                             .frame(maxWidth: .infinity).frame(height: 42)
                             .contentShape(Rectangle())
                     }
@@ -362,7 +362,7 @@ struct CameraScreen: View {
                                 .contentShape(Circle())
                                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: camera.isRecording)
                         }
-                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || (camera.isFinishingRecording && !quickRecording))
+                        .disabled((mode == .video && !camera.ready) || camera.isCapturing || camera.isSwitching || (camera.isFinishingRecording && !quickRecording))
                         .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : camera.isRecording ? "Parar gravação" : mode == .photo ? "Fotografar" : "Gravar vídeo")
                         .simultaneousGesture(
                             LongPressGesture(minimumDuration: 0.5, maximumDistance: 40)
@@ -763,6 +763,7 @@ struct CameraScreen: View {
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                         Link("Dados meteorológicos: MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
+                        Link("Mapas de exemplo: USGS · National Geospatial Program", destination: URL(string: "https://www.usgs.gov/programs/national-geospatial-program/national-map")!)
                         Text("A previsão usa a localização aproximada quando permitida e o app está aberto.").font(.footnote).foregroundStyle(.secondary)
                     } header: {
                         Text("Sobre")
@@ -771,7 +772,6 @@ struct CameraScreen: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .toggleStyle(MomentraSwitchStyle())
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
@@ -911,7 +911,7 @@ struct CameraScreen: View {
     }
 
     private func schedulePhoto() {
-        guard camera.ready, !camera.isCapturing, !camera.isSwitching else { return }
+        guard camera.canStartPhoto() else { return }
         if timerSeconds == 0 { capturePhoto(); return }
         countdown = timerSeconds
         countdownTask = Task { @MainActor in
@@ -1051,15 +1051,8 @@ struct CameraScreen: View {
         Task {
             let image = await Task.detached(priority: .utility) { () -> UIImage? in
                 guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false),
-                      let files = try? FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("Processed", isDirectory: true), includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]),
-                      let newest = files.max(by: { left, right in
-                          let lhs = (try? left.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                          let rhs = (try? right.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                          return lhs < rhs
-                      }),
-                      let source = CGImageSourceCreateWithURL(newest as CFURL, nil),
-                      let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 160] as CFDictionary) else { return nil }
-                return UIImage(cgImage: thumb)
+                      let source = CloudThumbnailCache.latestCapturePreview(root: root) else { return nil }
+                return UIImage(cgImage: source)
             }.value
             if galleryThumbnailRevision == revision, photoFlight == nil { galleryThumbnail = image }
         }

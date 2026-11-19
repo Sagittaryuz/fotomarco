@@ -6,6 +6,28 @@ import UniformTypeIdentifiers
 enum CloudThumbnailCache {
     enum Failure: Error { case missingSource, invalidImage, encoding }
 
+    static func latestCapturePreview(root: URL) -> CGImage? {
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
+        let candidates = ["Processed", "CloudThumbnails"].flatMap { name in
+            let directory = root.appendingPathComponent(name, isDirectory: true)
+            return (try? FileManager.default.contentsOfDirectory(at: directory,
+                includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])) ?? []
+        }.compactMap { url -> (URL, Date)? in
+            guard let attributes = try? url.resourceValues(forKeys: keys), attributes.isRegularFile == true,
+                  let date = attributes.contentModificationDate else { return nil }
+            return (url, date)
+        }.sorted { $0.1 > $1.1 }
+        for (url, _) in candidates {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { continue }
+            if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 160
+            ] as CFDictionary) { return thumbnail }
+        }
+        return nil
+    }
+
     static func ensure(root: URL, captureID: UUID, source: URL) throws {
         let directory = root.appendingPathComponent("CloudThumbnails", isDirectory: true)
         let output = directory.appendingPathComponent(captureID.uuidString + ".jpg")
@@ -32,5 +54,8 @@ enum CloudThumbnailCache {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         try (bytes as Data).write(to: output, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        if let date = try? source.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+            try? FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: output.path)
+        }
     }
 }

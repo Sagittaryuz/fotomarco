@@ -38,7 +38,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     private var pendingPhoto: PhotoRequest?
-    private var pendingImage: AVCapturePhoto?
+    private var pendingPhotoData: Data?
     private let photoStagingQueue = DispatchQueue(label: "br.com.momentra.photo.staging", qos: .userInitiated)
     private let photoRenderQueue = DispatchQueue(label: "br.com.momentra.photo.render", qos: .utility)
     private var stagedPhotos: [StagedPhoto] = []
@@ -129,14 +129,30 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         DispatchQueue.main.async { self.ready = false }
     }
 
+    func canStartPhoto() -> Bool {
+        guard !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return false }
+        guard ready else {
+            let authorization = AVCaptureDevice.authorizationStatus(for: .video)
+            errorMessage = authorization == .denied || authorization == .restricted
+                ? "Permita o acesso à câmera nos Ajustes do iPhone."
+                : "A câmera não está disponível para fotografar agora. Aguarde um instante e tente novamente."
+            return false
+        }
+        return true
+    }
+
     func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil) {
-        guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
+        guard canStartPhoto() else { return }
         isCapturing = true
         let selectedFlash = flashMode
         let capturedAt = snapshot?.capturedAt ?? Date()
         queue.async {
-            guard self.wantsSession, self.session.isRunning else {
-                DispatchQueue.main.async { self.isCapturing = false }
+            guard self.wantsSession, self.session.isRunning, !self.session.isInterrupted,
+                  let connection = self.photoOutput.connection(with: .video), connection.isActive, connection.isEnabled else {
+                DispatchQueue.main.async {
+                    self.isCapturing = false
+                    self.errorMessage = "A câmera foi interrompida. Volte ao visor e tente fotografar novamente."
+                }
                 return
             }
             let settings = AVCapturePhotoSettings()
@@ -144,7 +160,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             self.pendingPhoto = PhotoRequest(settingsID: settings.uniqueID, id: UUID(), capturedAt: capturedAt,
                                              snapshot: snapshot, aspect: aspect, style: style, saveToPhotos: saveToPhotos,
                                              profile: profile, archivePlan: archivePlan)
-            self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
+            self.applyCaptureRotation(to: connection)
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
                 settings.flashMode = selectedFlash
@@ -397,19 +413,21 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        let settingsID = photo.resolvedSettings.uniqueID
+        let data = error == nil ? photo.fileDataRepresentation() : nil
         queue.async {
-            guard self.pendingPhoto?.settingsID == photo.resolvedSettings.uniqueID else { return }
-            self.pendingImage = error == nil ? photo : nil
+            guard self.pendingPhoto?.settingsID == settingsID else { return }
+            self.pendingPhotoData = data
         }
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor settings: AVCaptureResolvedPhotoSettings, error: Error?) {
         queue.async {
             guard let request = self.pendingPhoto, request.settingsID == settings.uniqueID else { return }
-            let photo = self.pendingImage
+            let data = self.pendingPhotoData
             self.pendingPhoto = nil
-            self.pendingImage = nil
-            guard error == nil, let photo else {
+            self.pendingPhotoData = nil
+            guard error == nil, let data else {
                 self.report("Não foi possível capturar a foto.")
                 DispatchQueue.main.async { self.isCapturing = false }
                 return
@@ -418,7 +436,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.beginPhotoWork()
                 self.isCapturing = false
             }
-            self.photoStagingQueue.async { self.stagePhoto(photo, request: request) }
+            self.photoStagingQueue.async { self.stagePhoto(data, request: request) }
         }
     }
 
@@ -443,12 +461,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
     }
 
-    private func stagePhoto(_ photo: AVCapturePhoto, request: PhotoRequest) {
-        guard let data = photo.fileDataRepresentation() else {
-            report("Não foi possível ler a foto capturada.")
-            finishPhotoWork()
-            return
-        }
+    private func stagePhoto(_ data: Data, request: PhotoRequest) {
         let base: URL
         let original: URL
         let suffix: String

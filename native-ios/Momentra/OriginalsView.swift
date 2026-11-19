@@ -58,8 +58,13 @@ struct OriginalsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                GallerySectionTabs(selection: $gallerySection)
-                    .padding(.horizontal, 12).padding(.bottom, 10)
+                Picker("Origem das fotos", selection: $gallerySection) {
+                    Text("Capturas").tag(0)
+                    Text("Celular").tag(1)
+                    Text("Nuvem").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12).padding(.bottom, 10)
                 GalleryCapacitySummary(section: gallerySection, accounts: archiveAccounts.accounts)
                 if gallerySection == 0 {
                     captures
@@ -206,7 +211,10 @@ struct OriginalsView: View {
                     catch { return nil }
                 }
             }.value
-            selectedCaptureIDs.subtract(removed)
+            if !removed.isEmpty {
+                selectingCaptures = false
+                selectedCaptureIDs.removeAll()
+            }
             deletingSelection = false
             if removed.count != items.count {
                 message = "Alguns itens não puderam ser excluídos. Confira se há envios pendentes."
