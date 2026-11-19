@@ -175,9 +175,14 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             return CGSize(width: max(1, side), height: max(1, side))
         }
         func collectionView(_ collectionView: UICollectionView, layout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
-            guard parent.showsSectionHeaders else { return .zero }
-            let line = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: collectionView.traitCollection).lineHeight
-            return CGSize(width: collectionView.bounds.width, height: max(44, ceil(line) + 20))
+            guard parent.showsSectionHeaders, parent.groups.indices.contains(section) else { return .zero }
+            let font = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: collectionView.traitCollection)
+            let width = collectionView.bounds.width
+            let title = parent.groups[section].title as NSString
+            let height = title.boundingRect(with: CGSize(width: max(1, width - 24), height: .greatestFiniteMagnitude),
+                                            options: [.usesLineFragmentOrigin, .usesFontLeading],
+                                            attributes: [.font: font], context: nil).height
+            return CGSize(width: width, height: max(44, ceil(height) + 20))
         }
         func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
             let item = parent.groups[indexPath.section].items[indexPath.item]
@@ -354,6 +359,8 @@ private final class GallerySectionHeader: UICollectionReusableView {
         super.init(frame: frame)
         label.font = .preferredFont(forTextStyle: .headline)
         label.adjustsFontForContentSizeCategory = true
+        label.numberOfLines = 0
+        label.accessibilityTraits.insert(.header)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
         NSLayoutConstraint.activate([label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),

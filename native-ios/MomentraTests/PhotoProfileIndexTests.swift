@@ -38,6 +38,17 @@ final class PhotoProfileIndexTests: XCTestCase {
         XCTAssertNil(CloudProfileFilename.decode("unrelated.jpg"))
     }
 
+    func testGalleryDateHeadersPutTheWeekdayAfterTheLongDate() throws {
+        let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2020, month: 11, day: 18, hour: 12)))
+        let past = GalleryGroup<Int>(date: date, profile: nil, items: [], showsProfile: false)
+        XCTAssertEqual(past.title, "18 de novembro de 2020 · quarta-feira")
+        let today = GalleryGroup<Int>(date: Calendar.current.startOfDay(for: .now), profile: nil, items: [], showsProfile: false)
+        XCTAssertEqual(today.title.components(separatedBy: " · ").count, 3)
+        XCTAssertTrue(today.title.hasPrefix("Hoje · "))
+        let undated = GalleryGroup<Int>(date: nil, profile: nil, items: [], showsProfile: false)
+        XCTAssertEqual(undated.title, "Sem data")
+    }
+
     func testPinchChangesColumnCountWithinBounds() {
         XCTAssertEqual(GalleryZoom.next(columns: 3, magnification: 1.5), 2)
         XCTAssertEqual(GalleryZoom.next(columns: 3, magnification: 0.7), 5)

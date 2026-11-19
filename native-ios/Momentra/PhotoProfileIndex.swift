@@ -104,9 +104,13 @@ struct GalleryGroup<Item>: Identifiable {
     var showsProfile = true
     var id: String { "\(date?.timeIntervalSince1970 ?? -1)|\(profile?.id.uuidString ?? "none")" }
     var title: String {
-        let dateTitle = date.map { $0.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "pt_BR"))) } ?? "Sem data"
+        let locale = Locale(identifier: "pt_BR")
+        let dateTitle = date.map { $0.formatted(.dateTime.day().month(.wide).year().locale(locale)) } ?? "Sem data"
         if !showsProfile {
-            return date.map { Calendar.current.isDateInToday($0) } == true ? "Hoje · " + dateTitle : dateTitle
+            guard let date else { return dateTitle }
+            let weekday = date.formatted(.dateTime.weekday(.wide).locale(locale))
+            let prefix = Calendar.current.isDateInToday(date) ? "Hoje · " : ""
+            return "\(prefix)\(dateTitle) · \(weekday)"
         }
         let profileTitle = profile?.name.isEmpty == false ? profile!.name : "Sem perfil"
         return "\(dateTitle) · \(profileTitle)"
