@@ -11,7 +11,7 @@ final class ForecastService: ObservableObject {
     private var coordinateKey: String?
     private var nextRefresh = Date.distantPast
 
-    func consult(location: CLLocation?, consent: Bool) {
+    private func consult(location: CLLocation?, consent: Bool) {
         guard !isLoading else { return }
         guard let location, let key = ForecastModel.coordinateKey(location.coordinate) else {
             status = "Localização recente indisponível para a consulta."
@@ -46,7 +46,7 @@ final class ForecastService: ObservableObject {
               location.timestamp <= now, now.timeIntervalSince(location.timestamp) <= 60,
               current(location: location, at: now) == nil else { return }
         nextRefresh = now.addingTimeInterval(60)
-        consult(location: location, consent: true)
+        consult(location: approximateLocation(location), consent: true)
     }
 
     func cancel() {
@@ -59,8 +59,16 @@ final class ForecastService: ObservableObject {
     func current(location: CLLocation?, at date: Date) -> Forecast? {
         guard let location, location.horizontalAccuracy >= 0, location.timestamp <= date,
               date.timeIntervalSince(location.timestamp) <= 60,
-              ForecastModel.coordinateKey(location.coordinate) == coordinateKey,
+              ForecastModel.coordinateKey(approximateLocation(location).coordinate) == coordinateKey,
               let forecast, forecast.isValid(at: date) else { return nil }
         return forecast
+    }
+
+    private func approximateLocation(_ location: CLLocation) -> CLLocation {
+        let coordinates = location.coordinate
+        let approximate = CLLocationCoordinate2D(latitude: (coordinates.latitude * 100).rounded() / 100,
+                                                 longitude: (coordinates.longitude * 100).rounded() / 100)
+        return CLLocation(coordinate: approximate, altitude: 0, horizontalAccuracy: max(location.horizontalAccuracy, 1000),
+                          verticalAccuracy: -1, timestamp: location.timestamp)
     }
 }

@@ -393,11 +393,19 @@ enum StampRenderer {
         return fits
     }
 
-    static func render(_ data: Data, aspect: PhotoAspect, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
+    static func render(_ data: Data, aspect: PhotoAspect?, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
         guard let sourceImage = UIImage(data: data) else { return nil }
         let image = style.apply(to: sourceImage)
         let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-        guard let crop = aspect.crop(in: sourceSize) else { return nil }
+        guard sourceSize.width > 0, sourceSize.height > 0,
+              sourceSize.width.isFinite, sourceSize.height.isFinite else { return nil }
+        let crop: CGRect
+        if let aspect {
+            guard let adjusted = aspect.crop(in: sourceSize) else { return nil }
+            crop = adjusted
+        } else {
+            crop = CGRect(origin: .zero, size: sourceSize)
+        }
         let size = crop.size
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1

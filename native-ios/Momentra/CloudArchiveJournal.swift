@@ -78,6 +78,11 @@ struct CloudArchiveJournal {
         try action()
     }
 
+    func hasPendingDelivery(id: UUID) -> Bool {
+        guard FileManager.default.fileExists(atPath: path(id).path) else { return false }
+        return (try? read(id).finished) != true
+    }
+
     func markReady(id: UUID) throws {
         Self.fileLock.lock()
         defer { Self.fileLock.unlock() }

@@ -63,6 +63,8 @@ struct SlidingCapsule<Labels: View>: View {
 }
 
 struct MomentraSwitchStyle: ToggleStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 12) {
             Button { configuration.isOn.toggle() } label: {
@@ -79,7 +81,7 @@ struct MomentraSwitchStyle: ToggleStyle {
             }
             .frame(width: 51, height: 44)
             .contentShape(Rectangle())
-            .onTapGesture { configuration.isOn.toggle() }
+            .onTapGesture { if isEnabled { configuration.isOn.toggle() } }
             .accessibilityHidden(true)
         }
     }

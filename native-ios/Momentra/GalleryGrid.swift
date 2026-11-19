@@ -28,7 +28,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         let layout = UICollectionViewFlowLayout()
         layout.minimumInteritemSpacing = 3
         layout.minimumLineSpacing = 3
-        layout.headerReferenceSize = CGSize(width: 1, height: 36)
+        layout.headerReferenceSize = CGSize(width: 1, height: 44)
         let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
         view.backgroundColor = .clear
         view.alwaysBounceVertical = true
@@ -112,7 +112,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             return CGSize(width: max(1, side), height: max(1, side))
         }
         func collectionView(_ collectionView: UICollectionView, layout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
-            CGSize(width: collectionView.bounds.width, height: 36)
+            let line = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: collectionView.traitCollection).lineHeight
+            return CGSize(width: collectionView.bounds.width, height: max(44, ceil(line) + 20))
         }
         func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
             let item = parent.groups[indexPath.section].items[indexPath.item]
@@ -233,7 +234,9 @@ private final class GallerySectionHeader: UICollectionReusableView {
         addSubview(label)
         NSLayoutConstraint.activate([label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
                                      label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-                                     label.centerYAnchor.constraint(equalTo: centerYAnchor)])
+                                     label.centerYAnchor.constraint(equalTo: centerYAnchor),
+                                     label.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 10),
+                                     label.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10)])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

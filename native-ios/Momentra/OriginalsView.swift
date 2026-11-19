@@ -63,10 +63,10 @@ struct OriginalsView: View {
             .navigationTitle("Galeria")
             .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { reload() }
-            .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } })) {
+            .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } }), onDismiss: reload) {
                 if let selectedCapture {
                     CapturePager(items: captureGroups.flatMap(\.items), initialURL: selectedCapture,
-                                 message: $message, save: save)
+                                 message: $message, profiles: stampProfiles, save: save)
                         .presentationDragIndicator(.hidden)
                 }
             }
@@ -181,16 +181,31 @@ struct OriginalsView: View {
 }
 
 private struct CapturePager: View {
-    let items: [OriginalFile]
-    let save: (OriginalFile) -> Void
-    @Binding var message: String?
-    @State private var selection: URL
-    @Environment(\.dismiss) private var dismiss
+    private enum Panel: String, Identifiable {
+        case information, adjustments, text
+        var id: String { rawValue }
+    }
 
-    init(items: [OriginalFile], initialURL: URL, message: Binding<String?>, save: @escaping (OriginalFile) -> Void) {
-        self.items = items
+    let save: (OriginalFile) -> Void
+    @ObservedObject var profiles: StampProfilesStore
+    @Binding var message: String?
+    @AppStorage("native.gallery.favoriteCaptureKeys") private var storedFavorites = Data()
+    @State private var items: [OriginalFile]
+    @State private var selection: URL
+    @State private var panel: Panel?
+    @State private var removing: OriginalFile?
+    @State private var fullscreen = false
+    @State private var stamping = false
+    @State private var selectedProfile: UUID?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(items: [OriginalFile], initialURL: URL, message: Binding<String?>, profiles: StampProfilesStore,
+         save: @escaping (OriginalFile) -> Void) {
         self.save = save
+        self.profiles = profiles
         _message = message
+        _items = State(initialValue: items)
         _selection = State(initialValue: initialURL)
     }
 
@@ -198,33 +213,220 @@ private struct CapturePager: View {
         let index = items.firstIndex { $0.id == selection }
         let current = index.map { items[$0] }
         VStack(spacing: 0) {
-            GalleryDetailHeader(date: current?.date, position: (index ?? 0) + 1,
-                                count: items.count, close: { dismiss() }) {
-                if let current {
-                    Menu {
-                        ShareLink(item: current.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
-                        Button { save(current) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
-                    } label: {
-                        Image(systemName: "ellipsis").font(.body.weight(.bold))
-                            .frame(width: 44, height: 44)
-                            .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
-                    }.accessibilityLabel("Opções da captura")
+            if !fullscreen {
+                GalleryDetailHeader(date: current?.date, position: (index ?? 0) + 1,
+                                    count: items.count, close: { dismiss() }) {
+                    if let current { captureMenu(current) }
                 }
             }
             TabView(selection: $selection) {
                 ForEach(items) { item in
                     CapturePage(item: item, active: item.id == selection).tag(item.id)
                 }
-            }.tabViewStyle(.page(indexDisplayMode: .never))
-            GalleryFilmstrip(items: items, selection: $selection) { item in
-                Thumbnail(url: item.url, isVideo: item.isVideo)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .overlay(alignment: .topTrailing) {
+                galleryButton(fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                              label: fullscreen ? "Mostrar controles" : "Expandir visualização") {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { fullscreen.toggle() }
+                }.padding(12)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if let current, !current.isVideo, !fullscreen {
+                    galleryButton("text.viewfinder", label: "Ler texto da foto") { panel = .text }.padding(12)
+                }
+            }
+            if !fullscreen {
+                GalleryFilmstrip(items: items, selection: $selection) { item in
+                    Thumbnail(url: item.url, isVideo: item.isVideo)
+                }
+                if let current { controls(current) }
             }
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+        .sheet(item: $panel) { route in
+            if let current { detailSheet(route, item: current) }
+        }
+        .confirmationDialog("Excluir esta captura do Momentra?", isPresented: Binding(
+            get: { removing != nil }, set: { if !$0 { removing = nil } }
+        ), titleVisibility: .visible, presenting: removing) { item in
+            Button("Excluir captura", role: .destructive) { delete(item) }
+            Button("Cancelar", role: .cancel) { removing = nil }
+        } message: { _ in
+            Text("A exclusão se aplica a este arquivo local.")
+        }
+        .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil }, set: { if !$0, panel == nil { message = nil } })) {
             Button("OK") { message = nil }
         } message: { Text(message ?? "") }
+    }
+
+    private func captureMenu(_ item: OriginalFile) -> some View {
+        Menu {
+            Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
+            Button { panel = .information } label: { Label("Informações", systemImage: "info.circle") }
+            if !item.isVideo {
+                Button { openAdjustments() } label: { Label("Adicionar carimbo", systemImage: "slider.horizontal.3") }
+                Button { panel = .text } label: { Label("Ler texto", systemImage: "text.viewfinder") }
+            }
+        } label: {
+            controlIcon("ellipsis")
+        }.accessibilityLabel("Mais opções")
+    }
+
+    private func controls(_ item: OriginalFile) -> some View {
+        HStack(spacing: 8) {
+            ShareLink(item: item.url) { controlIcon("square.and.arrow.up") }
+                .accessibilityLabel("Compartilhar")
+            Spacer(minLength: 2)
+            let favorite = favorites.contains(favoriteKey(item))
+            galleryButton(favorite ? "heart.fill" : "heart",
+                          label: favorite ? "Remover dos favoritos" : "Favoritar",
+                          tint: favorite ? .yellow : .primary) { toggleFavorite(item) }
+            galleryButton("info.circle", label: "Informações") { panel = .information }
+            galleryButton("slider.horizontal.3", label: "Ajustes da foto") { openAdjustments() }
+                .disabled(item.isVideo)
+            Spacer(minLength: 2)
+            galleryButton("trash", label: "Excluir captura", tint: .red) { removing = item }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14).padding(.vertical, 7)
+        .background(.black)
+    }
+
+    private func galleryButton(_ icon: String, label: String, tint: Color = .primary,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) { controlIcon(icon, tint: tint) }
+            .buttonStyle(.plain).accessibilityLabel(label)
+    }
+
+    private func controlIcon(_ name: String, tint: Color = .primary) -> some View {
+        Image(systemName: name).font(.body.weight(.semibold))
+            .frame(width: 44, height: 44)
+            .modifier(GalleryControlSurface(tint: tint))
+    }
+
+    private var favorites: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: storedFavorites)) ?? []
+    }
+
+    private func favoriteKey(_ item: OriginalFile) -> String {
+        item.url.deletingLastPathComponent().lastPathComponent + "/" + item.url.lastPathComponent
+    }
+
+    private func toggleFavorite(_ item: OriginalFile) {
+        var keys = favorites
+        let key = favoriteKey(item)
+        if !keys.insert(key).inserted { keys.remove(key) }
+        if let data = try? JSONEncoder().encode(keys) { storedFavorites = data }
+    }
+
+    private func openAdjustments() {
+        selectedProfile = profiles.selected.id
+        panel = .adjustments
+    }
+
+    @ViewBuilder
+    private func detailSheet(_ route: Panel, item: OriginalFile) -> some View {
+        NavigationStack {
+            Group {
+                switch route {
+                case .information:
+                    let details = GalleryFileInformation(url: item.url)
+                    Form {
+                        LabeledContent("Tipo", value: item.isVideo ? "Vídeo" : "Foto")
+                        if let date = item.date { LabeledContent("Data", value: date.formatted(date: .abbreviated, time: .shortened)) }
+                        if let text = details.originalDate { LabeledContent("Data original", value: text) }
+                        if let dimensions = details.dimensions { LabeledContent("Dimensões", value: dimensions) }
+                        if let size = details.size { LabeledContent("Tamanho", value: size) }
+                        if let point = details.location?.coordinate {
+                            LabeledContent("Coordenadas", value: String(format: "%.6f, %.6f", point.latitude, point.longitude))
+                        }
+                    }
+                case .adjustments:
+                    Form {
+                        Picker("Perfil do carimbo", selection: $selectedProfile) {
+                            ForEach(profiles.profiles) { profile in
+                                Text(profile.name.isEmpty ? "Sem nome" : profile.name).tag(Optional(profile.id))
+                            }
+                        }
+                        Button("Adicionar carimbo em uma cópia") { applyStamp(item) }
+                            .disabled(stamping || selectedProfile == nil || item.date == nil)
+                        if stamping { ProgressView("Aplicando carimbo…") }
+                        if item.date == nil { Text("A data da captura não está disponível.").font(.footnote) }
+                    }
+                case .text:
+                    CaptureTextPanel(url: item.url)
+                }
+            }
+            .navigationTitle(route == .information ? "Informações" : route == .adjustments ? "Ajustes da foto" : "Texto da foto")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Concluído") { panel = nil }.disabled(stamping) }
+        }
+        .interactiveDismissDisabled(stamping)
+    }
+
+    private func applyStamp(_ item: OriginalFile) {
+        guard !stamping, let date = item.date,
+              let profile = profiles.profiles.first(where: { $0.id == selectedProfile }) else { return }
+        stamping = true
+        Task {
+            do {
+                _ = try await GalleryPhotoActions.copyWithStamp(url: item.url, date: date, profile: profile)
+                message = "Cópia com carimbo criada em Capturas."
+            } catch { message = "Não foi possível criar a cópia com carimbo." }
+            stamping = false
+            panel = nil
+        }
+    }
+
+    private func delete(_ item: OriginalFile) {
+        removing = nil
+        Task {
+            do {
+                try await Task.detached(priority: .utility) {
+                    let root = item.url.deletingLastPathComponent().deletingLastPathComponent()
+                    let journal = CloudArchiveJournal(root: root)
+                    try journal.serializeCleanup {
+                        if let id = UUID(uuidString: item.url.deletingPathExtension().lastPathComponent),
+                           journal.hasPendingDelivery(id: id) { throw CocoaError(.fileWriteFileExists) }
+                        try FileManager.default.removeItem(at: item.url)
+                    }
+                }.value
+                if favorites.contains(favoriteKey(item)) { toggleFavorite(item) }
+                if let index = items.firstIndex(where: { $0.id == item.id }) { items.remove(at: index) }
+                if let next = items.first { selection = next.id } else { dismiss() }
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                message = "A foto tem um envio pendente. Aguarde a conclusão antes de excluir."
+            } catch { message = "Não foi possível excluir a captura." }
+        }
+    }
+}
+
+private struct CaptureTextPanel: View {
+    let url: URL
+    @State private var text: String?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if failed {
+                ContentUnavailableView("Não foi possível ler o texto", systemImage: "text.viewfinder")
+            } else if let text {
+                if text.isEmpty {
+                    ContentUnavailableView("Nenhum texto reconhecido", systemImage: "text.viewfinder")
+                } else {
+                    ScrollView { Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding() }
+                    Button("Copiar texto") { UIPasteboard.general.string = text }.padding()
+                }
+            } else {
+                ProgressView("Lendo texto…")
+            }
+        }
+        .task(id: url) {
+            do { text = try await Task.detached(priority: .userInitiated) { try GalleryPhotoActions.recognizeText(in: url) }.value }
+            catch { failed = true }
+        }
     }
 }
 

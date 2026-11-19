@@ -35,6 +35,12 @@ enum VideoStampRenderer {
         exporter.outputURL = temporary
         exporter.outputFileType = .mov
         exporter.videoComposition = composition
+        if snapshot.forecast != nil, snapshot.layout.showsInformation {
+            let credit = AVMutableMetadataItem()
+            credit.identifier = .commonIdentifierDescription
+            credit.value = "Dados meteorológicos: MET Norway · Locationforecast · CC BY 4.0 · https://creativecommons.org/licenses/by/4.0/" as NSString
+            exporter.metadata = ((try? await asset.load(.metadata)) ?? []) + [credit]
+        }
         try Task.checkCancellation()
         await withTaskCancellationHandler {
             guard !Task.isCancelled else { return }

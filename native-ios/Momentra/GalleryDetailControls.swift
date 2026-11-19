@@ -14,8 +14,8 @@ struct GalleryDetailHeader<Actions: View>: View {
             HStack(spacing: 12) {
                 Button(action: close) {
                     Image(systemName: "chevron.left").font(.body.weight(.semibold))
-                        .foregroundStyle(.yellow).frame(width: 44, height: 44)
-                        .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
+                        .frame(width: 44, height: 44)
+                        .modifier(GalleryControlSurface(tint: .yellow))
                 }
                 .accessibilityLabel("Voltar à galeria")
                 Spacer(minLength: 0)
