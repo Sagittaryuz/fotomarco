@@ -36,7 +36,7 @@ struct GalleryQuickShare: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(.black.ignoresSafeArea())
+        .background { Color.black.ignoresSafeArea() }
         .preferredColorScheme(.dark)
         .task { await prepare() }
         .task(id: source?.url) {
