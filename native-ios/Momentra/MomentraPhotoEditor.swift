@@ -16,6 +16,7 @@ final class PhotoEditorInput {
     }
 }
 
+@MainActor
 struct MomentraPhotoEditor: View {
     let load: () async throws -> PhotoEditorInput
     let date: Date?
@@ -41,6 +42,7 @@ struct MomentraPhotoEditor: View {
     @State private var input: PhotoEditorInput?
     @State private var original: CGImage?
     @State private var preview: CGImage?
+    @State private var previewQueue = PhotoEditPreviewQueue()
     @State private var filterPreviews: [PhotoEditFilter: CGImage] = [:]
     @State private var showingOriginal = false
     @State private var markup = false
@@ -68,8 +70,11 @@ struct MomentraPhotoEditor: View {
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(changed || saving)
         .task { await open() }
-        .task(id: recipe) { await updatePreview() }
-        .onDisappear { input?.close() }
+        .onChange(of: recipe) { _, _ in updatePreview() }
+        .onDisappear {
+            previewQueue.discardPending()
+            input?.close()
+        }
         .confirmationDialog("Descartar as alterações?", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("Descartar", role: .destructive) { dismiss() }
             Button("Continuar editando", role: .cancel) {}
@@ -377,6 +382,7 @@ struct MomentraPhotoEditor: View {
                 try Task.checkCancellation()
                 input = source
                 original = bitmap
+                if recipe != PhotoEditRecipe() { updatePreview() }
                 let thumbnails = await Task.detached(priority: .utility) { () -> [PhotoEditFilter: CGImage] in
                     guard let small = try? PhotoEditRenderer.previewSource(source.url, maximumPixels: 100) else { return [:] }
                     return Dictionary(uniqueKeysWithValues: PhotoEditFilter.allCases.compactMap { filter in
@@ -393,11 +399,9 @@ struct MomentraPhotoEditor: View {
         } catch { if !Task.isCancelled { failedToLoad = true } }
     }
 
-    private func updatePreview() async {
+    private func updatePreview() {
         guard let original else { return }
-        let current = recipe
-        let output = await Task.detached(priority: .userInitiated) { PhotoEditRenderer.preview(original, recipe: current) }.value
-        if !Task.isCancelled { preview = output }
+        previewQueue.submit(original, recipe: recipe) { preview = $0 }
     }
 
     private func save() {
@@ -426,6 +430,49 @@ struct MomentraPhotoEditor: View {
                 saved(destination)
                 dismiss()
             } catch { errorMessage = "Não foi possível salvar uma cópia da foto." }
+        }
+    }
+}
+
+
+@MainActor
+private final class PhotoEditPreviewQueue {
+    private struct Request {
+        let image: CGImage
+        let recipe: PhotoEditRecipe
+        let generation: UUID
+        let apply: (CGImage?) -> Void
+    }
+
+    private var pending: Request?
+    private var rendering = false
+    private var generation = UUID()
+
+    func submit(_ image: CGImage, recipe: PhotoEditRecipe, apply: @escaping (CGImage?) -> Void) {
+        pending = Request(image: image, recipe: recipe, generation: generation, apply: apply)
+        guard !rendering else { return }
+        rendering = true
+        Task { await renderPending() }
+    }
+
+    func discardPending() {
+        pending = nil
+        generation = UUID()
+    }
+
+    private func renderPending() async {
+        defer { rendering = false }
+        while pending != nil {
+            // Let rapid slider and crop events replace the pending recipe before starting a render.
+            try? await Task.sleep(for: .milliseconds(32))
+            guard let request = pending else { return }
+            pending = nil
+            let image = request.image
+            let recipe = request.recipe
+            let output = await Task.detached(priority: .userInitiated) {
+                PhotoEditRenderer.preview(image, recipe: recipe)
+            }.value
+            if request.generation == generation { request.apply(output) }
         }
     }
 }

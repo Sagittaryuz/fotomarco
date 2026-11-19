@@ -113,8 +113,8 @@ struct GalleryCloudItem: Identifiable {
     }
 
     @MainActor
-    func fullImage() -> some View {
-        ArchiveGalleryImage(photo: photo, images: images, fullView: true)
+    func fullImage(active: Bool = true) -> some View {
+        ArchiveGalleryImage(photo: photo, images: images, fullView: true, active: active)
     }
 
     @MainActor
@@ -497,18 +497,59 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         return PhotoEditorInput(url: file, temporary: true)
     }
 
+    private static let gridPixels = 320
+
     func image(_ photo: ArchiveGalleryPhoto, maximumPixels: Int) async throws -> UIImage {
-        let version = revision
-        let prefix = "\(version.uuidString):\(photo.id):\(photo.revision ?? ""):"
-        let key = (prefix + String(maximumPixels)) as NSString
-        if let cached = cache.object(forKey: key) { return cached }
+        if maximumPixels <= Self.gridPixels {
+            if let key = persistentThumbnailKey(photo) {
+                let bitmap = try await GalleryThumbnailCache.shared.image(for: key, maximumPixels: maximumPixels) {
+                    try await self.acquireGridPreview(photo, pixels: maximumPixels)
+                }
+                try Task.checkCancellation()
+                guard let bitmap else { throw CocoaError(.fileReadCorruptFile) }
+                return UIImage(cgImage: bitmap)
+            }
+
+            // Older responses sometimes omit the revision. Keep those previews in
+            // this loader's memory only, and never share them across accounts.
+            let version = revision
+            let key = thumbnailMemoryKey(photo, pixels: maximumPixels, version: version)
+            if let cached = cache.object(forKey: key) { return cached }
+            await acquireDownload()
+            defer { releaseDownload() }
+            try Task.checkCancellation()
+            if let cached = cache.object(forKey: key) { return cached }
+            let bitmap = try await gridPreview(photo, pixels: maximumPixels)
+            let image = UIImage(cgImage: bitmap)
+            if revision == version { cache.setObject(image, forKey: key, cost: bitmap.bytesPerRow * bitmap.height) }
+            return image
+        }
+
         await acquireDownload()
         defer { releaseDownload() }
         try Task.checkCancellation()
-        if let cached = cache.object(forKey: key) { return cached }
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        return UIImage(cgImage: try await originalPreview(photo, pixels: maximumPixels, token: token))
+    }
 
-        let gridSize = 320
-        if maximumPixels <= gridSize, !photo.isOriginal {
+    private func persistentThumbnailKey(_ photo: ArchiveGalleryPhoto) -> String? {
+        guard let revision = photo.revision, !revision.isEmpty else { return nil }
+        return "cloud/\(photo.favoriteKey(in: destination))/\(revision)"
+    }
+
+    private func thumbnailMemoryKey(_ photo: ArchiveGalleryPhoto, pixels: Int, version: UUID) -> NSString {
+        "\(version.uuidString):\(photo.id):\(pixels)" as NSString
+    }
+
+    private func acquireGridPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async throws -> CGImage {
+        await acquireDownload()
+        defer { releaseDownload() }
+        try Task.checkCancellation()
+        return try await gridPreview(photo, pixels: pixels)
+    }
+
+    private func gridPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async throws -> CGImage {
+        if !photo.isOriginal {
             // Successful deliveries already leave a stamped thumbnail on this iPhone.
             let captureID = photo.captureID
             let offline = await Task.detached(priority: .utility) {
@@ -520,45 +561,36 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
                 guard attributes?.isRegularFile == true, attributes?.isSymbolicLink != true,
                       let size = attributes?.fileSize, (1...2_000_000).contains(size) else { return nil }
                 let source = CGImageSourceCreateWithURL(file as CFURL, nil)
-                return Self.downsample(source, pixels: maximumPixels)
+                return Self.downsample(source, pixels: pixels)
             }.value
             try Task.checkCancellation()
-            if let offline {
-                return remember(offline, key: key, version: version)
-            }
+            if let offline { return offline }
         }
 
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-        if maximumPixels <= gridSize, destination.provider == .googleDrive, let link = photo.thumbnailLink,
+        if destination.provider == .googleDrive, let link = photo.thumbnailLink,
            let thumbnail = try await drive.thumbnail(link: link, accessToken: token) {
             let bitmap = await Task.detached(priority: .utility) {
-                Self.downsample(CGImageSourceCreateWithData(thumbnail as CFData, nil), pixels: maximumPixels)
+                Self.downsample(CGImageSourceCreateWithData(thumbnail as CFData, nil), pixels: pixels)
             }.value
             try Task.checkCancellation()
             guard let bitmap else { throw CocoaError(.fileReadCorruptFile) }
-            return remember(bitmap, key: key, version: version)
+            return bitmap
         }
 
+        return try await originalPreview(photo, pixels: pixels, token: token)
+    }
+
+    private func originalPreview(_ photo: ArchiveGalleryPhoto, pixels: Int, token: String) async throws -> CGImage {
         let file = try await download(photo, accessToken: token)
         defer { try? FileManager.default.removeItem(at: file) }
         try Task.checkCancellation()
-        let gridKey = (prefix + String(gridSize)) as NSString
-        let needsGridPreview = maximumPixels > gridSize && cache.object(forKey: gridKey) == nil
-        let bitmaps = await Task.detached(priority: .utility) {
-            let source = CGImageSourceCreateWithURL(file as CFURL, nil)
-            return (Self.downsample(source, pixels: maximumPixels),
-                    needsGridPreview ? Self.downsample(source, pixels: gridSize) : nil)
+        let bitmap = await Task.detached(priority: .utility) {
+            Self.downsample(CGImageSourceCreateWithURL(file as CFURL, nil), pixels: pixels)
         }.value
         try Task.checkCancellation()
-        guard let bitmap = bitmaps.0 else { throw CocoaError(.fileReadCorruptFile) }
-        if let thumbnail = bitmaps.1 { _ = remember(thumbnail, key: gridKey, version: version) }
-        return remember(bitmap, key: key, version: version)
-    }
-
-    private func remember(_ bitmap: CGImage, key: NSString, version: UUID) -> UIImage {
-        let image = UIImage(cgImage: bitmap)
-        if revision == version { cache.setObject(image, forKey: key, cost: bitmap.bytesPerRow * bitmap.height) }
-        return image
+        guard let bitmap else { throw CocoaError(.fileReadCorruptFile) }
+        return bitmap
     }
 
     nonisolated private static func downsample(_ source: CGImageSource?, pixels: Int) -> CGImage? {
@@ -585,6 +617,7 @@ private struct ArchiveGalleryImage: View {
     let photo: ArchiveGalleryPhoto
     let images: ArchiveGalleryImages
     var fullView = false
+    var active = true
     @State private var image: UIImage?
     @State private var failed = false
     @State private var retry = UUID()
@@ -596,10 +629,12 @@ private struct ArchiveGalleryImage: View {
                 if let image {
                     Image(uiImage: image).resizable()
                         .aspectRatio(contentMode: fullView ? .fit : .fill)
-                } else if failed && fullView {
-                    Button("Tentar abrir novamente") { retry = UUID() }.buttonStyle(.bordered)
                 } else if fullView {
-                    ProgressView()
+                    if failed && active {
+                        Button("Tentar abrir novamente") { retry = UUID() }.buttonStyle(.bordered)
+                    } else if active {
+                        ProgressView()
+                    }
                 } else {
                     Image(systemName: failed ? "exclamationmark.circle" : "photo").foregroundStyle(.secondary)
                 }
@@ -608,9 +643,10 @@ private struct ArchiveGalleryImage: View {
             .clipped()
         }
         .aspectRatio(fullView ? nil : 1, contentMode: .fit)
-        .task(id: "\(images.revision):\(photo.id):\(photo.revision ?? ""):\(retry)") {
+        .task(id: "\(images.revision):\(photo.id):\(photo.revision ?? ""):\(retry):\(active)") {
             failed = false
             image = nil
+            guard !fullView || active else { return }
             do {
                 let preview = try await images.image(photo, maximumPixels: fullView ? 1800 : 320)
                 guard !Task.isCancelled else { return }
