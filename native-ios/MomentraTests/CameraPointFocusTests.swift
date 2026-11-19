@@ -8,7 +8,7 @@ final class CameraPointFocusTests: XCTestCase {
         XCTAssertTrue(CameraPointFocus.isValid(CGPoint(x: 1, y: 0)))
         XCTAssertFalse(CameraPointFocus.isValid(CGPoint(x: 1.1, y: 0.8)))
         XCTAssertFalse(CameraPointFocus.isValid(CGPoint(x: 0.5, y: -0.1)))
-        XCTAssertFalse(CameraPointFocus.isValid(CGPoint(x: .infinity, y: 0)))
+        XCTAssertFalse(CameraPointFocus.isValid(CGPoint(x: CGFloat.infinity, y: 0)))
     }
 
     func testContinuousFocusIsFallbackWhenSingleFocusIsUnavailable() {
