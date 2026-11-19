@@ -19,6 +19,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     @Binding var selected: Set<Item.ID>
     @Binding var columns: Int
     var refreshKey = 0
+    var showsSectionHeaders = true
     let tile: (Item) -> Tile
     let open: (Item) -> Void
 
@@ -55,7 +56,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         let coordinator = context.coordinator
         let oldIDs = coordinator.parent.groups.map { $0.items.map(\.id) }
         let newIDs = groups.map { $0.items.map(\.id) }
-        let changed = oldIDs != newIDs || coordinator.parent.columns != columns || coordinator.parent.refreshKey != refreshKey || coordinator.parent.groups.map(\.title) != groups.map(\.title)
+        let changed = oldIDs != newIDs || coordinator.parent.columns != columns || coordinator.parent.refreshKey != refreshKey ||
+            coordinator.parent.showsSectionHeaders != showsSectionHeaders || coordinator.parent.groups.map(\.title) != groups.map(\.title)
         coordinator.parent = self
         view.isEditing = selecting
         if changed { coordinator.rebuildIndex(); view.collectionViewLayout.invalidateLayout(); view.reloadData() }
@@ -112,6 +114,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             return CGSize(width: max(1, side), height: max(1, side))
         }
         func collectionView(_ collectionView: UICollectionView, layout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
+            guard parent.showsSectionHeaders else { return .zero }
             let line = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: collectionView.traitCollection).lineHeight
             return CGSize(width: collectionView.bounds.width, height: max(44, ceil(line) + 20))
         }
@@ -203,24 +206,68 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
 }
 
 private final class GallerySelectionCell: UICollectionViewCell {
-    private let badge = UIImageView()
-    var selectionMode = false { didSet { badge.isHidden = !selectionMode } }
+    private let selectionOverlay = UIView()
+    private let badge = UIView()
+    private let check = UIImageView(image: UIImage(systemName: "checkmark",
+        withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)))
+
+    var selectionMode = false {
+        didSet {
+            if !selectionMode { showSelected(false) }
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
+        selectionOverlay.translatesAutoresizingMaskIntoConstraints = false
+        selectionOverlay.isUserInteractionEnabled = false
+        selectionOverlay.backgroundColor = .black.withAlphaComponent(0.15)
+        selectionOverlay.isHidden = true
+        addSubview(selectionOverlay)
+
         badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.contentMode = .scaleAspectFit
-        contentView.addSubview(badge)
-        NSLayoutConstraint.activate([badge.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -5),
-                                     badge.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
-                                     badge.widthAnchor.constraint(equalToConstant: 25), badge.heightAnchor.constraint(equalToConstant: 25)])
-        badge.isHidden = true
+        badge.backgroundColor = .systemBlue
+        badge.layer.cornerRadius = 13
+        badge.layer.borderWidth = 1.5
+        badge.layer.borderColor = UIColor.white.cgColor
+        selectionOverlay.addSubview(badge)
+
+        check.translatesAutoresizingMaskIntoConstraints = false
+        check.tintColor = .white
+        check.contentMode = .center
+        badge.addSubview(check)
+        NSLayoutConstraint.activate([
+            selectionOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            selectionOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            selectionOverlay.topAnchor.constraint(equalTo: topAnchor),
+            selectionOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+            badge.trailingAnchor.constraint(equalTo: selectionOverlay.trailingAnchor, constant: -6),
+            badge.bottomAnchor.constraint(equalTo: selectionOverlay.bottomAnchor, constant: -6),
+            badge.widthAnchor.constraint(equalToConstant: 26),
+            badge.heightAnchor.constraint(equalToConstant: 26),
+            check.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
+            check.centerYAnchor.constraint(equalTo: badge.centerYAnchor)
+        ])
     }
+
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        bringSubviewToFront(selectionOverlay)
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        selectionMode = false
+    }
+
     func showSelected(_ selected: Bool) {
-        badge.image = UIImage(systemName: selected ? "checkmark.circle.fill" : "circle")
-        badge.tintColor = selected ? .systemBlue : .white
-        badge.layer.shadowColor = UIColor.black.cgColor; badge.layer.shadowOpacity = 0.8; badge.layer.shadowRadius = 2
-        contentView.bringSubviewToFront(badge)
+        let visible = selectionMode && selected
+        selectionOverlay.isHidden = !visible
+        if visible { accessibilityTraits.insert(.selected) }
+        else { accessibilityTraits.remove(.selected) }
+        bringSubviewToFront(selectionOverlay)
     }
 }
 
