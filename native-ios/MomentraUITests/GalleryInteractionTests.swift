@@ -134,9 +134,10 @@ final class GalleryInteractionTests: XCTestCase {
         label.press(forDuration: 0.07, thenDragTo: label.withOffset(CGVector(dx: -18, dy: 115)))
         XCTAssertGreaterThan(grid.frame.midY, before + 20, "Arrastar sobre o texto deve rolar o formulário.")
         XCTAssertEqual(grid.value as? String, "0")
-        rightEdge.tap()
+        let capsuleCenter = right.withOffset(CGVector(dx: -34, dy: 0))
+        capsuleCenter.tap()
         XCTAssertEqual(grid.value as? String, "1")
-        rightEdge.tap()
+        capsuleCenter.tap()
         XCTAssertEqual(grid.value as? String, "0")
         snapshot("Interruptores nativos", app: app)
     }

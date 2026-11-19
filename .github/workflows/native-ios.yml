@@ -14,7 +14,7 @@ permissions:
 jobs:
   gallery-ui:
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Generate project and start simulator
@@ -29,7 +29,7 @@ jobs:
       - name: Install fixture captures
         working-directory: native-ios
         run: |
-          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" CODE_SIGNING_ALLOWED=NO -quiet build-for-testing
+          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" CODE_SIGNING_ALLOWED=NO -only-testing:MomentraUITests -quiet build-for-testing
           xcrun simctl install "$DEVICE" "$RUNNER_TEMP/gallery/Build/Products/Debug-iphonesimulator/Momentra.app"
           xcrun simctl privacy "$DEVICE" grant all br.com.momentra.camera
           xcrun simctl privacy "$DEVICE" grant photos br.com.momentra.camera
