@@ -88,6 +88,13 @@ final class GalleryInteractionTests: XCTestCase {
                     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.739)).tap()
                 }
             }
+            let cameraUnavailable = app.alerts.containing(.staticText, identifier: "Câmera indisponível neste aparelho.").firstMatch
+            if cameraUnavailable.waitForExistence(timeout: 5) { cameraUnavailable.buttons["OK"].tap() }
+            if !tabs.exists {
+                app.buttons["Abrir capturas"].tap()
+                XCTAssertTrue(device.waitForExistence(timeout: 8))
+                device.tap()
+            }
         }
         let select = app.buttons["Selecionar"]
         XCTAssertTrue(select.waitForExistence(timeout: 8))
