@@ -1,11 +1,12 @@
 import XCTest
 
 final class GalleryInteractionTests: XCTestCase {
-    private func launch() -> XCUIApplication {
+    private func launch(seedBenchmark: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.19",
                                "-native.gps.enabled", "NO"]
+        if seedBenchmark { app.launchArguments.append("-seedGalleryBenchmark") }
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let permission = springboard.alerts.buttons["Allow"].firstMatch
@@ -16,7 +17,10 @@ final class GalleryInteractionTests: XCTestCase {
     }
 
     func testGalleryCatalogMeasurement() {
-        let app = launch()
+        let app = launch(seedBenchmark: true)
+        let fixtures = app.staticTexts["gallery-benchmark-fixtures"]
+        XCTAssertTrue(fixtures.waitForExistence(timeout: 20))
+        XCTAssertEqual(fixtures.label, "24 fotos pessoais de teste")
         var milliseconds: [Double] = []
         var counts: [String] = []
         for _ in 0..<3 {
