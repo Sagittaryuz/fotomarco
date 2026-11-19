@@ -13,8 +13,9 @@ enum GallerySelectionRange {
 }
 
 enum GalleryEndRefresh {
-    static func reached(offset: CGFloat, maximum: CGFloat, fingerMovement: CGPoint) -> Bool {
-        offset - maximum >= 54 && -fingerMovement.y > abs(fingerMovement.x)
+    static func reached(offset: CGFloat, maximum: CGFloat, initialDistance: CGFloat, fingerMovement: CGPoint) -> Bool {
+        let upward = -fingerMovement.y
+        return offset >= maximum - 2 && upward - initialDistance >= 64 && upward > abs(fingerMovement.x) * 1.35
     }
 }
 
@@ -59,6 +60,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         drag.delegate = context.coordinator
         view.addGestureRecognizer(drag)
         view.panGestureRecognizer.require(toFail: drag)
+        view.panGestureRecognizer.addTarget(context.coordinator, action: #selector(Coordinator.refreshAtEnd(_:)))
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
         pinch.delegate = context.coordinator
         view.addGestureRecognizer(pinch)
@@ -121,19 +123,25 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         private var pathOffsets: [IndexPath: Int] = [:]
         private var scrolledRequest: Int?
         private var refreshedThisDrag = false
+        private var initialEndDistance: CGFloat?
 
-        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-            refreshedThisDrag = false
-        }
-
-        func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            guard !parent.selecting, !refreshedThisDrag, scrollView.isDragging,
-                  let refresh = parent.reachedEnd else { return }
-            let maximum = maximumOffset(in: scrollView)
-            let movement = scrollView.panGestureRecognizer.translation(in: scrollView)
-            guard GalleryEndRefresh.reached(offset: scrollView.contentOffset.y, maximum: maximum, fingerMovement: movement) else { return }
-            refreshedThisDrag = true
-            refresh()
+        @objc func refreshAtEnd(_ pan: UIPanGestureRecognizer) {
+            guard let collection, let refresh = parent.reachedEnd, !parent.selecting else { return }
+            let maximum = maximumOffset(in: collection)
+            switch pan.state {
+            case .began:
+                initialEndDistance = max(0, maximum - collection.contentOffset.y)
+                refreshedThisDrag = false
+            case .changed, .ended:
+                guard !refreshedThisDrag, let initialEndDistance,
+                      GalleryEndRefresh.reached(offset: collection.contentOffset.y, maximum: maximum,
+                                                initialDistance: initialEndDistance,
+                                                fingerMovement: pan.translation(in: collection.window)) else { return }
+                refreshedThisDrag = true
+                refresh()
+            default:
+                initialEndDistance = nil
+            }
         }
 
         func updateBottomInset(_ inset: CGFloat) {
