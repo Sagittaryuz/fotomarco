@@ -18,6 +18,7 @@ struct MomentraGalleryDetail: View {
     @State private var favoriteStates: [GalleryItem.ID: Bool] = [:]
     @State private var panel: Panel?
     @State private var fullscreen = false
+    @State private var shareSucceeded = false
     @State private var zoomed = false
     @State private var busy = false
     @State private var message: String?
@@ -83,7 +84,9 @@ struct MomentraGalleryDetail: View {
         .preferredColorScheme(.dark)
         .modifier(GalleryCameraSwipe(action: { if !busy && !zoomed { dismiss() } }))
         .onChange(of: selection) { _, _ in zoomed = false }
-        .sheet(item: $panel) { route in
+        .sheet(item: $panel, onDismiss: {
+            if shareSucceeded { dismiss() }
+        }) { route in
             if let current { sheet(route, item: current) }
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
@@ -150,7 +153,10 @@ struct MomentraGalleryDetail: View {
         case .grid:
             GalleryDetailGrid(items: items, choose: { selection = $0.id }) { $0.thumbnail() }
         case .share:
-            GalleryShareComposer(items: items, current: item, copy: { try await $0.copy(to: $1) }) { $0.thumbnail() }
+            GalleryShareComposer(items: items, current: item, copy: { try await $0.copy(to: $1) }, onSuccess: {
+                shareSucceeded = true
+                panel = nil
+            }) { $0.thumbnail() }
         case .information:
             NavigationStack {
                 GalleryItemInformation(item: item)

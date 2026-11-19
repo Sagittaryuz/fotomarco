@@ -10,6 +10,7 @@ struct GalleryQuickShare: View {
     @State private var picture: CGImage?
     @State private var player: AVPlayer?
     @State private var sharePresented = false
+    @State private var shareSucceeded = false
     @State private var attempted = false
     @State private var failed = false
 
@@ -46,8 +47,14 @@ struct GalleryQuickShare: View {
             attempted = true
             sharePresented = true
         }
-        .sheet(isPresented: $sharePresented) {
-            if let source { Activity(source: source) }
+        .sheet(isPresented: $sharePresented, onDismiss: {
+            if shareSucceeded { dismiss() }
+        }) {
+            if let source {
+                GalleryActivitySheet(files: [source.url], resource: source) {
+                    if sharePresented { shareSucceeded = true } else { dismiss() }
+                }
+            }
         }
         .onDisappear {
             player?.pause()
@@ -72,21 +79,5 @@ struct GalleryQuickShare: View {
                 throw error
             }
         } catch { if !Task.isCancelled { failed = true } }
-    }
-
-    private struct Activity: UIViewControllerRepresentable {
-        let source: PhotoEditorInput
-
-        func makeUIViewController(context: Context) -> UIActivityViewController {
-            let controller = UIActivityViewController(activityItems: [source.url], applicationActivities: nil)
-            controller.completionWithItemsHandler = { [source] activity, completed, _, error in
-                withExtendedLifetime(source) {
-                    GalleryShareHandoff.openDestination(for: activity, completed: completed, error: error)
-                }
-            }
-            return controller
-        }
-
-        func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
     }
 }

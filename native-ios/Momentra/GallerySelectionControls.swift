@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct GallerySelectionBar<Share: View>: View {
     let count: Int
@@ -123,19 +122,8 @@ final class GalleryShareBatch: Identifiable {
         }
     }
 
-    struct Sheet: UIViewControllerRepresentable {
-        let batch: GalleryShareBatch
-
-        func makeUIViewController(context: Context) -> UIActivityViewController {
-            let controller = UIActivityViewController(activityItems: batch.files, applicationActivities: nil)
-            controller.completionWithItemsHandler = { [batch] activity, completed, _, error in
-                try? FileManager.default.removeItem(at: batch.directory)
-                GalleryShareHandoff.openDestination(for: activity, completed: completed, error: error)
-            }
-            return controller
-        }
-
-        func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+    func sheet(onSuccess: @escaping @MainActor () -> Void) -> GalleryActivitySheet {
+        GalleryActivitySheet(files: files, resource: self, onSuccess: onSuccess)
     }
 }
 
@@ -144,18 +132,21 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
     let current: Item
     let copy: (Item, URL) async throws -> URL
     let tile: (Item) -> Tile
+    let onSuccess: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selected: Set<Item.ID>
     @State private var batch: GalleryShareBatch?
+    @State private var shareSucceeded = false
     @State private var preparation: Task<Void, Never>?
     @State private var failed = false
 
     init(items: [Item], current: Item, copy: @escaping (Item, URL) async throws -> URL,
-         @ViewBuilder tile: @escaping (Item) -> Tile) {
+         onSuccess: @escaping () -> Void, @ViewBuilder tile: @escaping (Item) -> Tile) {
         self.items = items
         self.current = current
         self.copy = copy
         self.tile = tile
+        self.onSuccess = onSuccess
         _selected = State(initialValue: [current.id])
     }
 
@@ -204,7 +195,13 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
             .navigationTitle("Compartilhar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Fechar") { preparation?.cancel(); dismiss() } }
-            .sheet(item: $batch) { GalleryShareBatch.Sheet(batch: $0) }
+            .sheet(item: $batch, onDismiss: {
+                if shareSucceeded { onSuccess() }
+            }) { batch in
+                batch.sheet {
+                    if self.batch != nil { shareSucceeded = true } else { onSuccess() }
+                }
+            }
             .alert("Não foi possível preparar os itens", isPresented: $failed) {
                 Button("OK", role: .cancel) {}
             }

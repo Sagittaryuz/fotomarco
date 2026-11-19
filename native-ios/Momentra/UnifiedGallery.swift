@@ -215,7 +215,7 @@ struct OriginalsView: View {
             GalleryQuickShare(load: { try await item.input() }, isVideo: item.isVideo)
         }
         .sheet(item: $trashItem) { item in trashDetail(item) }
-        .sheet(item: $shared) { GalleryShareBatch.Sheet(batch: $0) }
+        .sheet(item: $shared) { $0.sheet(onSuccess: resetSelection) }
         .fullScreenCover(item: $pane, onDismiss: searchDismissed) { active in
             if active == .search {
                 GalleryContentSearch(items: Array(items.reversed()), keywords: \.keywordText,
