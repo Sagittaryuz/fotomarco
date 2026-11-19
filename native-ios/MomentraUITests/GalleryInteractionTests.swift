@@ -4,7 +4,7 @@ final class GalleryInteractionTests: XCTestCase {
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.16",
+        app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.17",
                                "-native.gps.enabled", "NO"]
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -48,6 +48,84 @@ final class GalleryInteractionTests: XCTestCase {
         snapshot("Painel de apoio", app: app)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.77)).tap()
         XCTAssertFalse(pix.exists)
+    }
+
+    func testBatchDeleteLeavesSelectionMode() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        app.buttons["Selecionar"].tap()
+        app.collectionViews.cells.firstMatch.tap()
+        XCTAssertTrue(app.buttons["Excluir seleção"].isEnabled)
+        app.buttons["Excluir seleção"].tap()
+        app.buttons["Excluir 1 itens"].tap()
+        XCTAssertTrue(app.buttons["Selecionar"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["Mostrar seleção (1)"].exists)
+    }
+
+    func testChangingGalleryTabByDraggingNativeSegmentAndSelectingDevicePhoto() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let tabs = app.segmentedControls.firstMatch
+        let captures = tabs.buttons["Capturas"]
+        let device = tabs.buttons["Celular"]
+        XCTAssertTrue(captures.waitForExistence(timeout: 8))
+        captures.press(forDuration: 0.15, thenDragTo: device)
+        XCTAssertTrue(device.isSelected)
+        device.press(forDuration: 0.15, thenDragTo: captures)
+        XCTAssertTrue(captures.isSelected)
+        device.tap()
+        let select = app.buttons["Selecionar"]
+        XCTAssertTrue(select.waitForExistence(timeout: 8))
+        select.tap()
+        let first = app.collectionViews.cells.firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        first.tap()
+        XCTAssertTrue(app.buttons["Compartilhar seleção"].isEnabled)
+        XCTAssertTrue(app.buttons["Excluir seleção"].isEnabled)
+        app.buttons["Mostrar seleção (1)"].tap()
+        XCTAssertTrue(app.staticTexts["1 item selecionado"].waitForExistence(timeout: 8))
+        snapshot("Seleção do iPhone", app: app)
+    }
+
+    func testEditorSavesACopyAfterRotating() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let first = app.collectionViews.cells.firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 8))
+        first.tap()
+        app.buttons["Editar foto"].tap()
+        XCTAssertTrue(app.staticTexts["Editor Momentra"].waitForExistence(timeout: 8))
+        let save = app.buttons["Salvar cópia"]
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["Recortar"].tap()
+        let rotate = app.buttons["Girar 90 graus"]
+        XCTAssertTrue(rotate.waitForExistence(timeout: 8))
+        rotate.tap()
+        XCTAssertTrue(save.isEnabled)
+        app.buttons["Desfazer"].tap()
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["Refazer"].tap()
+        XCTAssertTrue(save.isEnabled)
+        snapshot("Editor de foto", app: app)
+        save.tap()
+        XCTAssertTrue(app.buttons["Editar foto"].waitForExistence(timeout: 12))
+        XCTAssertFalse(app.staticTexts["Editor Momentra"].exists)
+    }
+
+    func testSettingsUsesADraggableNativeSwitch() {
+        let app = launch()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Configurações")).firstMatch.tap()
+        let grid = app.switches["Grade"]
+        if !grid.isHittable { app.swipeUp() }
+        XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        XCTAssertEqual(grid.value as? String, "0")
+        let rightEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5))
+        let leftEdge = rightEdge.withOffset(CGVector(dx: -42, dy: 0))
+        leftEdge.press(forDuration: 0.15, thenDragTo: rightEdge)
+        XCTAssertEqual(grid.value as? String, "1")
+        rightEdge.press(forDuration: 0.15, thenDragTo: leftEdge)
+        XCTAssertEqual(grid.value as? String, "0")
+        snapshot("Interruptores nativos", app: app)
     }
 
     private func snapshot(_ name: String, app: XCUIApplication) {

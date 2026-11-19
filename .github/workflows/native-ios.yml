@@ -33,6 +33,7 @@ jobs:
           for number in 1 2 3; do
             sips -s format jpeg "Momentra/Assets.xcassets/AppIcon.appiconset/Light.png" --out "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-00000000000$number.jpg" >/dev/null
           done
+          xcrun simctl addmedia "$DEVICE" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg"
       - name: Exercise gallery and support panel
         working-directory: native-ios
         run: |
