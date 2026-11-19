@@ -261,8 +261,6 @@ struct CameraScreen: View {
                                 Button {
                                     guard !suppressZoomPresetTap else { return }
                                     camera.setZoom(factor)
-                                    withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
-                                    scheduleZoomDismiss()
                                 } label: {
                                     let selected = abs(camera.zoomFactor - factor) < 0.01
                                     Text(factor == 0.5 ? "0,5" : "\(Int(factor))\(selected ? "×" : "")")
@@ -278,20 +276,16 @@ struct CameraScreen: View {
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 8)
                             .updating($zoomTouchActive) { _, active, _ in active = true }
-                            .onChanged { gesture in updateZoomDrag(gesture.translation.width) }
+                            .onChanged { gesture in
+                                let movement = gesture.translation
+                                guard zoomDrag != nil || (abs(movement.width) >= 8 && abs(movement.width) > abs(movement.height)) else { return }
+                                updateZoomDrag(movement.width)
+                            }
                             .onEnded { _ in finishZoomDrag() }
                     )
                     .onChange(of: zoomTouchActive) { _, active in
                         if !active { finishZoomDrag() }
                     }
-                    .onLongPressGesture(minimumDuration: 0.35, maximumDistance: 8, perform: {
-                        guard camera.ready, zoomDrag == nil else { return }
-                        suppressZoomPresetTap = true
-                        withAnimation(.easeOut(duration: 0.2)) { showingZoomDial = true }
-                        zoomEditingChanged(true)
-                    }, onPressingChanged: { pressing in
-                        if !pressing, zoomDrag == nil, suppressZoomPresetTap { scheduleZoomDismiss() }
-                    })
                     HStack {
                         Menu {
                             ForEach(stampProfiles.profiles) { item in
