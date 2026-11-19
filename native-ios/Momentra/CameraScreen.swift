@@ -761,6 +761,7 @@ struct CameraScreen: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
+                .toggleStyle(DirectionalSwitchStyle())
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
