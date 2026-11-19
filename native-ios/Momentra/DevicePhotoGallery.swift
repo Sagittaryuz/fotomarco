@@ -182,7 +182,7 @@ struct DevicePhotoGallery: View {
     }
 }
 
-private enum DevicePhotoFile {
+enum DevicePhotoFile {
     static func editorInput(_ asset: PHAsset) async throws -> PhotoEditorInput {
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         return PhotoEditorInput(url: try await copy(asset, to: temporary), temporary: true)
@@ -372,7 +372,7 @@ private struct DevicePhotoPager: View {
     }
 }
 
-private struct DeviceThumbnail: View {
+struct DeviceThumbnail: View {
     let asset: PHAsset
     var fullView = false
     @State private var thumbnail: UIImage?
@@ -409,7 +409,7 @@ private struct DeviceThumbnail: View {
     }
 }
 
-private struct DevicePhotoDetail: View {
+struct DevicePhotoDetail: View {
     let asset: PHAsset
     let profile: CaptureProfileTag
     @State private var data: Data?

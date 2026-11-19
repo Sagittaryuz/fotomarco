@@ -5,6 +5,10 @@ final class GoogleDriveArchive {
     static let scope = "https://www.googleapis.com/auth/drive.file"
 
     struct Item: Decodable {
+        struct Capabilities: Decodable {
+            let canUntrash: Bool?
+        }
+
         let id: String
         let name: String
         let mimeType: String
@@ -13,6 +17,8 @@ final class GoogleDriveArchive {
         let sha256Checksum: String?
         let parents: [String]?
         let trashed: Bool?
+        let trashedTime: String?
+        let capabilities: Capabilities?
         let appProperties: [String: String]?
     }
 
@@ -143,6 +149,11 @@ final class GoogleDriveArchive {
                        pageToken: pageToken, accessToken: accessToken)
     }
 
+    func listTrash(pageToken: String? = nil, accessToken: String) async throws -> Page {
+        try await find("trashed = true and appProperties has { key='momentraArchivePhoto' and value='1' }",
+                       pageToken: pageToken, accessToken: accessToken, additionalFields: ",trashedTime,capabilities(canUntrash)")
+    }
+
     func download(id: String, accessToken: String) async throws -> Data {
         let location = try await downloadFile(id: id, accessToken: accessToken)
         defer { try? FileManager.default.removeItem(at: location) }
@@ -165,9 +176,28 @@ final class GoogleDriveArchive {
         guard result.id == id, result.trashed == true else { throw ArchiveError.invalidResponse }
     }
 
-    private func find(_ filter: String, pageToken: String?, accessToken: String) async throws -> Page {
+    func restorePhoto(id: String, name: String, accessToken: String) async throws {
+        guard Self.validID(id), CloudArchiveFilename(name) != nil else { throw ArchiveError.invalidRequest }
+        let path = "/drive/v3/files/\(id)"
+        let query = ["fields": Self.fields + ",capabilities(canUntrash)"]
+        let existing: Item = try await decode(request(path: path, query: query, accessToken: accessToken))
+        guard existing.id == id, existing.name == name, existing.mimeType.hasPrefix("image/"),
+              existing.appProperties?["momentraArchivePhoto"] == "1" else { throw ArchiveError.integrity }
+        if existing.trashed == false { return }
+        guard existing.trashed == true, existing.capabilities?.canUntrash == true else {
+            throw ArchiveError.invalidRequest
+        }
+        var update = try request(path: path, query: query, method: "PATCH", accessToken: accessToken)
+        update.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        update.httpBody = Data(#"{"trashed":false}"#.utf8)
+        let result: Item = try await decode(update)
+        guard result.id == id, result.trashed == false else { throw ArchiveError.invalidResponse }
+    }
+
+    private func find(_ filter: String, pageToken: String?, accessToken: String,
+                      additionalFields: String = "") async throws -> Page {
         var query = ["q": filter, "pageSize": "100", "spaces": "drive", "orderBy": "createdTime desc",
-                     "fields": "nextPageToken,files(\(Self.fields))"]
+                     "fields": "nextPageToken,files(\(Self.fields)\(additionalFields))"]
         if let pageToken { query["pageToken"] = pageToken }
         let request = try request(path: "/drive/v3/files", query: query, accessToken: accessToken)
         return try await decode(request)

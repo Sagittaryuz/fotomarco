@@ -72,10 +72,10 @@ struct CloudArchiveJournal {
         publish()
     }
 
-    func serializeCleanup(_ action: () throws -> Void) rethrows {
+    func serializeCleanup<T>(_ action: () throws -> T) rethrows -> T {
         Self.fileLock.lock()
         defer { Self.fileLock.unlock() }
-        try action()
+        return try action()
     }
 
     func hasPendingDelivery(id: UUID) -> Bool {
