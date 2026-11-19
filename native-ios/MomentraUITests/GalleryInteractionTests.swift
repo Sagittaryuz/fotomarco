@@ -15,7 +15,7 @@ final class GalleryInteractionTests: XCTestCase {
         return app
     }
 
-    func testCapturesExcludeUntrackedPhotosEvenAfterVisitingFavorites() {
+    func testAppCapturesExcludeUntrackedPhotosEvenAfterVisitingFavorites() {
         let app = launch()
         app.buttons["Abrir capturas"].tap()
         let count = app.staticTexts["3 itens"]

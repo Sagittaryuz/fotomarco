@@ -40,7 +40,7 @@ jobs:
           done
           mkdir -p "$RUNNER_TEMP/camera-roll"
           for number in $(seq 1 24); do
-            cp "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" "$RUNNER_TEMP/camera-roll/$number.jpg"
+            sips -Z "$((256 + number * 8))" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" --out "$RUNNER_TEMP/camera-roll/$number.jpg" >/dev/null
           done
           xcrun simctl addmedia "$DEVICE" "$RUNNER_TEMP"/camera-roll/*.jpg
       - name: Exercise gallery and support panel
