@@ -448,8 +448,7 @@ enum PhotoMetadata {
         copyFields(kCGImagePropertyExifDictionary, [kCGImagePropertyExifDateTimeOriginal, kCGImagePropertyExifExposureTime, kCGImagePropertyExifFNumber, kCGImagePropertyExifISOSpeedRatings, kCGImagePropertyExifFocalLength, kCGImagePropertyExifLensModel])
         if snapshot?.forecast != nil, snapshot?.layout.showsInformation == true {
             result[kCGImagePropertyIPTCDictionary as String] = [
-                kCGImagePropertyIPTCCredit as String: "MET Norway",
-                kCGImagePropertyIPTCSource as String: "Locationforecast · CC BY 4.0 · https://creativecommons.org/licenses/by/4.0/"
+                kCGImagePropertyIPTCSource as String: "https://momentra-camera.vercel.app/privacidade.html#creditos"
             ]
         }
         if let location = snapshot?.location, snapshot?.gpsEnabled == true {

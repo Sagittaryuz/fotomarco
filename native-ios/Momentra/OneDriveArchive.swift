@@ -43,6 +43,7 @@ struct OneDriveArchive {
         let name: String
         let size: Int64?
         let createdDateTime: String?
+        let eTag: String?
         let parentReference: Parent?
         let folder: Folder?
         let file: File?
@@ -118,6 +119,25 @@ struct OneDriveArchive {
         guard let stored = try await item(named: name, in: folder, accessToken: accessToken),
               stored.id == id else { throw Failure.integrity }
         try await check(stored, name: name, folder: folder, fingerprint: fingerprint, accessToken: accessToken)
+    }
+
+    func trashPhoto(id: String, name: String, accessToken: String) async throws {
+        guard Self.validID(id), Self.validName(name) else { throw Failure.invalidName }
+        let folder = try await folderID(accessToken: accessToken)
+        let url = itemURL(id)
+        let fields = URLQueryItem(name: "$select", value: "id,name,file,folder,parentReference,eTag")
+        let item = try JSONDecoder().decode(DriveItem.self,
+            from: await get(Self.query(url, items: [fields]), accessToken: accessToken))
+        guard item.id == id, item.name == name, item.file != nil, item.folder == nil,
+              item.parentReference?.id == folder, let eTag = item.eTag, !eTag.isEmpty else {
+            throw Failure.integrity
+        }
+        var request = try authorizedRequest(url, accessToken: accessToken)
+        request.httpMethod = "DELETE"
+        request.setValue(eTag, forHTTPHeaderField: "If-Match")
+        let (_, response) = try await Self.session.data(for: request)
+        let status = try Self.status(response)
+        guard status == 204 || status == 404 else { throw Failure.http(status) }
     }
 
     func list(accessToken: String, nextPage: String? = nil) async throws -> Page {

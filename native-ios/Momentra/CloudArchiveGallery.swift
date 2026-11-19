@@ -85,6 +85,11 @@ private struct ArchiveAccountGallery: View {
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
     @State private var openPhoto: ArchiveGalleryPhoto?
+    @State private var showingSelection = false
+    @State private var confirmingDelete = false
+    @State private var actionInProgress = false
+    @State private var share: GalleryShareBatch?
+    @State private var actionError: String?
 
     init(destination: CloudDeliveryPlan.Destination, profileLookup: PhotoProfileLookup,
          stampProfiles: StampProfilesStore) {
@@ -133,12 +138,13 @@ private struct ArchiveAccountGallery: View {
                 Text(errorMessage).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
             }
 
-            HStack {
-                if selecting {
-                    Text("\(selectedIDs.count) selecionada(s)")
-                    Spacer()
-                    Button("Selecionar exibidas") { selectedIDs = Set(photos.map(\.id)) }
-                } else {
+            if selecting {
+                GallerySelectionBar(count: selectedIDs.count, busy: busy || actionInProgress,
+                                    review: { showingSelection = true }, delete: { confirmingDelete = true }) {
+                    Button(action: shareSelection) { GalleryShareIcon() }
+                }
+            } else {
+                HStack {
                     Button(errorMessage == nil ? "Atualizar" : "Tentar novamente") {
                         request = ListRequest(pageToken: errorMessage == nil ? nil : request.pageToken)
                     }
@@ -148,8 +154,8 @@ private struct ArchiveAccountGallery: View {
                         Button("Carregar mais") { request = ListRequest(pageToken: nextPage) }
                     }
                 }
+                .disabled(busy || actionInProgress).font(.footnote).padding()
             }
-            .disabled(busy).font(.footnote).padding()
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -157,12 +163,84 @@ private struct ArchiveAccountGallery: View {
                     selecting.toggle()
                     if !selecting { selectedIDs.removeAll() }
                 }
-                .disabled(photos.isEmpty)
+                .disabled(actionInProgress || (!selecting && photos.isEmpty))
+            }
+            if selecting {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Selecionar exibidas") { selectedIDs = Set(photos.map(\.id)) }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Opções da seleção")
+                    .disabled(actionInProgress)
+                }
             }
         }
         .task(id: currentRequest) { await load(currentRequest) }
         .sheet(item: $openPhoto) { photo in
-            ArchiveGalleryPager(items: groups.flatMap(\.items), initialID: photo.id, images: images)
+            ArchiveGalleryPager(items: groups.flatMap(\.items), initialID: photo.id, images: images,
+                                stampProfiles: stampProfiles.profiles)
+        }
+        .sheet(isPresented: $showingSelection) {
+            GallerySelectionSheet(items: photos, selected: $selectedIDs) { ArchiveGalleryImage(photo: $0, images: images) }
+        }
+        .sheet(item: $share) { GalleryShareBatch.Sheet(batch: $0) }
+        .confirmationDialog("Excluir as fotos selecionadas?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Excluir \(selectedIDs.count) itens", role: .destructive, action: deleteSelection)
+            Button("Cancelar", role: .cancel) {}
+        } message: { Text("Os arquivos vão para a lixeira desta conta. As outras cópias ficam disponíveis.") }
+        .alert("Momentra", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+            Button("OK") { actionError = nil }
+        } message: { Text(actionError ?? "") }
+    }
+
+    private func shareSelection() {
+        let items = photos.filter { selectedIDs.contains($0.id) }
+        guard !items.isEmpty, !actionInProgress else { return }
+        actionInProgress = true
+        Task {
+            defer { actionInProgress = false }
+            do {
+                let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+                share = try await GalleryShareBatch.prepare(items) { photo, directory in
+                    let downloaded = try await images.download(photo, accessToken: token)
+                    defer { try? FileManager.default.removeItem(at: downloaded) }
+                    let target = directory.appendingPathComponent(photo.name)
+                    try FileManager.default.moveItem(at: downloaded, to: target)
+                    return target
+                }
+            } catch { actionError = "Não foi possível baixar todos os arquivos selecionados para compartilhar." }
+        }
+    }
+
+    private func deleteSelection() {
+        let items = photos.filter { selectedIDs.contains($0.id) }
+        guard !items.isEmpty, !actionInProgress else { return }
+        actionInProgress = true
+        Task {
+            defer { actionInProgress = false }
+            do {
+                let journal = try CloudArchiveJournal.documents()
+                let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+                var removed: Set<String> = []
+                for photo in items where !journal.hasPendingDelivery(id: photo.captureID) {
+                    do {
+                        switch destination.provider {
+                        case .googleDrive: try await images.drive.trashPhoto(id: photo.id, name: photo.name, accessToken: token)
+                        case .oneDrive: try await OneDriveArchive().trashPhoto(id: photo.id, name: photo.name, accessToken: token)
+                        }
+                        removed.insert(photo.id)
+                    } catch { continue }
+                }
+                if !removed.isEmpty {
+                    photos.removeAll { removed.contains($0.id) }
+                    selecting = false
+                    selectedIDs.removeAll()
+                    request = ListRequest(pageToken: nil)
+                }
+                if removed.count != items.count {
+                    actionError = "Nem todos os arquivos foram movidos para a lixeira. Confira o acesso à conta e se há envios pendentes."
+                }
+            } catch { actionError = error.localizedDescription }
         }
     }
 
@@ -236,6 +314,18 @@ private final class ArchiveGalleryImages: ObservableObject {
         revision = UUID()
     }
 
+    func download(_ photo: ArchiveGalleryPhoto, accessToken: String) async throws -> URL {
+        switch destination.provider {
+        case .googleDrive: try await drive.downloadFile(id: photo.id, accessToken: accessToken)
+        case .oneDrive: try await OneDriveArchive().download(id: photo.id, accessToken: accessToken)
+        }
+    }
+
+    func editorInput(_ photo: ArchiveGalleryPhoto) async throws -> PhotoEditorInput {
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        return PhotoEditorInput(url: try await download(photo, accessToken: token), temporary: true)
+    }
+
     func image(_ photo: ArchiveGalleryPhoto, maximumPixels: Int) async throws -> UIImage {
         let version = revision
         let key = "\(version.uuidString):\(photo.id):\(maximumPixels)" as NSString
@@ -246,11 +336,7 @@ private final class ArchiveGalleryImages: ObservableObject {
         if let cached = cache.object(forKey: key) { return cached }
 
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-        let file: URL
-        switch destination.provider {
-        case .googleDrive: file = try await drive.downloadFile(id: photo.id, accessToken: token)
-        case .oneDrive: file = try await OneDriveArchive().download(id: photo.id, accessToken: token)
-        }
+        let file = try await download(photo, accessToken: token)
         defer { try? FileManager.default.removeItem(at: file) }
         try Task.checkCancellation()
         let bitmap = await Task.detached(priority: .utility) {
@@ -323,12 +409,17 @@ private struct ArchiveGalleryImage: View {
 private struct ArchiveGalleryPager: View {
     let items: [ArchiveGalleryPhoto]
     let images: ArchiveGalleryImages
+    let stampProfiles: [StampProfile]
     @State private var selection: String
+    @State private var editing: ArchiveGalleryPhoto?
+    @State private var savedCopy = false
+    @State private var showSavedCopy = false
     @Environment(\.dismiss) private var dismiss
 
-    init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages) {
+    init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages, stampProfiles: [StampProfile]) {
         self.items = items
         self.images = images
+        self.stampProfiles = stampProfiles
         _selection = State(initialValue: initialID)
     }
 
@@ -338,9 +429,9 @@ private struct ArchiveGalleryPager: View {
             GalleryDetailHeader(date: index.flatMap { items[$0].date }, position: (index ?? 0) + 1,
                                 count: items.count, close: { dismiss() }) {
                 if let index {
-                    Text(items[index].isOriginal ? "Orig." : "Carimbo")
-                        .font(.caption2).lineLimit(1).minimumScaleFactor(0.7)
-                        .accessibilityLabel(items[index].versionLabel)
+                    Button { editing = items[index] } label: {
+                        Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44).modifier(GalleryControlSurface())
+                    }.accessibilityLabel("Editar foto").accessibilityHint(items[index].versionLabel)
                 }
             }
             TabView(selection: $selection) {
@@ -361,5 +452,10 @@ private struct ArchiveGalleryPager: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.hidden)
+        .sheet(item: $editing, onDismiss: { if savedCopy { showSavedCopy = true } }) { photo in
+            MomentraPhotoEditor(load: { try await images.editorInput(photo) }, date: photo.date,
+                                profile: photo.profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
+        }
+        .alert("Cópia salva em Capturas", isPresented: $showSavedCopy) { Button("OK") { savedCopy = false } }
     }
 }

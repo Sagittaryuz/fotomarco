@@ -67,7 +67,7 @@ enum ForecastError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalid: return "Dados meteorológicos inválidos."
-        case .consent: return "É necessário ler e aceitar os termos da MET Norway."
+        case .consent: return "A previsão está indisponível para esta configuração."
         case .location: return "Localização recente indisponível para a consulta."
         case .cooldown: return "Aguarde o próximo horário permitido para atualizar a previsão."
         case .unavailable: return "Previsão indisponível; a câmera continua funcionando."

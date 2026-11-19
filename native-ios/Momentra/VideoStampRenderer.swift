@@ -38,7 +38,7 @@ enum VideoStampRenderer {
         if snapshot.forecast != nil, snapshot.layout.showsInformation {
             let credit = AVMutableMetadataItem()
             credit.identifier = .commonIdentifierDescription
-            credit.value = "Dados meteorológicos: MET Norway · Locationforecast · CC BY 4.0 · https://creativecommons.org/licenses/by/4.0/" as NSString
+            credit.value = "https://momentra-camera.vercel.app/privacidade.html#creditos" as NSString
             exporter.metadata = ((try? await asset.load(.metadata)) ?? []) + [credit]
         }
         try Task.checkCancellation()
