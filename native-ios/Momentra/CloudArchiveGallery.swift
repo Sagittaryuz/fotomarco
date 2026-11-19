@@ -438,7 +438,7 @@ private struct ArchiveAccountGallery: View {
 @MainActor
 fileprivate final class ArchiveGalleryImages: ObservableObject {
     let drive = GoogleDriveArchive()
-    private let destination: CloudDeliveryPlan.Destination
+    let destination: CloudDeliveryPlan.Destination
     private let cache = NSCache<NSString, UIImage>()
     private var activeDownloads = 0
     private var waiting: [CheckedContinuation<Void, Never>] = []
@@ -645,17 +645,19 @@ private struct ArchiveGalleryImage: View {
     let images: ArchiveGalleryImages
     var fullView = false
     var active = true
-    @State private var image: UIImage?
+    @State private var loaded: (key: String, image: UIImage)?
     @State private var failed = false
     @State private var retry = UUID()
 
     var body: some View {
+        let key = photo.favoriteKey(in: images.destination)
         GeometryReader { proxy in
             ZStack {
                 Color.secondary.opacity(0.15)
-                if let image {
-                    Image(uiImage: image).resizable()
+                if let loaded, loaded.key == key {
+                    Image(uiImage: loaded.image).resizable()
                         .aspectRatio(contentMode: fullView ? .fit : .fill)
+                        .accessibilityLabel(fullView ? "Imagem" : "Miniatura disponível")
                 } else if fullView {
                     if failed && active {
                         Button("Tentar abrir novamente") { retry = UUID() }.buttonStyle(.bordered)
@@ -663,21 +665,23 @@ private struct ArchiveGalleryImage: View {
                         ProgressView()
                     }
                 } else {
-                    Image(systemName: failed ? "exclamationmark.circle" : "photo").foregroundStyle(.secondary)
+                    Image(systemName: failed ? "exclamationmark.circle" : "icloud.and.arrow.down")
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(failed ? "Miniatura indisponível" : "Miniatura pendente")
                 }
             }
             .frame(width: proxy.size.width, height: fullView ? proxy.size.height : proxy.size.width)
             .clipped()
         }
         .aspectRatio(fullView ? nil : 1, contentMode: .fit)
-        .task(id: "\(images.revision):\(photo.id):\(photo.revision ?? ""):\(retry):\(active)") {
+        .task(id: "\(images.revision):\(key):\(photo.revision ?? ""):\(retry):\(active)") {
             failed = false
-            image = nil
+            if fullView || loaded?.key != key { loaded = nil }
             guard !fullView || active else { return }
             do {
                 let preview = try await images.image(photo, maximumPixels: fullView ? 1800 : 320)
                 guard !Task.isCancelled else { return }
-                image = preview
+                loaded = (key, preview)
             } catch {
                 if !Task.isCancelled { failed = true }
             }

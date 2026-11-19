@@ -40,6 +40,7 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 - O compartilhamento usa o painel do iOS. Só abra o app de destino após a confirmação de conclusão sem erro e quando houver um link de abertura conhecido. O WhatsApp usa `whatsapp://app` e recebe apenas o link de abertura nesse passo.
 - Em Capturas, mostre arquivos do Momentra e cópias do Fotos com vínculo confirmado pelo índice do aplicativo. Os filtros mudam a projeção da galeria. Itens com envio pendente mantêm as proteções do arquivo e da fila.
 - Reúna o armazenamento em uma faixa compacta acima da grade. Mostre cada origem em uma cápsula com ícone, trilho e percentual real. Para várias contas, use rolagem horizontal de altura fixa. A lixeira local conserva o item por 30 dias. Use os dados reais do provedor para indicar a expiração de itens remotos.
+- Mostre a última capacidade válida de cada conta e do iPhone enquanto consulta os valores em segundo plano. A linha fina sob a faixa aparece durante a sincronização e some quando as consultas terminam.
 
 ## Processamento e validação
 

@@ -22,6 +22,7 @@ struct OriginalsView: View {
     @State private var catalogLoaded = false
     @State private var cloudRefresh = 0
     @State private var cloudActivation = 0
+    @State private var cloudSyncing = false
     @State private var tab: Tab = .captures
     @State private var origin: GalleryOrigin?
     @State private var profile: UUID?
@@ -87,7 +88,8 @@ struct OriginalsView: View {
         let items = projection.items
         VStack(spacing: 0) {
             header(total: items.count, latest: items.last?.date)
-            GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true)
+            GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true,
+                                   syncingCatalog: cloudSyncing, refresh: cloudActivation)
                 .frame(height: tab == .captures ? storageBandHeight : 0)
                 .clipped()
                 .accessibilityHidden(tab != .captures)
@@ -435,6 +437,7 @@ struct OriginalsView: View {
     }
 
     private func reloadCloud(trash: Bool) async {
+        cloudSyncing = false
         let accounts = archive.accounts
         let refresh = cloudRefresh
         guard !accounts.isEmpty else { remote = []; remoteTrash = []; cloudError = false; updateProjection(); return }
@@ -464,6 +467,8 @@ struct OriginalsView: View {
             if !cached.isEmpty { applyCloud(remote + cached.map { galleryItem($0, lookup: lookup) }, trash: false) }
         }
         if !trash && !force && stale.isEmpty { return }
+        cloudSyncing = !trash
+        defer { if !Task.isCancelled { cloudSyncing = false } }
         var results: [GalleryItem] = []
         var failed = false
         let priorItems = Dictionary(grouping: trash ? remoteTrash : remote) { item -> CloudDeliveryPlan.Destination? in

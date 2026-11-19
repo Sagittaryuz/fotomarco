@@ -4,15 +4,33 @@ import GoogleSignIn
 struct GalleryCapacitySummary: View {
     let section: Int
     let accounts: [CloudArchiveAccounts.Account]
-    var compact = false
+    let compact: Bool
+    let syncingCatalog: Bool
+    let refresh: Int
+    private let cache: GalleryCapacityCache
+    private typealias CloudQuota = GalleryCapacityCache.Quota
     @State private var local: StorageTotals?
     @State private var quotas: [CloudDeliveryPlan.Destination: CloudQuota] = [:]
     @State private var loading = Set<CloudDeliveryPlan.Destination>()
-    @Environment(\.scenePhase) private var scenePhase
+    @State private var failed = Set<CloudDeliveryPlan.Destination>()
 
-    private struct CloudQuota: Sendable {
-        let total: Int64
-        let used: Int64
+    private struct RefreshRequest: Equatable {
+        let destinations: [CloudDeliveryPlan.Destination]
+        let generation: Int
+    }
+
+    init(section: Int, accounts: [CloudArchiveAccounts.Account], compact: Bool, syncingCatalog: Bool, refresh: Int) {
+        let cache = GalleryCapacityCache()
+        self.cache = cache
+        self.section = section
+        self.accounts = accounts
+        self.compact = compact
+        self.syncingCatalog = syncingCatalog
+        self.refresh = refresh
+        _local = State(initialValue: cache.local(includeAppBytes: section == 0 && !compact))
+        _quotas = State(initialValue: Dictionary(uniqueKeysWithValues: accounts.compactMap { account in
+            cache.quota(for: account.id).map { (account.id, $0) }
+        }))
     }
 
     var body: some View {
@@ -29,29 +47,41 @@ struct GalleryCapacitySummary: View {
                     .background(.white.opacity(0.075), in: Capsule())
                 }
                 .padding(.horizontal, 13)
+                .overlay(alignment: .bottom) {
+                    if syncingCatalog || !loading.isEmpty {
+                        GallerySyncLine().padding(.horizontal, 21)
+                    }
+                }
             } else {
                 VStack(spacing: 8) { rows() }
                     .padding(.horizontal, 14).padding(.bottom, 10)
             }
         }
-        .task { await refreshLocal() }
-        .task(id: accounts.map(\.id)) {
-            let destinations = accounts.map(\.id)
+        .task(id: refresh) { await refreshLocal() }
+        .task(id: RefreshRequest(destinations: accounts.map(\.id), generation: refresh)) {
+            let destinations = section == 1 ? [] : accounts.map(\.id)
             loading = Set(destinations)
+            failed.formIntersection(destinations)
             quotas = quotas.filter { destinations.contains($0.key) }
+            for destination in destinations where quotas[destination] == nil {
+                quotas[destination] = cache.quota(for: destination)
+            }
             await withTaskGroup(of: (CloudDeliveryPlan.Destination, CloudQuota?).self) { group in
                 for destination in destinations {
                     group.addTask { (destination, await Self.fetchQuota(for: destination)) }
                 }
                 for await (destination, quota) in group {
                     guard !Task.isCancelled else { return }
-                    quotas[destination] = quota
+                    if let quota {
+                        cache.store(quota, for: destination)
+                        quotas[destination] = quota
+                        failed.remove(destination)
+                    } else {
+                        failed.insert(destination)
+                    }
                     loading.remove(destination)
                 }
             }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await refreshLocal() } }
         }
     }
 
@@ -75,7 +105,8 @@ struct GalleryCapacitySummary: View {
                 let duplicateProvider = accounts.lazy.filter { $0.id.provider == account.id.provider }.dropFirst().first != nil
                 let shortName = duplicateProvider ? account.label : google ? "Drive" : "OneDrive"
                 row(name: name, shortName: shortName, quota: quotas[account.id],
-                    unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Limite não informado pelo serviço",
+                    unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Capacidade indisponível",
+                    status: status(for: account.id),
                     tint: google ? .green : .blue) {
                     Image(google ? "GoogleDriveMark" : "OneDriveMark")
                         .renderingMode(.original).resizable().scaledToFit().frame(width: compact ? 15 : 24, height: compact ? 15 : 24)
@@ -89,7 +120,8 @@ struct GalleryCapacitySummary: View {
     }
 
     @ViewBuilder
-    private func row<Icon: View>(name: String, shortName: String, quota: CloudQuota?, unavailable: String, tint: Color,
+    private func row<Icon: View>(name: String, shortName: String, quota: CloudQuota?, unavailable: String,
+                                 status: String = "", tint: Color,
                                  @ViewBuilder icon: () -> Icon) -> some View {
         if compact {
             VStack(alignment: .leading, spacing: 3) {
@@ -111,6 +143,7 @@ struct GalleryCapacitySummary: View {
             .accessibilityElement()
             .accessibilityLabel(name)
             .accessibilityValue(quota.map { fraction($0).formatted(.percent.precision(.fractionLength(0...1))) } ?? unavailable)
+            .accessibilityHint(status)
         } else {
             HStack(spacing: 9) {
                 icon().accessibilityHidden(true)
@@ -151,8 +184,18 @@ struct GalleryCapacitySummary: View {
     }
 
     private func refreshLocal() async {
+        guard section != 2 else { return }
         let includeAppBytes = section == 0 && !compact
-        local = await Task.detached(priority: .utility) { StorageTotals.local(includeAppBytes: includeAppBytes) }.value
+        let reading = await Task.detached(priority: .utility) { StorageTotals.local(includeAppBytes: includeAppBytes) }.value
+        guard !Task.isCancelled, let reading else { return }
+        cache.store(reading, includeAppBytes: includeAppBytes)
+        local = reading
+    }
+
+    private func status(for destination: CloudDeliveryPlan.Destination) -> String {
+        if loading.contains(destination) { return "Atualizando em segundo plano" }
+        if failed.contains(destination), quotas[destination] != nil { return "Último valor salvo no iPhone" }
+        return ""
     }
 
     private func format(_ bytes: Int64) -> String {
@@ -198,6 +241,32 @@ struct GalleryCapacitySummary: View {
             guard let total, let used, total > 0, used >= 0 else { return nil }
             return CloudQuota(total: total, used: used)
         } catch { return nil }
+    }
+}
+
+private struct GallerySyncLine: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var moving = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let segment = proxy.size.width * 0.28
+            Capsule().fill(.yellow.opacity(0.14))
+                .overlay(alignment: .leading) {
+                    Capsule().fill(.yellow)
+                        .frame(width: segment)
+                        .offset(x: reduceMotion ? 0 : moving ? proxy.size.width : -segment)
+                }
+                .clipped()
+        }
+        .frame(height: 2)
+        .allowsHitTesting(false)
+        .accessibilityElement()
+        .accessibilityLabel("Sincronizando galeria e armazenamento")
+        .accessibilityIdentifier("gallery-sync-line")
+        .onAppear {
+            if !reduceMotion { withAnimation(.linear(duration: 0.95).repeatForever(autoreverses: false)) { moving = true } }
+        }
     }
 }
 
@@ -286,7 +355,7 @@ struct GalleryStorageSummary: View {
     }
 }
 
-struct StorageTotals {
+struct StorageTotals: Codable, Sendable {
     let total: Int64
     let used: Int64
     let primary: Int64
