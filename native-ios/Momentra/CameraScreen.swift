@@ -83,6 +83,7 @@ struct CameraScreen: View {
     @State private var galleryThumbnailFrame: CGRect = .zero
     @State private var wordmarkBottom: CGFloat = 0
     @State private var shutterTop: CGFloat = 0
+    @State private var shutterCenterX: CGFloat?
     @State private var photoFlight: PhotoFlight?
     @State private var photoLanded = false
     @State private var shutterOpacity = 0.0
@@ -199,13 +200,17 @@ struct CameraScreen: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
             if let version = updates.availableVersion {
-                Button(directUpdate.busy ? "Preparando atualização…" : "Atualização \(version) disponível") {
+                Button {
                     if directUpdate.ready { requestUpdate(version, fromBanner: true) }
                     else { showSettings = true }
+                } label: {
+                    Text(directUpdate.busy ? "Preparando atualização…" : "Atualização \(version) disponível")
+                        .font(.caption.bold()).padding(.horizontal, 12).frame(minHeight: 44)
+                        .background(.black.opacity(0.75), in: Capsule())
+                        .contentShape(Capsule())
                 }
-                    .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(.black.opacity(0.75), in: Capsule())
-                    .disabled(directUpdate.busy || camera.isRecording || camera.isFinishingRecording || countdown > 0)
+                .buttonStyle(.plain)
+                .disabled(directUpdate.busy || camera.isRecording || camera.isFinishingRecording || countdown > 0)
             }
         }
     }
@@ -295,7 +300,7 @@ struct CameraScreen: View {
                         ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, editingChanged: zoomEditingChanged)
                             .frame(height: 132).transition(.move(edge: .bottom))
                     } else if !camera.zoomOptions.isEmpty {
-                        CameraZoomStrip(presets: camera.zoomOptions, zoom: camera.zoomFactor) { factor in
+                        CameraZoomStrip(presets: camera.zoomOptions, zoom: camera.zoomFactor, shutterCenterX: shutterCenterX) { factor in
                             if !suppressZoomPresetTap { camera.setZoom(factor) }
                         }.padding(.bottom, 16)
                     }
@@ -354,9 +359,12 @@ struct CameraScreen: View {
                                 .frame(width: controlSize, height: controlSize)
                                 .frame(width: diameter, height: diameter)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
-                                .onGeometryChange(for: CGFloat.self) { proxy in
-                                    proxy.frame(in: .named("MomentraCamera")).minY
-                                } action: { shutterTop = $0 - 1.5 }
+                                .onGeometryChange(for: CGRect.self) { proxy in
+                                    proxy.frame(in: .named("MomentraCamera"))
+                                } action: { frame in
+                                    shutterTop = frame.minY - 1.5
+                                    shutterCenterX = frame.midX
+                                }
                                 .contentShape(Circle())
                                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: camera.isRecording)
                         }
