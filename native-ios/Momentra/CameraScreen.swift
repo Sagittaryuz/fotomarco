@@ -123,65 +123,76 @@ struct CameraScreen: View {
 
     private var normalCameraHeader: some View {
         VStack(spacing: 0) {
-                    MomentraWordmark()
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.frame(in: .named("MomentraCamera")).maxY
-                        } action: { wordmarkBottom = $0 }
-                        .padding(.vertical, 4)
-                    HStack {
-                        Button { cycleFlash() } label: {
-                            Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
-                                .font(.title2).foregroundStyle(camera.flashMode == .off ? Color.white : Color.yellow)
-                                .frame(width: 44, height: 44)
+            HStack(spacing: 4) {
+                Button { cycleFlash() } label: {
+                    Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
+                        .font(.title2).foregroundStyle(camera.flashMode == .off ? Color.white : Color.yellow)
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching || countdown > 0)
+                .accessibilityLabel("Flash")
+                .accessibilityValue(camera.flashMode == .off ? "Desativado" : camera.flashMode == .auto ? "Automático" : "Ativado")
+
+                Menu {
+                    Button("Desligado") { timerSeconds = 0 }
+                    Button("3 segundos") { timerSeconds = 3 }
+                    Button("10 segundos") { timerSeconds = 10 }
+                } label: {
+                    VStack(spacing: 0) {
+                        Image(systemName: "timer").font(.title2)
+                        if timerSeconds > 0 { Text("\(timerSeconds)s").font(.caption2) }
+                    }.frame(width: 44, height: 44)
+                }
+                .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
+                .accessibilityLabel("Temporizador")
+
+                Spacer(minLength: 4)
+                MomentraWordmark()
+                    .fixedSize()
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .named("MomentraCamera")).maxY
+                    } action: { wordmarkBottom = $0 }
+                Spacer(minLength: 4)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel.toggle() }
+                } label: {
+                    Text(photoAspect).font(.caption.bold()).frame(width: 44, height: 44)
+                }
+                .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
+                .accessibilityLabel("Proporção da foto")
+
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape.fill").font(.title2)
+                        .frame(width: 44, height: 44)
+                        .overlay(alignment: .topTrailing) {
+                            if updates.availableVersion != nil {
+                                Circle().fill(.red).frame(width: 10, height: 10).padding(3)
+                            }
                         }
-                        .disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching || countdown > 0)
-                        .accessibilityLabel("Flash")
-                        .accessibilityValue(camera.flashMode == .off ? "Desativado" : camera.flashMode == .auto ? "Automático" : "Ativado")
-                        Spacer(minLength: 0)
-                        Menu {
-                            Button("Desligado") { timerSeconds = 0 }
-                            Button("3 segundos") { timerSeconds = 3 }
-                            Button("10 segundos") { timerSeconds = 10 }
-                        } label: {
-                            VStack(spacing: 0) {
-                                Image(systemName: "timer").font(.title2)
-                                if timerSeconds > 0 { Text("\(timerSeconds)s").font(.caption2) }
-                            }.frame(width: 44, height: 44)
-                        }
-                        .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
-                        .accessibilityLabel("Temporizador")
-                        Spacer(minLength: 0)
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel.toggle() }
-                        } label: {
-                            Text(photoAspect).font(.caption.bold()).frame(width: 44, height: 44)
-                        }
-                        .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
-                        .accessibilityLabel("Proporção da foto")
-                        Spacer(minLength: 0)
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gearshape.fill").font(.title2)
-                                .frame(width: 44, height: 44)
-                                .overlay(alignment: .topTrailing) {
-                                    if updates.availableVersion != nil {
-                                        Circle().fill(.red).frame(width: 10, height: 10).padding(3)
-                                    }
-                                }
-                        }.accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível").disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
-                    }.padding(.horizontal, 28).padding(.bottom, 6)
-                    if let flashNotice {
-                        Text(flashNotice)
-                            .font(.caption.weight(.medium)).foregroundStyle(.black)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(camera.flashMode == .off ? Color.white : Color.yellow, in: RoundedRectangle(cornerRadius: 6))
-                            .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                    }
-                    if let version = updates.availableVersion {
-                        Button("Atualização \(version) disponível") { showSettings = true }
-                            .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(.black.opacity(0.75), in: Capsule())
-                            .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
-                    }
+                }
+                .accessibilityLabel(updates.availableVersion == nil ? "Configurações" : "Configurações, atualização disponível")
+                .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+            .frame(maxWidth: 420)
+            .frame(maxWidth: .infinity)
+
+            if let flashNotice {
+                Text(flashNotice)
+                    .font(.caption.weight(.medium)).foregroundStyle(.black)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(camera.flashMode == .off ? Color.white : Color.yellow, in: RoundedRectangle(cornerRadius: 6))
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+            if let version = updates.availableVersion {
+                Button("Atualização \(version) disponível") { showSettings = true }
+                    .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(.black.opacity(0.75), in: Capsule())
+                    .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
+            }
         }
     }
 
