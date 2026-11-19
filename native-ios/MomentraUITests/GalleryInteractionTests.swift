@@ -112,6 +112,9 @@ final class GalleryInteractionTests: XCTestCase {
         let count = app.staticTexts["3 itens"]
         XCTAssertTrue(count.waitForExistence(timeout: 8))
         XCTAssertEqual(app.collectionViews.cells.count, 3)
+        let header = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@",
+            "Hoje · .+ · (segunda-feira|terça-feira|quarta-feira|quinta-feira|sexta-feira|sábado|domingo)")).firstMatch
+        XCTAssertTrue(header.exists)
         let storage = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Armazenamento do iPhone")).firstMatch
         XCTAssertTrue(storage.waitForExistence(timeout: 8))
         XCTAssertLessThanOrEqual(storage.frame.height, 50)
