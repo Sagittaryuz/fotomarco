@@ -213,7 +213,7 @@ struct CameraScreen: View {
                 ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
                     Button { mode = value } label: {
                         Text(value.rawValue).font(.subheadline.weight(.medium))
-                            .foregroundStyle(proposedRight == (value == .photo) ? Color.yellow : Color.white)
+                            .foregroundStyle(proposedRight == (value == .photo) ? Color.white : Color.white.opacity(0.65))
                             .frame(maxWidth: .infinity).frame(height: 42)
                             .contentShape(Rectangle())
                     }
