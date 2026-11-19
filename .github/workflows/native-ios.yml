@@ -81,7 +81,11 @@ jobs:
           TEST_METHOD: ${{ inputs.test_method }}
         run: |
           TEST_TARGET="MomentraUITests/GalleryInteractionTests${TEST_METHOD:+/$TEST_METHOD}"
-          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "-only-testing:$TEST_TARGET" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
+          SKIP_BENCHMARK=()
+          if [ -z "$TEST_METHOD" ]; then
+            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement)
+          fi
+          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "-only-testing:$TEST_TARGET" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence
         if: always()
         run: |
