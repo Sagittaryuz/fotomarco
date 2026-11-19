@@ -1,6 +1,147 @@
 import SwiftUI
 import GoogleSignIn
 
+struct GalleryCapacitySummary: View {
+    let section: Int
+    let accounts: [CloudArchiveAccounts.Account]
+    @State private var local: StorageTotals?
+    @State private var quotas: [CloudDeliveryPlan.Destination: CloudQuota] = [:]
+    @State private var loading = Set<CloudDeliveryPlan.Destination>()
+    @Environment(\.scenePhase) private var scenePhase
+
+    private struct CloudQuota: Sendable {
+        let total: Int64
+        let used: Int64
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if section != 2 {
+                let name = section == 0 ? "Capturas no iPhone" : "Armazenamento do iPhone"
+                let value = local.map { CloudQuota(total: $0.total, used: section == 0 ? $0.primary : $0.used) }
+                row(name: name, quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
+                    Image(systemName: "photo.on.rectangle.fill")
+                        .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
+                        .frame(width: 25, height: 25)
+                        .background(.angularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
+                                                     center: .center), in: Circle())
+                }
+            }
+            if section != 1 {
+                ForEach(accounts) { account in
+                    let google = account.id.provider == .googleDrive
+                    let name = (google ? "Google Drive" : "OneDrive") + " · " + account.label
+                    row(name: name, quota: quotas[account.id],
+                        unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Limite não informado pelo serviço",
+                        tint: google ? .green : .blue) {
+                        Image(google ? "GoogleDriveMark" : "OneDriveMark")
+                            .renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
+                    }
+                }
+                if section == 2 && accounts.isEmpty {
+                    Text("Conecte uma conta para consultar a capacidade da nuvem.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14).padding(.bottom, 10)
+        .task { await refreshLocal() }
+        .task(id: accounts.map(\.id)) {
+            let destinations = accounts.map(\.id)
+            loading = Set(destinations)
+            quotas = quotas.filter { destinations.contains($0.key) }
+            await withTaskGroup(of: (CloudDeliveryPlan.Destination, CloudQuota?).self) { group in
+                for destination in destinations {
+                    group.addTask { (destination, await Self.fetchQuota(for: destination)) }
+                }
+                for await (destination, quota) in group {
+                    guard !Task.isCancelled else { return }
+                    quotas[destination] = quota
+                    loading.remove(destination)
+                }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await refreshLocal() } }
+        }
+    }
+
+    private func row<Icon: View>(name: String, quota: CloudQuota?, unavailable: String, tint: Color,
+                                 @ViewBuilder icon: () -> Icon) -> some View {
+        HStack(spacing: 9) {
+            icon().accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(name).font(.caption.weight(.semibold)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let quota {
+                        let fraction = Double(quota.used) / Double(quota.total)
+                        Text(fraction, format: .percent.precision(.fractionLength(0...1)))
+                            .font(.caption.monospacedDigit()).foregroundStyle(tint)
+                    }
+                }
+                if let quota {
+                    ProgressView(value: min(1, Double(quota.used) / Double(quota.total))).tint(tint)
+                    Text("\(format(quota.used)) de \(format(quota.total))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Text(unavailable).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func refreshLocal() async {
+        local = await Task.detached(priority: .utility) { StorageTotals.local() }.value
+    }
+
+    private func format(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private static func fetchQuota(for destination: CloudDeliveryPlan.Destination) async -> CloudQuota? {
+        struct GoogleResponse: Decodable {
+            struct Storage: Decodable { let limit: String?; let usage: String? }
+            let storageQuota: Storage
+        }
+        struct MicrosoftResponse: Decodable {
+            struct Storage: Decodable { let total: Int64?; let used: Int64? }
+            let quota: Storage?
+        }
+        do {
+            let google = destination.provider == .googleDrive
+            let endpoint = google ? "https://www.googleapis.com/drive/v3/about?fields=storageQuota%28limit%2Cusage%29" :
+                "https://graph.microsoft.com/v1.0/me/drive?$select=quota"
+            let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+            var request = URLRequest(url: URL(string: endpoint)!, timeoutInterval: 10)
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            let session = URLSession(configuration: .ephemeral, delegate: NoQuotaRedirect(), delegateQueue: nil)
+            defer { session.invalidateAndCancel() }
+            let (bytes, response) = try await session.bytes(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200, response.expectedContentLength <= 32768 else { return nil }
+            var data = Data()
+            for try await byte in bytes {
+                guard data.count < 32768 else { return nil }
+                data.append(byte)
+            }
+            let total: Int64?
+            let used: Int64?
+            if google {
+                let quota = try JSONDecoder().decode(GoogleResponse.self, from: data).storageQuota
+                total = Int64(quota.limit ?? "")
+                used = Int64(quota.usage ?? "")
+            } else {
+                let quota = try JSONDecoder().decode(MicrosoftResponse.self, from: data).quota
+                total = quota?.total
+                used = quota?.used
+            }
+            guard let total, let used, total > 0, used >= 0 else { return nil }
+            return CloudQuota(total: total, used: used)
+        } catch { return nil }
+    }
+}
+
 struct GalleryStorageSummary: View {
     let cloud: Bool
     @State private var local: StorageTotals?

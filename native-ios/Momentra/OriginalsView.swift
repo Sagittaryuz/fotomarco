@@ -58,12 +58,9 @@ struct OriginalsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Galeria", selection: $gallerySection) {
-                    Text("Capturas").tag(0)
-                    Text("Celular").tag(1)
-                    Text("Nuvem").tag(2)
-                }.pickerStyle(.segmented).padding()
-                if gallerySection != 2 { GalleryStorageSummary(cloud: false) }
+                GallerySectionTabs(selection: $gallerySection)
+                    .padding(.horizontal, 12).padding(.bottom, 10)
+                GalleryCapacitySummary(section: gallerySection, accounts: archiveAccounts.accounts)
                 if gallerySection == 0 {
                     captures
                 } else if gallerySection == 1 {
@@ -74,6 +71,7 @@ struct OriginalsView: View {
                 }
             }
             .navigationTitle("Galeria")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { reload() }
             .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } }), onDismiss: reload) {

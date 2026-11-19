@@ -61,6 +61,7 @@ struct CameraScreen: View {
     @State private var flashNoticeTask: Task<Void, Never>?
     @State private var selectedRecognizedText: RecognizedTextSelection?
     @State private var showSettings = false
+    @State private var showSupportPanel = false
     @State private var showOriginals = false
     @State private var showMap = false
     @State private var mapLocation: CLLocation?
@@ -145,11 +146,19 @@ struct CameraScreen: View {
                 .accessibilityLabel("Temporizador")
 
                 Spacer(minLength: 4)
-                MomentraWordmark()
-                    .fixedSize()
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.frame(in: .named("MomentraCamera")).maxY
-                    } action: { wordmarkBottom = $0 }
+                Button {
+                    setSupportPanel(true)
+                } label: {
+                    MomentraWordmark()
+                        .fixedSize()
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .named("MomentraCamera")).maxY
+                        } action: { wordmarkBottom = $0 }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Abre o painel de apoio ao aplicativo")
                 Spacer(minLength: 4)
 
                 Button {
@@ -492,7 +501,13 @@ struct CameraScreen: View {
     private var observedCamera: some View {
         cameraContent
         .statusBarHidden()
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport, action: handleHardwareCapture))
+        .overlay(alignment: .top) {
+            if showSupportPanel {
+                MomentraSupportPanel { setSupportPanel(false) }
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showSupportPanel, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
@@ -518,6 +533,7 @@ struct CameraScreen: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .momentraOpenCamera).receive(on: RunLoop.main)) { _ in
             showSettings = false
+            showSupportPanel = false
             showOriginals = false
             showMap = false
             showSettingsImport = false
@@ -996,12 +1012,18 @@ struct CameraScreen: View {
     }
 
     private func showShutterFeedback() {
-        guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel, !reduceMotion else { return }
+        guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel, !showSupportPanel, !reduceMotion else { return }
         shutterFeedbackTask?.cancel()
         shutterOpacity = 0.35
         shutterFeedbackTask = Task {
             do { try await Task.sleep(for: .milliseconds(65)) } catch { return }
             withAnimation(.easeOut(duration: 0.10)) { shutterOpacity = 0 }
+        }
+    }
+
+    private func setSupportPanel(_ visible: Bool) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.84)) {
+            showSupportPanel = visible
         }
     }
 
