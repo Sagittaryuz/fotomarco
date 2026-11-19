@@ -46,7 +46,7 @@ struct CloudArchiveGallery: View {
     }
 }
 
-private struct ArchiveGalleryPhoto: Identifiable {
+fileprivate struct ArchiveGalleryPhoto: Identifiable {
     let id: String
     let name: String
     let date: Date?
@@ -65,6 +65,128 @@ private struct ArchiveGalleryPhoto: Identifiable {
     }
 
     var versionLabel: String { isOriginal ? "Original" : "Com carimbo" }
+
+    func favoriteKey(in destination: CloudDeliveryPlan.Destination) -> String {
+        "\(destination.provider.rawValue)/\(destination.accountHash)/\(id)"
+    }
+}
+
+
+struct GalleryCloudItem: Identifiable {
+    struct Page {
+        let items: [GalleryCloudItem]
+        let nextPage: String?
+        fileprivate let destination: CloudDeliveryPlan.Destination
+        fileprivate let images: ArchiveGalleryImages
+    }
+
+    private let photo: ArchiveGalleryPhoto
+    private let images: ArchiveGalleryImages
+    let destination: CloudDeliveryPlan.Destination
+    let accountLabel: String
+    let trashedAt: Date?
+    let canRestore: Bool
+
+    var id: String { favoriteKey }
+    var favoriteKey: String { photo.favoriteKey(in: destination) }
+    var provider: CloudDeliveryPlan.Provider { destination.provider }
+    var captureID: UUID { photo.captureID }
+    var date: Date? { photo.date }
+    var name: String { photo.name }
+    var isOriginal: Bool { photo.isOriginal }
+
+    func profileTag(lookup: PhotoProfileLookup) -> CaptureProfileTag? {
+        lookup.captures[captureID] ?? photo.profile
+    }
+
+    func captureDate(lookup: PhotoProfileLookup) -> Date? {
+        lookup.dates[captureID] ?? date
+    }
+
+    @MainActor
+    func thumb() -> some View {
+        ArchiveGalleryImage(photo: photo, images: images)
+    }
+
+    @MainActor
+    func fullImage() -> some View {
+        ArchiveGalleryImage(photo: photo, images: images, fullView: true)
+    }
+
+    @MainActor
+    func load() async throws -> PhotoEditorInput {
+        try await images.editorInput(photo)
+    }
+
+    @MainActor
+    func copy(to directory: URL) async throws -> URL {
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        return try await images.copy(photo, to: directory, accessToken: token)
+    }
+
+    @MainActor
+    func moveToTrash() async throws {
+        let journal = try CloudArchiveJournal.documents()
+        guard !journal.hasPendingDelivery(id: captureID) else { throw GalleryError.pendingDelivery }
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        try await images.trash(photo, accessToken: token)
+    }
+
+    @MainActor
+    func restore() async throws {
+        guard canRestore else { throw GalleryError.providerRestore }
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        try await images.drive.restorePhoto(id: photo.id, name: photo.name, accessToken: token)
+    }
+
+    private enum GalleryError: LocalizedError {
+        case pendingDelivery, providerRestore
+
+        var errorDescription: String? {
+            switch self {
+            case .pendingDelivery:
+                return "A foto tem um envio pendente. Aguarde a conclusão antes de movê-la para a lixeira."
+            case .providerRestore:
+                return "Abra a lixeira do provedor para recuperar esse arquivo."
+            }
+        }
+    }
+
+    @MainActor
+    static func load(for account: CloudArchiveAccounts.Account, pageToken: String? = nil,
+                     reusing previousPage: Page? = nil) async throws -> Page {
+        let images = imageLoader(for: account, previousPage: previousPage)
+        let page = try await images.list(pageToken: pageToken)
+        return Page(items: page.items.map {
+            GalleryCloudItem(photo: $0, images: images, destination: account.id, accountLabel: account.label,
+                             trashedAt: nil, canRestore: false)
+        }, nextPage: page.nextPage, destination: account.id, images: images)
+    }
+
+    @MainActor
+    static func loadTrash(for account: CloudArchiveAccounts.Account, pageToken: String? = nil,
+                          reusing previousPage: Page? = nil) async throws -> Page {
+        let images = imageLoader(for: account, previousPage: previousPage)
+        guard account.id.provider == .googleDrive else {
+            return Page(items: [], nextPage: nil, destination: account.id, images: images)
+        }
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: account.id)
+        let result = try await images.drive.listTrash(pageToken: pageToken, accessToken: token)
+        let items = result.files.compactMap { item -> GalleryCloudItem? in
+            guard let photo = ArchiveGalleryImages.googlePhoto(item, trashed: true) else { return nil }
+            return GalleryCloudItem(photo: photo, images: images, destination: account.id, accountLabel: account.label,
+                                    trashedAt: ArchiveGalleryImages.parseDate(item.trashedTime),
+                                    canRestore: item.capabilities?.canUntrash == true)
+        }
+        return Page(items: items, nextPage: result.nextPageToken == pageToken ? nil : result.nextPageToken,
+                    destination: account.id, images: images)
+    }
+
+    @MainActor
+    private static func imageLoader(for account: CloudArchiveAccounts.Account, previousPage: Page?) -> ArchiveGalleryImages {
+        if let previousPage, previousPage.destination == account.id { return previousPage.images }
+        return ArchiveGalleryImages(destination: account.id)
+    }
 }
 
 private struct ArchiveAccountGallery: View {
@@ -263,25 +385,7 @@ private struct ArchiveAccountGallery: View {
         errorMessage = nil
         defer { if current == request { busy = false } }
         do {
-            let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-            let page: (items: [ArchiveGalleryPhoto], nextPage: String?)
-            switch destination.provider {
-            case .googleDrive:
-                let result = try await images.drive.list(pageToken: current.pageToken, accessToken: token)
-                let fractional = ISO8601DateFormatter()
-                fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let standard = ISO8601DateFormatter()
-                page = (result.files.compactMap { item in
-                    guard item.mimeType.hasPrefix("image/"), item.appProperties?["momentraArchivePhoto"] == "1",
-                          item.trashed == false else { return nil }
-                    let date = item.createdTime.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
-                    return ArchiveGalleryPhoto(id: item.id, name: item.name, date: date)
-                }, result.nextPageToken)
-            case .oneDrive:
-                let result = try await OneDriveArchive().list(accessToken: token, nextPage: current.pageToken)
-                page = (result.items.compactMap { ArchiveGalleryPhoto(id: $0.id, name: $0.name, date: $0.date) },
-                        result.nextPage)
-            }
+            let page = try await images.list(pageToken: current.pageToken)
             try Task.checkCancellation()
             guard current == request else { return }
             let existing = current.pageToken == nil ? [] : photos
@@ -309,7 +413,7 @@ private struct ArchiveAccountGallery: View {
 }
 
 @MainActor
-private final class ArchiveGalleryImages: ObservableObject {
+fileprivate final class ArchiveGalleryImages: ObservableObject {
     let drive = GoogleDriveArchive()
     private let destination: CloudDeliveryPlan.Destination
     private let cache = NSCache<NSString, UIImage>()
@@ -320,6 +424,34 @@ private final class ArchiveGalleryImages: ObservableObject {
     init(destination: CloudDeliveryPlan.Destination) {
         self.destination = destination
         cache.totalCostLimit = 32 * 1024 * 1024
+    }
+
+    func list(pageToken: String?) async throws -> (items: [ArchiveGalleryPhoto], nextPage: String?) {
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        let page: (items: [ArchiveGalleryPhoto], nextPage: String?)
+        switch destination.provider {
+        case .googleDrive:
+            let result = try await drive.list(pageToken: pageToken, accessToken: token)
+            page = (result.files.compactMap { Self.googlePhoto($0, trashed: false) }, result.nextPageToken)
+        case .oneDrive:
+            let result = try await OneDriveArchive().list(accessToken: token, nextPage: pageToken)
+            page = (result.items.compactMap { ArchiveGalleryPhoto(id: $0.id, name: $0.name, date: $0.date) },
+                    result.nextPage)
+        }
+        try Task.checkCancellation()
+        return (page.items, page.nextPage == pageToken ? nil : page.nextPage)
+    }
+
+    static func googlePhoto(_ item: GoogleDriveArchive.Item, trashed: Bool) -> ArchiveGalleryPhoto? {
+        guard item.mimeType.hasPrefix("image/"), item.appProperties?["momentraArchivePhoto"] == "1",
+              item.trashed == trashed else { return nil }
+        return ArchiveGalleryPhoto(id: item.id, name: item.name, date: parseDate(item.createdTime))
+    }
+
+    static func parseDate(_ text: String?) -> Date? {
+        guard let text else { return nil }
+        return (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(text))
+            ?? (try? Date.ISO8601FormatStyle().parse(text))
     }
 
     func clear() {
@@ -589,7 +721,7 @@ private struct ArchiveGalleryPager: View {
     }
 
     private func favoriteKey(_ photo: ArchiveGalleryPhoto) -> String {
-        "\(destination.provider.rawValue)/\(destination.accountHash)/\(photo.id)"
+        photo.favoriteKey(in: destination)
     }
 
     private func toggleFavorite(_ photo: ArchiveGalleryPhoto) {

@@ -4,6 +4,7 @@ import GoogleSignIn
 struct GalleryCapacitySummary: View {
     let section: Int
     let accounts: [CloudArchiveAccounts.Account]
+    var compact = false
     @State private var local: StorageTotals?
     @State private var quotas: [CloudDeliveryPlan.Destination: CloudQuota] = [:]
     @State private var loading = Set<CloudDeliveryPlan.Destination>()
@@ -15,14 +16,14 @@ struct GalleryCapacitySummary: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: compact ? 3 : 8) {
             if section != 2 {
-                let name = section == 0 ? "Capturas no iPhone" : "Armazenamento do iPhone"
-                let value = local.map { CloudQuota(total: $0.total, used: section == 0 ? $0.primary : $0.used) }
+                let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
+                let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
                 row(name: name, quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
                     Image(systemName: "photo.on.rectangle.fill")
                         .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
-                        .frame(width: 25, height: 25)
+                        .frame(width: compact ? 17 : 25, height: compact ? 17 : 25)
                         .background(AngularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
                                                     center: .center, startAngle: .zero, endAngle: .degrees(360)), in: Circle())
                 }
@@ -35,7 +36,7 @@ struct GalleryCapacitySummary: View {
                         unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Limite não informado pelo serviço",
                         tint: google ? .green : .blue) {
                         Image(google ? "GoogleDriveMark" : "OneDriveMark")
-                            .renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
+                            .renderingMode(.original).resizable().scaledToFit().frame(width: compact ? 17 : 24, height: compact ? 17 : 24)
                     }
                 }
                 if section == 2 && accounts.isEmpty {
@@ -44,7 +45,7 @@ struct GalleryCapacitySummary: View {
                 }
             }
         }
-        .padding(.horizontal, 14).padding(.bottom, 10)
+        .padding(.horizontal, 14).padding(.bottom, compact ? 4 : 10)
         .task { await refreshLocal() }
         .task(id: accounts.map(\.id)) {
             let destinations = accounts.map(\.id)
@@ -72,7 +73,7 @@ struct GalleryCapacitySummary: View {
             icon().accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(name).font(.caption.weight(.semibold)).lineLimit(1)
+                    Text(name).font((compact ? Font.caption2 : Font.caption).weight(.semibold)).lineLimit(1)
                     Spacer(minLength: 0)
                     if let quota {
                         let fraction = Double(quota.used) / Double(quota.total)
@@ -82,8 +83,10 @@ struct GalleryCapacitySummary: View {
                 }
                 if let quota {
                     ProgressView(value: min(1, Double(quota.used) / Double(quota.total))).tint(tint)
-                    Text("\(format(quota.used)) de \(format(quota.total))")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    if !compact {
+                        Text("\(format(quota.used)) de \(format(quota.total))")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                 } else {
                     Text(unavailable).font(.caption2).foregroundStyle(.secondary)
                 }

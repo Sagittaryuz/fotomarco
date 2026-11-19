@@ -20,6 +20,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     @Binding var columns: Int
     var refreshKey = 0
     var showsSectionHeaders = true
+    var newestScrollRequest: Int? = nil
     let tile: (Item) -> Tile
     let open: (Item) -> Void
     var longPress: ((Item) -> Void)? = nil
@@ -68,6 +69,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         view.isEditing = selecting
         if changed { coordinator.rebuildIndex(); view.collectionViewLayout.invalidateLayout(); view.reloadData() }
         coordinator.synchronizeSelection()
+        if let request = newestScrollRequest { coordinator.scrollToLastIfRequested(request) }
     }
 
     static func dismantleUIView(_ uiView: UICollectionView, coordinator: Coordinator) {
@@ -86,6 +88,19 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         private var orderedPaths: [IndexPath] = []
         private var orderedIDs: [Item.ID] = []
         private var pathOffsets: [IndexPath: Int] = [:]
+        private var scrolledRequest: Int?
+
+        func scrollToLastIfRequested(_ request: Int) {
+            guard scrolledRequest != request, let collection, let path = orderedPaths.last else { return }
+            scrolledRequest = request
+            DispatchQueue.main.async { [weak self, weak collection] in
+                guard let self, let collection, self.parent.newestScrollRequest == request,
+                      collection.numberOfSections > path.section,
+                      collection.numberOfItems(inSection: path.section) > path.item else { return }
+                collection.layoutIfNeeded()
+                collection.scrollToItem(at: path, at: .bottom, animated: false)
+            }
+        }
 
         init(_ parent: GalleryGrid) { self.parent = parent; super.init(); rebuildIndex() }
         func rebuildIndex() {
