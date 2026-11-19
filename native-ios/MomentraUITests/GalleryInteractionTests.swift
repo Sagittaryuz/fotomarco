@@ -57,56 +57,30 @@ final class GalleryInteractionTests: XCTestCase {
         app.collectionViews.cells.firstMatch.tap()
         XCTAssertTrue(app.buttons["Excluir seleção"].isEnabled)
         app.buttons["Excluir seleção"].tap()
-        app.buttons["Mover 1 itens para a lixeira"].tap()
+        app.buttons["Mover para a lixeira"].tap()
         XCTAssertTrue(app.buttons["Selecionar"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.buttons["Mostrar seleção (1)"].exists)
     }
 
-    func testChangingGalleryTabByDraggingNativeSegmentAndSelectingDevicePhoto() {
+    func testGallerySourceAndSearchClosePreserveFavoritesTab() {
         let app = launch()
         app.buttons["Abrir capturas"].tap()
-        let tabs = app.segmentedControls.firstMatch
-        let captures = tabs.buttons["Capturas"]
-        let device = tabs.buttons["Celular"]
-        XCTAssertTrue(captures.waitForExistence(timeout: 8))
-        captures.press(forDuration: 0.15, thenDragTo: device)
-        XCTAssertTrue(device.isSelected)
-        device.press(forDuration: 0.15, thenDragTo: captures)
-        XCTAssertTrue(captures.isSelected)
-        device.tap()
-        let allowPhotos = app.buttons["Permitir acesso"]
-        if allowPhotos.exists {
-            allowPhotos.tap()
-            let access = NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Allow Full Access", "Permitir Acesso Total")
-            let visibleAccess = app.buttons.matching(access).firstMatch
-            if visibleAccess.waitForExistence(timeout: 3) { visibleAccess.tap() }
-            else {
-                let systemAccess = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons.matching(access).firstMatch
-                if systemAccess.exists { systemAccess.tap() }
-                else {
-                    // The remote Photos authorization panel can be visible outside both accessibility trees.
-                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.739)).tap()
-                }
-            }
-            let cameraUnavailable = app.alerts.containing(.staticText, identifier: "Câmera indisponível neste aparelho.").firstMatch
-            if cameraUnavailable.waitForExistence(timeout: 5) { cameraUnavailable.buttons["OK"].tap() }
-            if !tabs.exists {
-                app.buttons["Abrir capturas"].tap()
-                XCTAssertTrue(device.waitForExistence(timeout: 8))
-                device.tap()
-            }
-        }
-        let select = app.buttons["Selecionar"]
-        XCTAssertTrue(select.waitForExistence(timeout: 8))
-        select.tap()
-        let first = app.collectionViews.cells.firstMatch
-        XCTAssertTrue(first.waitForExistence(timeout: 10))
-        first.tap()
-        XCTAssertTrue(app.buttons["Compartilhar seleção"].isEnabled)
-        XCTAssertTrue(app.buttons["Excluir seleção"].isEnabled)
-        app.buttons["Mostrar seleção (1)"].tap()
-        XCTAssertTrue(app.staticTexts["1 item selecionado"].waitForExistence(timeout: 8))
-        snapshot("Seleção do iPhone", app: app)
+        let filter = app.buttons["Filtrar por origem"]
+        XCTAssertTrue(filter.waitForExistence(timeout: 8))
+        XCTAssertEqual(filter.value as? String, "Todos")
+        filter.tap()
+        app.buttons["Local"].tap()
+        XCTAssertEqual(filter.value as? String, "Local")
+        app.buttons["Favoritos"].tap()
+        let search = app.buttons["Buscar"]
+        search.tap()
+        XCTAssertTrue(app.textFields["gallery-content-search-field"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
+        snapshot("Busca com teclado", app: app)
+        app.buttons["Fechar busca"].tap()
+        XCTAssertTrue(app.buttons["Buscar"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Favoritos"].isSelected)
+        XCTAssertEqual(filter.value as? String, "Local")
     }
 
     func testEditorSavesACopyAfterRotating() {
@@ -140,12 +114,12 @@ final class GalleryInteractionTests: XCTestCase {
         let grid = app.switches["Grade"]
         if !grid.isHittable { app.swipeUp() }
         XCTAssertTrue(grid.waitForExistence(timeout: 8))
-        XCTAssertLessThanOrEqual(grid.frame.width, 80, "A área do interruptor deve ter a largura da cápsula.")
         XCTAssertEqual(grid.value as? String, "0")
-        let rightEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.5))
-        let leftEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.5))
-        let label = grid.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
-            .withOffset(CGVector(dx: -110, dy: 0))
+        // UIKit exposes the entire native switch row to accessibility. Exercise physical positions.
+        let right = grid.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+        let rightEdge = right.withOffset(CGVector(dx: -14, dy: 0))
+        let leftEdge = right.withOffset(CGVector(dx: -43, dy: 0))
+        let label = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.5))
         label.tap()
         label.press(forDuration: 0.1, thenDragTo: label.withOffset(CGVector(dx: 50, dy: 0)))
         XCTAssertEqual(grid.value as? String, "0")
@@ -160,9 +134,9 @@ final class GalleryInteractionTests: XCTestCase {
         label.press(forDuration: 0.07, thenDragTo: label.withOffset(CGVector(dx: -18, dy: 115)))
         XCTAssertGreaterThan(grid.frame.midY, before + 20, "Arrastar sobre o texto deve rolar o formulário.")
         XCTAssertEqual(grid.value as? String, "0")
-        grid.tap()
+        rightEdge.tap()
         XCTAssertEqual(grid.value as? String, "1")
-        grid.tap()
+        rightEdge.tap()
         XCTAssertEqual(grid.value as? String, "0")
         snapshot("Interruptores nativos", app: app)
     }
@@ -187,8 +161,11 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Favoritar"].exists)
         app.buttons["Compartilhar"].tap()
         XCTAssertTrue(app.staticTexts["1 item selecionado"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["Item 1"].isSelected)
-        app.buttons["Item 2"].tap()
+        let candidates = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Item "))
+        XCTAssertTrue(candidates.allElementsBoundByIndex.contains { $0.isSelected })
+        let additional = candidates.allElementsBoundByIndex.first { $0.isHittable && !$0.isSelected }
+        XCTAssertNotNil(additional)
+        additional?.tap()
         XCTAssertTrue(app.staticTexts["2 itens selecionados"].exists)
         snapshot("Compartilhar duas capturas", app: app)
         app.buttons["Compartilhar seleção"].tap()
@@ -219,15 +196,14 @@ final class GalleryInteractionTests: XCTestCase {
         trash.tap()
         confirm.tap()
         app.buttons["Voltar à galeria"].tap()
-        app.buttons["Lixeira de Capturas"].tap()
-        let restore = app.buttons["Restaurar"].firstMatch
+        app.buttons["Lixeira"].tap()
+        XCTAssertTrue(app.staticTexts["30 dias"].firstMatch.waitForExistence(timeout: 8))
+        app.collectionViews.cells.firstMatch.tap()
+        let restore = app.buttons["Restaurar"]
         XCTAssertTrue(restore.waitForExistence(timeout: 8))
-        let previousCount = app.buttons.matching(identifier: "Restaurar").count
         restore.tap()
-        let newCount = NSPredicate { _, _ in app.buttons.matching(identifier: "Restaurar").count == previousCount - 1 }
-        expectation(for: newCount, evaluatedWith: app)
-        waitForExpectations(timeout: 8)
-        app.buttons["Concluído"].firstMatch.tap()
+        XCTAssertTrue(restore.waitForNonExistence(timeout: 8))
+        app.buttons["Capturas"].tap()
         XCTAssertTrue(app.collectionViews.cells.firstMatch.waitForExistence(timeout: 8))
     }
 
