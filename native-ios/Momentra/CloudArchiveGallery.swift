@@ -5,6 +5,7 @@ struct CloudArchiveGallery: View {
     @ObservedObject var accounts: CloudArchiveAccounts
     let profileLookup: PhotoProfileLookup
     @ObservedObject var stampProfiles: StampProfilesStore
+    let returnToCamera: () -> Void
 
     private enum Source: Hashable {
         case account(CloudDeliveryPlan.Destination)
@@ -33,7 +34,8 @@ struct CloudArchiveGallery: View {
 
             switch source {
             case .account(let destination):
-                ArchiveAccountGallery(destination: destination, profileLookup: profileLookup, stampProfiles: stampProfiles)
+                ArchiveAccountGallery(destination: destination, profileLookup: profileLookup, stampProfiles: stampProfiles,
+                                      returnToCamera: returnToCamera)
                     .id(destination)
             case .none:
                 ContentUnavailableView("Nenhuma conta de armazenamento", systemImage: "cloud",
@@ -74,6 +76,7 @@ private struct ArchiveAccountGallery: View {
     let destination: CloudDeliveryPlan.Destination
     let profileLookup: PhotoProfileLookup
     @ObservedObject var stampProfiles: StampProfilesStore
+    let returnToCamera: () -> Void
     @StateObject private var images: ArchiveGalleryImages
     @State private var photos: [ArchiveGalleryPhoto] = []
     @State private var nextPage: String?
@@ -85,6 +88,7 @@ private struct ArchiveAccountGallery: View {
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
     @State private var openPhoto: ArchiveGalleryPhoto?
+    @State private var leavingForCamera = false
     @State private var quickShare: ArchiveGalleryPhoto?
     @State private var showingSelection = false
     @State private var confirmingDelete = false
@@ -93,10 +97,11 @@ private struct ArchiveAccountGallery: View {
     @State private var actionError: String?
 
     init(destination: CloudDeliveryPlan.Destination, profileLookup: PhotoProfileLookup,
-         stampProfiles: StampProfilesStore) {
+         stampProfiles: StampProfilesStore, returnToCamera: @escaping () -> Void) {
         self.destination = destination
         self.profileLookup = profileLookup
         self.stampProfiles = stampProfiles
+        self.returnToCamera = returnToCamera
         _images = StateObject(wrappedValue: ArchiveGalleryImages(destination: destination))
     }
 
@@ -177,9 +182,20 @@ private struct ArchiveAccountGallery: View {
             }
         }
         .task(id: currentRequest) { await load(currentRequest) }
-        .sheet(item: $openPhoto) { photo in
+        .fullScreenCover(item: $openPhoto, onDismiss: {
+            if leavingForCamera {
+                leavingForCamera = false
+                returnToCamera()
+            }
+        }) { photo in
             ArchiveGalleryPager(items: groups.flatMap(\.items), initialID: photo.id, images: images,
-                                stampProfiles: stampProfiles.profiles)
+                                stampProfiles: stampProfiles.profiles, destination: destination,
+                                returnToCamera: { leavingForCamera = true; openPhoto = nil },
+                                didTrash: { id in
+                photos.removeAll { $0.id == id }
+                selectedIDs.remove(id)
+                request = ListRequest(pageToken: nil)
+            })
         }
         .fullScreenCover(item: $quickShare) { photo in
             GalleryQuickShare(load: { try await images.editorInput(photo) })
@@ -206,11 +222,7 @@ private struct ArchiveAccountGallery: View {
             do {
                 let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
                 share = try await GalleryShareBatch.prepare(items) { photo, directory in
-                    let downloaded = try await images.download(photo, accessToken: token)
-                    defer { try? FileManager.default.removeItem(at: downloaded) }
-                    let target = directory.appendingPathComponent(photo.name)
-                    try FileManager.default.moveItem(at: downloaded, to: target)
-                    return target
+                    try await images.copy(photo, to: directory, accessToken: token)
                 }
             } catch { actionError = "Não foi possível baixar todos os arquivos selecionados para compartilhar." }
         }
@@ -228,10 +240,7 @@ private struct ArchiveAccountGallery: View {
                 var removed: Set<String> = []
                 for photo in items where !journal.hasPendingDelivery(id: photo.captureID) {
                     do {
-                        switch destination.provider {
-                        case .googleDrive: try await images.drive.trashPhoto(id: photo.id, name: photo.name, accessToken: token)
-                        case .oneDrive: try await OneDriveArchive().trashPhoto(id: photo.id, name: photo.name, accessToken: token)
-                        }
+                        try await images.trash(photo, accessToken: token)
                         removed.insert(photo.id)
                     } catch { continue }
                 }
@@ -322,6 +331,21 @@ private final class ArchiveGalleryImages: ObservableObject {
         switch destination.provider {
         case .googleDrive: try await drive.downloadFile(id: photo.id, accessToken: accessToken)
         case .oneDrive: try await OneDriveArchive().download(id: photo.id, accessToken: accessToken)
+        }
+    }
+
+    func copy(_ photo: ArchiveGalleryPhoto, to directory: URL, accessToken: String) async throws -> URL {
+        let downloaded = try await download(photo, accessToken: accessToken)
+        defer { try? FileManager.default.removeItem(at: downloaded) }
+        let target = directory.appendingPathComponent(photo.name)
+        try FileManager.default.moveItem(at: downloaded, to: target)
+        return target
+    }
+
+    func trash(_ photo: ArchiveGalleryPhoto, accessToken: String) async throws {
+        switch destination.provider {
+        case .googleDrive: try await drive.trashPhoto(id: photo.id, name: photo.name, accessToken: accessToken)
+        case .oneDrive: try await OneDriveArchive().trashPhoto(id: photo.id, name: photo.name, accessToken: accessToken)
         }
     }
 
@@ -417,31 +441,51 @@ private struct ArchiveGalleryImage: View {
 }
 
 private struct ArchiveGalleryPager: View {
-    let items: [ArchiveGalleryPhoto]
+    private enum Panel: String, Identifiable {
+        case overview, share, information, editing
+        var id: Self { self }
+    }
+
     let images: ArchiveGalleryImages
     let stampProfiles: [StampProfile]
+    let destination: CloudDeliveryPlan.Destination
+    let returnToCamera: () -> Void
+    let didTrash: (String) -> Void
+    @AppStorage("native.gallery.favoriteCloudKeys") private var storedFavorites = Data()
+    @State private var items: [ArchiveGalleryPhoto]
     @State private var selection: String
-    @State private var editing: ArchiveGalleryPhoto?
-    @State private var savedCopy = false
-    @State private var showSavedCopy = false
+    @State private var panel: Panel?
+    @State private var updating = false
+    @State private var message: String?
     @Environment(\.dismiss) private var dismiss
 
-    init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages, stampProfiles: [StampProfile]) {
-        self.items = items
+    init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages, stampProfiles: [StampProfile],
+         destination: CloudDeliveryPlan.Destination, returnToCamera: @escaping () -> Void,
+         didTrash: @escaping (String) -> Void) {
         self.images = images
         self.stampProfiles = stampProfiles
+        self.destination = destination
+        self.returnToCamera = returnToCamera
+        self.didTrash = didTrash
+        _items = State(initialValue: items)
         _selection = State(initialValue: initialID)
     }
 
+    private var provider: String { destination.provider == .googleDrive ? "Google Drive" : "OneDrive" }
+
     var body: some View {
         let index = items.firstIndex { $0.id == selection }
+        let current = index.map { items[$0] }
         VStack(spacing: 0) {
-            GalleryDetailHeader(date: index.flatMap { items[$0].date }, position: (index ?? 0) + 1,
-                                count: items.count, close: { dismiss() }) {
-                if let index {
-                    Button { editing = items[index] } label: {
-                        Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44).modifier(GalleryControlSurface())
-                    }.accessibilityLabel("Editar foto").accessibilityHint(items[index].versionLabel)
+            GalleryDetailHeader(date: current?.date, position: (index ?? 0) + 1,
+                                count: items.count, close: { dismiss() }, overview: { panel = .overview }) {
+                if current != nil {
+                    Menu {
+                        Button("Informações da foto", systemImage: "info.circle") { panel = .information }
+                        Button("Editar ou adicionar carimbo", systemImage: "slider.horizontal.3") { panel = .editing }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 44, height: 44).modifier(GalleryControlSurface())
+                    }.accessibilityLabel("Mais opções")
                 }
             }
             TabView(selection: $selection) {
@@ -458,14 +502,123 @@ private struct ArchiveGalleryPager: View {
             GalleryFilmstrip(items: items, selection: $selection) { photo in
                 ArchiveGalleryImage(photo: photo, images: images)
             }
+            if let current { controls(current) }
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .presentationDragIndicator(.hidden)
-        .sheet(item: $editing, onDismiss: { if savedCopy { showSavedCopy = true } }) { photo in
-            MomentraPhotoEditor(load: { try await images.editorInput(photo) }, date: photo.date,
-                                profile: photo.profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
+        .modifier(GalleryCameraSwipe(action: { if !updating { returnToCamera() } }))
+        .sheet(item: $panel) { route in
+            if let current { sheet(route, current: current) }
         }
-        .alert("Cópia salva em Capturas", isPresented: $showSavedCopy) { Button("OK") { savedCopy = false } }
+        .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
+                                                set: { if !$0 && panel == nil { message = nil } })) {
+            Button("OK") { message = nil }
+        } message: { Text(message ?? "") }
+    }
+
+    private func controls(_ photo: ArchiveGalleryPhoto) -> some View {
+        let favorite = favorites.contains(favoriteKey(photo))
+        return HStack(spacing: 10) {
+            Button { panel = .share } label: { GalleryShareIcon() }
+                .accessibilityLabel("Compartilhar")
+            Spacer(minLength: 4)
+            HStack(spacing: 2) {
+                button(favorite ? "heart.fill" : "heart",
+                       label: favorite ? "Remover dos favoritos" : "Favoritar",
+                       tint: favorite ? .yellow : .primary) { toggleFavorite(photo) }
+                button("info.circle", label: "Informações") { panel = .information }
+                button("slider.horizontal.3", label: "Editar foto") { panel = .editing }
+            }
+            .padding(.horizontal, 3)
+            .modifier(GalleryControlSurface())
+            Spacer(minLength: 4)
+            GalleryTrashButton(label: "Excluir foto",
+                               message: "A foto vai para a lixeira desta conta do \(provider). Você pode recuperá-la por lá.") {
+                trash(photo)
+            }
+        }
+        .disabled(updating)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14).padding(.vertical, 7)
+    }
+
+    private func button(_ icon: String, label: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.body.weight(.semibold)).foregroundStyle(tint)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }.accessibilityLabel(label)
+    }
+
+    @ViewBuilder
+    private func sheet(_ route: Panel, current: ArchiveGalleryPhoto) -> some View {
+        switch route {
+        case .overview:
+            GalleryDetailGrid(items: items, choose: {
+                selection = $0.id
+                panel = nil
+            }) { ArchiveGalleryImage(photo: $0, images: images) }
+        case .share:
+            GalleryShareComposer(items: items, current: current, copy: { photo, directory in
+                let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+                return try await images.copy(photo, to: directory, accessToken: token)
+            }) { ArchiveGalleryImage(photo: $0, images: images) }
+        case .information:
+            NavigationStack {
+                Form {
+                    LabeledContent("Origem", value: provider)
+                    LabeledContent("Versão", value: current.versionLabel)
+                    if let date = current.date {
+                        LabeledContent("Data", value: date.formatted(date: .abbreviated, time: .shortened))
+                    }
+                    if let profile = current.profile, !profile.name.isEmpty {
+                        LabeledContent("Perfil", value: profile.name)
+                    }
+                }
+                .navigationTitle("Informações")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Concluído") { panel = nil } }
+            }
+        case .editing:
+            MomentraPhotoEditor(load: { try await images.editorInput(current) }, date: current.date,
+                                profile: current.profile, stampProfiles: stampProfiles) { _ in message = "Cópia salva em Capturas." }
+        }
+    }
+
+    private var favorites: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: storedFavorites)) ?? []
+    }
+
+    private func favoriteKey(_ photo: ArchiveGalleryPhoto) -> String {
+        "\(destination.provider.rawValue)/\(destination.accountHash)/\(photo.id)"
+    }
+
+    private func toggleFavorite(_ photo: ArchiveGalleryPhoto) {
+        var keys = favorites
+        let key = favoriteKey(photo)
+        if !keys.insert(key).inserted { keys.remove(key) }
+        if let data = try? JSONEncoder().encode(keys) { storedFavorites = data }
+    }
+
+    private func trash(_ photo: ArchiveGalleryPhoto) {
+        guard !updating else { return }
+        updating = true
+        Task {
+            defer { updating = false }
+            do {
+                let journal = try CloudArchiveJournal.documents()
+                let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+                guard !journal.hasPendingDelivery(id: photo.captureID) else {
+                    message = "A foto tem um envio pendente. Aguarde a conclusão antes de movê-la para a lixeira."
+                    return
+                }
+                try await images.trash(photo, accessToken: token)
+                didTrash(photo.id)
+                if let index = items.firstIndex(where: { $0.id == photo.id }) {
+                    items.remove(at: index)
+                    if items.isEmpty { dismiss() }
+                    else if selection == photo.id { selection = items[min(index, items.count - 1)].id }
+                }
+            } catch { message = "Não foi possível mover a foto para a lixeira do \(provider)." }
+        }
     }
 }

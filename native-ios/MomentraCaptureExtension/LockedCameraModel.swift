@@ -81,6 +81,14 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
 
     func updateCaptureRotation(_ angle: CGFloat) { queue.async { self.captureRotation = angle } }
 
+    func focus(at point: CGPoint, device: AVCaptureDevice, completion: @escaping (Bool) -> Void) {
+        queue.async {
+            let accepted = self.session.isRunning && !self.session.isInterrupted &&
+                self.device === device && CameraPointFocus.apply(point: point, to: device)
+            DispatchQueue.main.async { completion(accepted) }
+        }
+    }
+
     func setZoom(_ value: CGFloat) {
         queue.async {
             guard let device = self.device, let factor = self.scale?.deviceFactor(for: value) else { return }
@@ -195,58 +203,5 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         }) { success, _ in
             if !success { DispatchQueue.main.async { self.error = "A foto está em Capturas, mas não foi possível salvá-la no Fotos." } }
         }
-    }
-}
-
-struct LockedCameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
-    let device: AVCaptureDevice?
-    let onCaptureRotation: (CGFloat) -> Void
-    func makeUIView(context: Context) -> LockedPreviewView {
-        let view = LockedPreviewView()
-        view.preview.session = session
-        view.preview.videoGravity = .resizeAspectFill
-        view.update(device: device, onCaptureRotation: onCaptureRotation)
-        return view
-    }
-    func updateUIView(_ view: LockedPreviewView, context: Context) {
-        view.update(device: device, onCaptureRotation: onCaptureRotation)
-    }
-}
-
-final class LockedPreviewView: UIView {
-    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-    var preview: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
-    private weak var currentDevice: AVCaptureDevice?
-    private var coordinator: AVCaptureDevice.RotationCoordinator?
-    private var previewObservation: NSKeyValueObservation?
-    private var captureObservation: NSKeyValueObservation?
-    private var previewRotation: CGFloat = 0
-    private var onCaptureRotation: ((CGFloat) -> Void)?
-
-    func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void) {
-        self.onCaptureRotation = onCaptureRotation
-        guard currentDevice !== device else { applyRotation(); return }
-        currentDevice = device
-        previewObservation = nil
-        captureObservation = nil
-        coordinator = nil
-        guard let device else { return }
-        let rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: preview)
-        coordinator = rotation
-        previewObservation = rotation.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] rotation, _ in
-            self?.previewRotation = rotation.videoRotationAngleForHorizonLevelPreview
-            self?.applyRotation()
-        }
-        captureObservation = rotation.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.initial, .new]) { [weak self] rotation, _ in
-            self?.onCaptureRotation?(rotation.videoRotationAngleForHorizonLevelCapture)
-        }
-    }
-
-    override func layoutSubviews() { super.layoutSubviews(); applyRotation() }
-
-    private func applyRotation() {
-        guard let connection = preview.connection, connection.isVideoRotationAngleSupported(previewRotation) else { return }
-        connection.videoRotationAngle = previewRotation
     }
 }

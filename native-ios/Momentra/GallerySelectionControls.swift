@@ -137,3 +137,94 @@ final class GalleryShareBatch: Identifiable {
         func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
     }
 }
+
+struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
+    let items: [Item]
+    let current: Item
+    let copy: (Item, URL) async throws -> URL
+    let tile: (Item) -> Tile
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: Set<Item.ID>
+    @State private var batch: GalleryShareBatch?
+    @State private var preparation: Task<Void, Never>?
+    @State private var failed = false
+
+    init(items: [Item], current: Item, copy: @escaping (Item, URL) async throws -> URL,
+         @ViewBuilder tile: @escaping (Item) -> Tile) {
+        self.items = items
+        self.current = current
+        self.copy = copy
+        self.tile = tile
+        _selected = State(initialValue: [current.id])
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text(selected.count == 1 ? "1 item selecionado" : "\(selected.count) itens selecionados")
+                    .font(.title2.bold()).padding(.horizontal, 20)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        LazyHStack(spacing: 12) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                Button {
+                                    if !selected.insert(item.id).inserted { selected.remove(item.id) }
+                                } label: {
+                                    tile(item).frame(width: 136, height: 180).clipped()
+                                        .clipShape(.rect(cornerRadius: 16))
+                                        .overlay(alignment: .bottomTrailing) {
+                                            Image(systemName: selected.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                                .font(.title2.weight(.semibold))
+                                                .foregroundStyle(selected.contains(item.id) ? .yellow : .white)
+                                                .padding(5).background(.black.opacity(0.75), in: Circle()).padding(8)
+                                        }
+                                }
+                                .buttonStyle(.plain).id(item.id)
+                                .accessibilityLabel("Item \(index + 1)")
+                                .accessibilityAddTraits(selected.contains(item.id) ? .isSelected : [])
+                            }
+                        }.padding(.horizontal, 20)
+                    }
+                    .scrollIndicators(.hidden).frame(height: 182)
+                    .onAppear { proxy.scrollTo(current.id, anchor: .center) }
+                }
+                Button(action: prepare) {
+                    HStack {
+                        if preparation != nil { ProgressView() }
+                        Label("Compartilhar seleção", systemImage: "square.and.arrow.up")
+                    }
+                    .font(.headline).frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent).tint(.yellow).foregroundStyle(.black)
+                .disabled(selected.isEmpty || preparation != nil).padding(.horizontal, 20)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 14)
+            .navigationTitle("Compartilhar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Fechar") { preparation?.cancel(); dismiss() } }
+            .sheet(item: $batch) { GalleryShareBatch.Sheet(batch: $0) }
+            .alert("Não foi possível preparar os itens", isPresented: $failed) {
+                Button("OK", role: .cancel) {}
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium, .large])
+        .interactiveDismissDisabled(preparation != nil)
+    }
+
+    private func prepare() {
+        guard preparation == nil else { return }
+        let chosen = items.filter { selected.contains($0.id) }
+        guard !chosen.isEmpty else { return }
+        preparation = Task {
+            defer { preparation = nil }
+            do {
+                let prepared = try await GalleryShareBatch.prepare(chosen, copy: copy)
+                if !Task.isCancelled { batch = prepared }
+            } catch {
+                if !Task.isCancelled { failed = true }
+            }
+        }
+    }
+}

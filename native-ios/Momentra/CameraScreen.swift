@@ -233,15 +233,16 @@ struct CameraScreen: View {
             ZStack {
                 Color.black.ignoresSafeArea().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
-                CameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
+                CameraPreview(session: camera.session, device: camera.activeDevice,
+                              onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus, onTap: dismissZoomDial)
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
-                    .onTapGesture { dismissZoomDial() }
                     .overlay {
                         if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .separate {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date))
                             }
+                            .allowsHitTesting(false)
                         }
                     }
                     .position(x: previewFrame.midX, y: previewFrame.midY)
@@ -612,7 +613,7 @@ struct CameraScreen: View {
     var body: some View {
         moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
-        .sheet(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
+        .sheet(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles, returnToCamera: { showOriginals = false }) }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {

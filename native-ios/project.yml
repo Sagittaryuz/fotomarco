@@ -54,6 +54,7 @@ targets:
     deploymentTarget: '18.0'
     sources:
       - MomentraCaptureExtension
+      - path: Momentra/CameraPreview.swift
       - path: Momentra/MomentraCaptureIntent.swift
       - path: Momentra/CloudDeliveryPlan.swift
       - path: Momentra/LockedCaptureMetadata.swift

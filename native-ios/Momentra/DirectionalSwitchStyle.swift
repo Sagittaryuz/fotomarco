@@ -2,19 +2,19 @@ import SwiftUI
 
 /// The label and the space beside it remain available for scrolling the form.
 struct DirectionalSwitchStyle: ToggleStyle {
+    var showsLabel = true
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.layoutDirection) private var layoutDirection
-    @Environment(\.labelsVisibility) private var labelsVisibility
 
     func makeBody(configuration: Configuration) -> some View {
-        if labelsVisibility == .hidden {
-            capsule(configuration)
-        } else {
+        if showsLabel {
             HStack {
                 configuration.label.accessibilityHidden(true)
                 Spacer(minLength: 12)
                 capsule(configuration)
             }
+        } else {
+            capsule(configuration)
         }
     }
 
