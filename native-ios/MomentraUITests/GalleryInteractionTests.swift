@@ -57,7 +57,7 @@ final class GalleryInteractionTests: XCTestCase {
         app.collectionViews.cells.firstMatch.tap()
         XCTAssertTrue(app.buttons["Excluir seleção"].isEnabled)
         app.buttons["Excluir seleção"].tap()
-        app.buttons["Excluir 1 itens"].tap()
+        app.buttons["Mover 1 itens para a lixeira"].tap()
         XCTAssertTrue(app.buttons["Selecionar"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.buttons["Mostrar seleção (1)"].exists)
     }
@@ -178,6 +178,65 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(activities.waitForExistence(timeout: 12))
         XCTAssertTrue(activities.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "Copy", "Copiar")).firstMatch.exists)
         snapshot("Compartilhamento rápido", app: app)
+    }
+
+    func testViewerAddsNearbyPhotosToNativeShare() {
+        let app = launch()
+        openCapture(app)
+        XCTAssertTrue(app.buttons["Mostrar grade"].exists)
+        XCTAssertTrue(app.buttons["Favoritar"].exists)
+        app.buttons["Compartilhar"].tap()
+        XCTAssertTrue(app.staticTexts["1 item selecionado"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Item 1"].isSelected)
+        app.buttons["Item 2"].tap()
+        XCTAssertTrue(app.staticTexts["2 itens selecionados"].exists)
+        snapshot("Compartilhar duas capturas", app: app)
+        app.buttons["Compartilhar seleção"].tap()
+        XCTAssertTrue(app.collectionViews["activityCollectionView"].waitForExistence(timeout: 12))
+    }
+
+    func testViewerSwipeDownReturnsDirectlyToCamera() {
+        let app = launch()
+        openCapture(app)
+        let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.48, dy: 0.35))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.48, dy: 0.72))
+        origin.press(forDuration: 0.08, thenDragTo: end)
+        XCTAssertTrue(app.buttons["Voltar à galeria"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Abrir capturas"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Abrir capturas"].isHittable)
+    }
+
+    func testViewerTrashCanBeDismissedAndCaptureRestored() {
+        let app = launch()
+        openCapture(app)
+        let trash = app.buttons["Excluir captura"]
+        trash.tap()
+        let confirm = app.buttons["Mover para a lixeira"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 8))
+        snapshot("Confirmação da lixeira", app: app)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.25)).tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        trash.tap()
+        confirm.tap()
+        app.buttons["Voltar à galeria"].tap()
+        app.buttons["Lixeira de Capturas"].tap()
+        let restore = app.buttons["Restaurar"].firstMatch
+        XCTAssertTrue(restore.waitForExistence(timeout: 8))
+        let previousCount = app.buttons.matching(identifier: "Restaurar").count
+        restore.tap()
+        let newCount = NSPredicate { _, _ in app.buttons.matching(identifier: "Restaurar").count == previousCount - 1 }
+        expectation(for: newCount, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        app.buttons["Concluído"].firstMatch.tap()
+        XCTAssertTrue(app.collectionViews.cells.firstMatch.waitForExistence(timeout: 8))
+    }
+
+    private func openCapture(_ app: XCUIApplication) {
+        app.buttons["Abrir capturas"].tap()
+        let cell = app.collectionViews.cells.firstMatch
+        XCTAssertTrue(cell.waitForExistence(timeout: 8))
+        cell.tap()
+        XCTAssertTrue(app.buttons["Compartilhar"].waitForExistence(timeout: 8))
     }
 
     private func snapshot(_ name: String, app: XCUIApplication) {
