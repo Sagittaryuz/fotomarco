@@ -18,7 +18,7 @@ final class GalleryInteractionTests: XCTestCase {
     func testGalleryCatalogMeasurement() {
         let app = launch()
         var milliseconds: [Double] = []
-        var counts: [Int] = []
+        var counts: [String] = []
         for _ in 0..<3 {
             let entry = app.buttons["Abrir capturas"]
             XCTAssertTrue(entry.waitForExistence(timeout: 8))
@@ -27,7 +27,9 @@ final class GalleryInteractionTests: XCTestCase {
             let grid = app.collectionViews["momentra-gallery-grid"]
             XCTAssertTrue(grid.waitForExistence(timeout: 8))
             milliseconds.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
-            counts.append(grid.cells.count)
+            let counter = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "[0-9.,]+ itens?")).firstMatch
+            XCTAssertTrue(counter.waitForExistence(timeout: 5))
+            counts.append(counter.label)
             app.buttons["Fechar galeria"].tap()
         }
         let measurements = "Itens: \(counts)\nAbrir até grade pronta (ms): \(milliseconds.map { Int($0.rounded()) })"

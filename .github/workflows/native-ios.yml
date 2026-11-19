@@ -53,6 +53,15 @@ jobs:
             sips -Z "$((256 + number * 8))" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" --out "$RUNNER_TEMP/camera-roll/$number.jpg" >/dev/null
           done
           xcrun simctl addmedia "$DEVICE" "$RUNNER_TEMP"/camera-roll/*.jpg
+          DATABASE=$(find "$HOME/Library/Developer/CoreSimulator/Devices/$DEVICE/data" -name Photos.sqlite -print -quit 2>/dev/null)
+          if [ -n "$DATABASE" ]; then
+            for attempt in {1..10}; do
+              COUNT=$(sqlite3 -readonly "$DATABASE" "select count(*) from ZASSET" 2>/dev/null || true)
+              if [ "${COUNT:-0}" -ge 24 ]; then break; fi
+              sleep 2
+            done
+            echo "PhotoKit simulator fixture rows: ${COUNT:-unknown}"
+          fi
       - name: Exercise gallery and support panel
         working-directory: native-ios
         env:
