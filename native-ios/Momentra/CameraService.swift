@@ -213,6 +213,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
     }
 
+    func focus(at point: CGPoint, device: AVCaptureDevice, completion: @escaping (Bool) -> Void) {
+        queue.async {
+            let accepted = self.session.isRunning && !self.session.isInterrupted &&
+                self.input?.device === device && CameraPointFocus.apply(point: point, to: device)
+            DispatchQueue.main.async { completion(accepted) }
+        }
+    }
+
     private func applyCaptureRotation(to connection: AVCaptureConnection?) {
         guard let connection, connection.isVideoRotationAngleSupported(captureRotation) else { return }
         connection.videoRotationAngle = captureRotation
@@ -608,64 +616,6 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             case .microphone: return "Microfone indisponível para gravação."
             }
         }
-    }
-}
-
-struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
-    let device: AVCaptureDevice?
-    let onCaptureRotation: (CGFloat) -> Void
-    func makeUIView(context: Context) -> PreviewView {
-        let view = PreviewView()
-        view.previewLayer.session = session
-        view.previewLayer.videoGravity = .resizeAspectFill
-        view.update(device: device, onCaptureRotation: onCaptureRotation)
-        return view
-    }
-    func updateUIView(_ view: PreviewView, context: Context) {
-        view.previewLayer.session = session
-        view.update(device: device, onCaptureRotation: onCaptureRotation)
-    }
-}
-
-final class PreviewView: UIView {
-    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-    var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
-    private weak var currentDevice: AVCaptureDevice?
-    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
-    private var previewObservation: NSKeyValueObservation?
-    private var captureObservation: NSKeyValueObservation?
-    private var currentPreviewRotation: CGFloat = 0
-    private var onCaptureRotation: ((CGFloat) -> Void)?
-
-    func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void) {
-        self.onCaptureRotation = onCaptureRotation
-        guard currentDevice !== device else { applyPreviewRotation(); return }
-        currentDevice = device
-        previewObservation = nil
-        captureObservation = nil
-        rotationCoordinator = nil
-        guard let device else { return }
-        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
-        rotationCoordinator = coordinator
-        previewObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] coordinator, _ in
-            self?.currentPreviewRotation = coordinator.videoRotationAngleForHorizonLevelPreview
-            self?.applyPreviewRotation()
-        }
-        captureObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.initial, .new]) { [weak self] coordinator, _ in
-            self?.onCaptureRotation?(coordinator.videoRotationAngleForHorizonLevelCapture)
-        }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        applyPreviewRotation()
-    }
-
-    private func applyPreviewRotation() {
-        guard let connection = previewLayer.connection,
-              connection.isVideoRotationAngleSupported(currentPreviewRotation) else { return }
-        connection.videoRotationAngle = currentPreviewRotation
     }
 }
 

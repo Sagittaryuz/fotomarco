@@ -26,7 +26,8 @@ private struct LockedCameraScreen: View {
         let previewSize = aspect.fittedSize(in: geometry.size) ?? .zero
         ZStack {
             Color.black.ignoresSafeArea()
-            LockedCameraPreview(session: camera.session, device: camera.activeDevice, onCaptureRotation: camera.updateCaptureRotation)
+            CameraPreview(session: camera.session, device: camera.activeDevice,
+                          onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus)
                 .frame(width: previewSize.width, height: previewSize.height).clipped()
             VStack {
                 HStack {

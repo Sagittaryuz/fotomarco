@@ -105,7 +105,6 @@ struct StampLayoutEditor: View {
             }
             elementEditor.padding(10).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         }.padding(.horizontal, 12).padding(.vertical, 6)
-        .toggleStyle(DirectionalSwitchStyle())
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
@@ -152,6 +151,7 @@ struct StampLayoutEditor: View {
                         Picker("Visualização", selection: layout.mapStyle) { Text("Mapa").tag(StampLayout.MapAppearance.map); Text("Satélite").tag(StampLayout.MapAppearance.satellite) }
                     }
                     Toggle("Mostrar mapa", isOn: flag(\.showsMap)).labelsHidden()
+                        .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 case .information:
                     Menu("Opções") {
                         Picker("Fonte", selection: layout.fontStyle) { Text("Sistema").tag("system"); Text("Serifada").tag("serif"); Text("Monoespaçada").tag("mono") }
@@ -163,12 +163,14 @@ struct StampLayoutEditor: View {
                         Button("Observação") { draftNote = store.selected.note; editNote = true }
                     }
                     Toggle("Mostrar informações", isOn: flag(\.showsInformation)).labelsHidden()
+                        .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 case .logo:
                     Menu("Escolher") {
                         PhotosPicker(selection: $selectedLogo, matching: .images) { Label("Fotos", systemImage: "photo") }
                         Button(action: importLogo) { Label("Arquivos", systemImage: "folder") }
                     }.disabled(logoLoading)
                     Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
+                        .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 }
             }
             if layout.wrappedValue.mode == .separate {
