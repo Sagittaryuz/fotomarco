@@ -105,6 +105,7 @@ struct StampLayoutEditor: View {
             }
             elementEditor.padding(10).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         }.padding(.horizontal, 12).padding(.vertical, 6)
+        .toggleStyle(DirectionalSwitchStyle())
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
