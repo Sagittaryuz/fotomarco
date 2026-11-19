@@ -15,7 +15,8 @@ struct SlidingCapsule<Labels: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let inset: CGFloat = 7
+            let inset: CGFloat = 3
+            let knobHeight = max(0, height - 2 * inset)
             let usable = max(0, geometry.size.width - inset * 2)
             let knob = usable / 2
             let travel = max(0, usable - knob)
@@ -24,22 +25,21 @@ struct SlidingCapsule<Labels: View>: View {
             let proposed = drag.map { $0 > 0 } ?? selectedRight
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.13))
-                if #available(iOS 26, *) {
-                    GlassEffectContainer {
-                        Capsule().fill(.white.opacity(0.07))
-                            .frame(width: knob, height: height - 6)
-                            .glassEffect(.regular.interactive(isEnabled && !reduceMotion), in: Capsule())
-                            .scaleEffect(x: drag == nil || reduceMotion ? 1 : 1.08,
-                                         y: drag == nil || reduceMotion ? 1 : 1.15)
-                            .offset(x: offset + inset)
+                Group {
+                    if #available(iOS 26, *) {
+                        GlassEffectContainer {
+                            Capsule().fill(.white.opacity(0.07))
+                                .frame(width: knob, height: knobHeight)
+                                .glassEffect(.regular.interactive(isEnabled && !reduceMotion), in: Capsule())
+                        }
+                    } else {
+                        Capsule().fill(.white.opacity(0.23))
+                            .frame(width: knob, height: knobHeight)
                     }
-                } else {
-                    Capsule().fill(.white.opacity(0.23))
-                        .frame(width: knob, height: height - 6)
-                        .scaleEffect(x: drag == nil || reduceMotion ? 1 : 1.08,
-                                     y: drag == nil || reduceMotion ? 1 : 1.15)
-                        .offset(x: offset + inset)
                 }
+                .scaleEffect(x: drag == nil || reduceMotion ? 1 : 1.08,
+                             y: drag == nil || reduceMotion ? 1 : 1.15)
+                .offset(x: offset + inset)
                 labels(proposed)
                     .padding(.horizontal, inset)
             }

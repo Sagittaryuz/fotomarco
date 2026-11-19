@@ -49,6 +49,20 @@ struct ContinuousCameraZoom {
     }
 }
 
+/// Each pinch scales the current zoom and can reverse immediately at either limit.
+struct PreviewPinchZoom {
+    private(set) var value: CGFloat
+    private var previousMagnification: CGFloat = 1
+
+    init(value: CGFloat) { self.value = value }
+
+    mutating func move(to magnification: CGFloat, range: ClosedRange<CGFloat>) {
+        guard magnification.isFinite, magnification > 0 else { return }
+        value = min(range.upperBound, max(range.lowerBound, value * (magnification / previousMagnification)))
+        previousMagnification = magnification
+    }
+}
+
 /// Vertical movement while holding the shutter maps smoothly to optical zoom.
 enum QuickCaptureZoom {
     static func value(start: CGFloat, verticalTranslation: CGFloat, range: ClosedRange<CGFloat>) -> CGFloat {

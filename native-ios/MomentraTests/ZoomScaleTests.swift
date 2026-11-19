@@ -23,6 +23,23 @@ final class ZoomScaleTests: XCTestCase {
         XCTAssertNil(ZoomScale(wideFactor: 0, minimum: 1, maximum: 4).deviceFactor(for: 1))
     }
 
+    func testPinchZoomAccumulatesAndReversesAtEitherLimit() {
+        let range: ClosedRange<CGFloat> = 0.5...4
+        var pinch = PreviewPinchZoom(value: 2)
+        pinch.move(to: 1.1, range: range)
+        XCTAssertEqual(pinch.value, 2.2, accuracy: 0.001)
+        pinch.move(to: 3, range: range)
+        XCTAssertEqual(pinch.value, 4)
+        pinch.move(to: 2.4, range: range)
+        XCTAssertEqual(pinch.value, 3.2, accuracy: 0.001)
+        pinch.move(to: 0.2, range: range)
+        XCTAssertEqual(pinch.value, 0.5)
+        pinch.move(to: 0.4, range: range)
+        XCTAssertEqual(pinch.value, 1, accuracy: 0.001)
+        pinch.move(to: .nan, range: range)
+        XCTAssertEqual(pinch.value, 1, accuracy: 0.001)
+    }
+
     func testQuickCaptureDragZoomIsSmoothAndBounded() {
         XCTAssertEqual(QuickCaptureZoom.value(start: 1, verticalTranslation: -180, range: 0.5...8), 2, accuracy: 0.001)
         XCTAssertEqual(QuickCaptureZoom.value(start: 1, verticalTranslation: 180, range: 0.5...8), 0.5, accuracy: 0.001)

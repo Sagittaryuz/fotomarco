@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 enum CloudThumbnailCache {
     enum Failure: Error { case missingSource, invalidImage, encoding }
 
-    static func latestCapturePreview(root: URL) -> CGImage? {
+    static func latestCapturePreview(root: URL) -> (image: CGImage, file: URL)? {
         let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
         let candidates = ["Processed", "CloudThumbnails"].flatMap { name in
             let directory = root.appendingPathComponent(name, isDirectory: true)
@@ -23,7 +23,7 @@ enum CloudThumbnailCache {
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: 160
-            ] as CFDictionary) { return thumbnail }
+            ] as CFDictionary) { return (thumbnail, url) }
         }
         return nil
     }

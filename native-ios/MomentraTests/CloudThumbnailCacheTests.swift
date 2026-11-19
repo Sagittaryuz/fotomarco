@@ -17,6 +17,7 @@ final class CloudThumbnailCacheTests: XCTestCase {
         try FileManager.default.removeItem(at: processed)
         let invalid = try ProcessedFileStore.save(Data([0]), root: root)
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(30)], ofItemAtPath: invalid.path)
-        XCTAssertNotNil(CloudThumbnailCache.latestCapturePreview(root: root))
+        let selected = try XCTUnwrap(CloudThumbnailCache.latestCapturePreview(root: root))
+        XCTAssertEqual(selected.file, root.appendingPathComponent("CloudThumbnails").appendingPathComponent(id.uuidString + ".jpg"))
     }
 }

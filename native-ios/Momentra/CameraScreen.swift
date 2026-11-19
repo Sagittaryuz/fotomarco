@@ -74,7 +74,10 @@ struct CameraScreen: View {
     @State private var selectedLogo: PhotosPickerItem?
     @State private var logoLoading = false
     @State private var logo: UIImage?
-    @State private var galleryThumbnail: UIImage?
+    @State private var galleryThumbnail: CameraService.CapturePreview?
+    @State private var cameraShareTask: Task<Void, Never>?
+    @State private var cameraShare: GalleryShareBatch?
+    @State private var cameraShareFailed = false
     @State private var galleryThumbnailRevision = UUID()
     @State private var galleryThumbnailFrame: CGRect = .zero
     @State private var wordmarkBottom: CGFloat = 0
@@ -87,8 +90,9 @@ struct CameraScreen: View {
 
     private struct PhotoFlight: Identifiable {
         let id = UUID()
-        let image: UIImage
+        let capture: CameraService.CapturePreview
     }
+    @State private var pinchZoom: PreviewPinchZoom?
     @State private var showingZoomDial = false
     @State private var zoomDismissTask: Task<Void, Never>?
     @State private var zoomDrag: ContinuousCameraZoom?
@@ -234,7 +238,8 @@ struct CameraScreen: View {
                 Color.black.ignoresSafeArea().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
                 CameraPreview(session: camera.session, device: camera.activeDevice,
-                              onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus, onTap: dismissZoomDial)
+                              onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus,
+                              onTap: dismissZoomDial, onPinch: updatePreviewPinch)
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
                     .overlay {
@@ -287,7 +292,7 @@ struct CameraScreen: View {
                             .frame(height: 132).transition(.move(edge: .bottom))
                     } else if !camera.zoomOptions.isEmpty {
                         HStack(spacing: 0) {
-                            if camera.isRecording && !camera.zoomOptions.contains(where: { abs($0 - camera.zoomFactor) < 0.01 }) {
+                            if !camera.zoomOptions.contains(where: { abs($0 - camera.zoomFactor) < 0.01 }) {
                                 Text(String(format: "%.1f×", Double(camera.zoomFactor)).replacingOccurrences(of: ".", with: ","))
                                     .font(.subheadline.weight(.medium)).foregroundStyle(.yellow)
                                     .frame(width: 48, height: 44)
@@ -436,7 +441,7 @@ struct CameraScreen: View {
                         Button { openGallery() } label: {
                             Group {
                                 if let galleryThumbnail {
-                                    Image(uiImage: galleryThumbnail).resizable().scaledToFill()
+                                    Image(uiImage: galleryThumbnail.image).resizable().scaledToFill()
                                 } else {
                                     Image(systemName: "photo.on.rectangle").font(.title2)
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -447,8 +452,15 @@ struct CameraScreen: View {
                                     proxy.frame(in: .named("MomentraCamera"))
                                 } action: { galleryThumbnailFrame = $0 }
                         }
-                        .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
+                        .buttonStyle(CameraGalleryButtonStyle(share: shareCameraThumbnail))
+                        .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing ||
+                                  countdown > 0 || cameraShareTask != nil || cameraShare != nil)
                         .accessibilityLabel("Abrir capturas")
+                        .accessibilityActions {
+                            if galleryThumbnail != nil {
+                                Button("Compartilhar foto exibida", action: shareCameraThumbnail)
+                            }
+                        }
                         Spacer(minLength: 0)
                         captureModePicker
                         Spacer(minLength: 0)
@@ -477,9 +489,9 @@ struct CameraScreen: View {
                         }
                 }
                 if let flight = photoFlight {
-                    let frame = CaptureMotion.aspectFit(flight.image.size,
+                    let frame = CaptureMotion.aspectFit(flight.capture.image.size,
                                                         in: photoLanded ? galleryThumbnailFrame : previewFrame)
-                    Image(uiImage: flight.image).resizable()
+                    Image(uiImage: flight.capture.image).resizable()
                         .frame(width: frame.width, height: frame.height)
                         .clipShape(RoundedRectangle(cornerRadius: photoLanded ? 8 : 0))
                         .position(x: frame.midX, y: frame.midY)
@@ -514,7 +526,7 @@ struct CameraScreen: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showSupportPanel, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear {
             if !addressPreviewMigrated {
@@ -558,6 +570,8 @@ struct CameraScreen: View {
             showSettings = false
             showSupportPanel = false
             showOriginals = false
+            cameraShareTask?.cancel()
+            cameraShare = nil
             showMap = false
             showSettingsImport = false
             showLogoImport = false
@@ -639,6 +653,12 @@ struct CameraScreen: View {
         moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
+        .sheet(item: $cameraShare) { $0.sheet {} }
+        .alert("Não foi possível preparar a foto", isPresented: $cameraShareFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Confira se o arquivo ainda está disponível no iPhone ou na conta de armazenamento.")
+        }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {
@@ -659,6 +679,54 @@ struct CameraScreen: View {
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
+    }
+
+    private func shareCameraThumbnail() {
+        guard let thumbnail = galleryThumbnail, cameraSurfaceVisible, cameraShareTask == nil, cameraShare == nil,
+              !camera.isRecording, !camera.isFinishingRecording, !camera.isCapturing, countdown == 0 else { return }
+        cameraShareTask = Task {
+            defer { cameraShareTask = nil }
+            do {
+                let batch = try await GalleryShareBatch.prepare([thumbnail.file], copy: copyCameraThumbnail)
+                try Task.checkCancellation()
+                cameraShare = batch
+            } catch {
+                if !Task.isCancelled { cameraShareFailed = true }
+            }
+        }
+    }
+
+    private func copyCameraThumbnail(_ file: URL, to directory: URL) async throws -> URL {
+        let root = file.deletingLastPathComponent().deletingLastPathComponent()
+        let journal = CloudArchiveJournal(root: root)
+        let localFile = root.appendingPathComponent("Processed", isDirectory: true)
+            .appendingPathComponent(file.lastPathComponent)
+        let copied = try await Task.detached(priority: .userInitiated) { () -> URL? in
+            try journal.serializeCleanup {
+                guard FileManager.default.fileExists(atPath: localFile.path) else { return nil }
+                let copy = directory.appendingPathComponent(localFile.lastPathComponent)
+                try FileManager.default.copyItem(at: localFile, to: copy)
+                return copy
+            }
+        }.value
+        if let copied { return copied }
+
+        guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let receipt = try await Task.detached(priority: .userInitiated) { try journal.read(id) }.value
+        var lastError: Error = CocoaError(.fileNoSuchFile)
+        for delivery in receipt.plan.deliveries where delivery.phase == .verified {
+            try Task.checkCancellation()
+            guard let remoteID = delivery.stampedID,
+                  let account = archiveAccounts.accounts.first(where: { $0.id == delivery.destination }) else { continue }
+            let entry = CloudGalleryCatalog.Entry(id: remoteID, name: receipt.remoteName(stamped: true),
+                                                  date: receipt.createdAt, revision: nil)
+            guard let item = GalleryCloudItem.cachedPage([entry], for: account).items.first else { continue }
+            do { return try await item.copy(to: directory) }
+            catch { lastError = error }
+        }
+        throw lastError
     }
 
     private func openGallery() {
@@ -843,6 +911,20 @@ struct CameraScreen: View {
                     Button("OK") { importMessage = nil }
                 } message: { Text(importMessage ?? "") }
             }
+    }
+
+    private func updatePreviewPinch(_ magnification: CGFloat?) {
+        guard let magnification, camera.ready, !camera.isSwitching, !camera.isCapturing,
+              !camera.isFinishingRecording, camera.zoomRange.lowerBound < camera.zoomRange.upperBound else {
+            pinchZoom = nil
+            return
+        }
+        if pinchZoom == nil { dismissZoomDial() }
+        var zoom = pinchZoom ?? PreviewPinchZoom(value: camera.zoomFactor)
+        let previous = zoom.value
+        zoom.move(to: magnification, range: camera.zoomRange)
+        pinchZoom = zoom
+        if zoom.value != previous { camera.setZoom(zoom.value) }
     }
 
     private func zoomEditingChanged(_ editing: Bool) {
@@ -1049,19 +1131,19 @@ struct CameraScreen: View {
         }
     }
 
-    private func showCapturedPhoto(_ image: UIImage) {
+    private func showCapturedPhoto(_ capture: CameraService.CapturePreview) {
         finishPhotoFlight()
         galleryThumbnailRevision = UUID()
         guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel,
               !reduceMotion, !galleryThumbnailFrame.isEmpty else {
-            galleryThumbnail = image
+            galleryThumbnail = capture
             return
         }
-        photoFlight = PhotoFlight(image: image)
+        photoFlight = PhotoFlight(capture: capture)
     }
 
     private func finishPhotoFlight() {
-        if let flight = photoFlight { galleryThumbnail = flight.image }
+        if let flight = photoFlight { galleryThumbnail = flight.capture }
         photoFlight = nil
         photoLanded = false
         shutterOpacity = 0
@@ -1071,12 +1153,12 @@ struct CameraScreen: View {
         let revision = UUID()
         galleryThumbnailRevision = revision
         Task {
-            let image = await Task.detached(priority: .utility) { () -> UIImage? in
+            let capture = await Task.detached(priority: .utility) { () -> CameraService.CapturePreview? in
                 guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false),
                       let source = CloudThumbnailCache.latestCapturePreview(root: root) else { return nil }
-                return UIImage(cgImage: source)
+                return .init(image: UIImage(cgImage: source.image), file: source.file)
             }.value
-            if galleryThumbnailRevision == revision, photoFlight == nil { galleryThumbnail = image }
+            if galleryThumbnailRevision == revision, photoFlight == nil { galleryThumbnail = capture }
         }
     }
 
@@ -1101,7 +1183,7 @@ struct CameraScreen: View {
 
     private var cameraSurfaceVisible: Bool {
         scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSupportPanel &&
-            !showAspectPanel && !showSettingsImport && !showLogoImport && selectedRecognizedText == nil
+            !showAspectPanel && !showSettingsImport && !showLogoImport && selectedRecognizedText == nil && cameraShare == nil
     }
 
     private struct RecognitionDemand: Equatable {

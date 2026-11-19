@@ -54,7 +54,12 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     @Published private(set) var errorMessage: String?
     @Published private(set) var ready = false
     @Published private(set) var isCapturing = false
-    let completedPhoto = PassthroughSubject<UIImage, Never>()
+    struct CapturePreview {
+        let image: UIImage
+        let file: URL
+    }
+
+    let completedPhoto = PassthroughSubject<CapturePreview, Never>()
     @Published private(set) var isSwitching = false
     @Published private(set) var recordingStartedAt: ContinuousClock.Instant?
     var isRecording: Bool { recordingStartedAt != nil }
@@ -595,8 +600,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                kCGImageSourceCreateThumbnailWithTransform: true,
                kCGImageSourceThumbnailMaxPixelSize: 1200
            ] as CFDictionary) {
-            let image = UIImage(cgImage: preview)
-            DispatchQueue.main.async { self.completedPhoto.send(image) }
+            let capture = CapturePreview(image: UIImage(cgImage: preview), file: processed)
+            DispatchQueue.main.async { self.completedPhoto.send(capture) }
         }
         if archiveReady {
             CloudBackgroundScheduler.scheduleIfNeeded()

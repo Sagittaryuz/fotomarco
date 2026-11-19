@@ -7,6 +7,8 @@ struct CameraPreview: View {
     let onCaptureRotation: (CGFloat) -> Void
     let focus: (CGPoint, AVCaptureDevice, @escaping (Bool) -> Void) -> Void
     var onTap: () -> Void = {}
+    var onPinch: ((CGFloat?) -> Void)?
+    @GestureState private var pinching = false
     @State private var bridge = CameraPreviewBridge()
     @State private var marker: FocusMarker?
     @State private var focusRequest = UUID()
@@ -23,6 +25,12 @@ struct CameraPreview: View {
                 Rectangle().fill(.clear)
                     .contentShape(Rectangle())
                     .onTapGesture(coordinateSpace: .local, perform: tapPreview)
+                    .simultaneousGesture(
+                        MagnifyGesture(minimumScaleDelta: 0.01)
+                            .updating($pinching) { _, active, _ in active = true }
+                            .onChanged { onPinch?($0.magnification) },
+                        including: onPinch == nil ? .none : .all
+                    )
                     .accessibilityHidden(true)
             }
             .overlay {
@@ -41,6 +49,9 @@ struct CameraPreview: View {
                 do { try await Task.sleep(for: .seconds(1.25)) } catch { return }
                 guard self.marker?.id == marker.id else { return }
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { self.marker = nil }
+            }
+            .onChange(of: pinching) { _, active in
+                if !active { onPinch?(nil) }
             }
             .onChange(of: device?.uniqueID) { _, _ in
                 focusRequest = UUID()
