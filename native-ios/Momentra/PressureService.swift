@@ -16,14 +16,18 @@ final class PressureService: ObservableObject {
     @Published private(set) var available = CMAltimeter.isRelativeAltitudeAvailable()
     private let altimeter = CMAltimeter()
     private var generation = 0
+    private var tracking = false
 
     func setEnabled(_ enabled: Bool) {
+        let canTrack = enabled && CMAltimeter.isRelativeAltitudeAvailable()
+        guard canTrack != tracking else { return }
+        tracking = canTrack
         generation += 1
         let current = generation
         altimeter.stopRelativeAltitudeUpdates()
         sample = nil
         available = CMAltimeter.isRelativeAltitudeAvailable()
-        guard enabled, available else { return }
+        guard tracking else { return }
         altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
             let uptime = ProcessInfo.processInfo.systemUptime
             let sampleUptime = data?.timestamp

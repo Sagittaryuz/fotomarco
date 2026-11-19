@@ -275,7 +275,7 @@ struct CameraScreen: View {
                         Spacer(minLength: 8)
                     }
                     if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
-                    if !camera.isRecording {
+                    if recognitionDemand.qr || recognitionDemand.text {
                         LiveRecognitionBanner(engine: camera.recognition) { text in
                             selectedRecognizedText = RecognizedTextSelection(text: text)
                         }
@@ -509,10 +509,26 @@ struct CameraScreen: View {
         }
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showSupportPanel, action: handleHardwareCapture))
         .task { await updates.check() }
-        .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
-        .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onAppear {
+            if !addressPreviewMigrated {
+                var layout = stampProfiles.selected.layout
+                layout.showsAddress = true
+                stampProfiles.setLayout(layout)
+                addressEnabled = true
+                addressPreviewMigrated = true
+            }
+            refreshGalleryThumbnail()
+            camera.setRecognition(qr: recognitionDemand.qr, text: recognitionDemand.text)
+            camera.start()
+            location.setEnabled(gpsEnabled)
+            pressure.setEnabled(wantsPressure)
+            refreshLogo()
+            refreshAddress()
+            publishCaptureContext()
+        }
+        .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
             else { finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
@@ -546,8 +562,10 @@ struct CameraScreen: View {
 
     private var trackedCamera: some View {
         locationObservedCamera
-        .onChange(of: scanQR) { _, enabled in camera.recognition.setEnabled(qr: enabled, text: scanText) }
-        .onChange(of: scanText) { _, enabled in camera.recognition.setEnabled(qr: scanQR, text: enabled) }
+        .onChange(of: recognitionDemand) { _, demand in
+            camera.setRecognition(qr: demand.qr, text: demand.text)
+        }
+        .onChange(of: wantsPressure) { _, enabled in pressure.setEnabled(enabled) }
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
@@ -1066,6 +1084,25 @@ struct CameraScreen: View {
         var controller = scene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
         while let presented = controller?.presentedViewController { controller = presented }
         return controller
+    }
+
+    private var cameraSurfaceVisible: Bool {
+        scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSupportPanel &&
+            !showAspectPanel && !showSettingsImport && !showLogoImport && selectedRecognizedText == nil
+    }
+
+    private struct RecognitionDemand: Equatable {
+        let qr: Bool
+        let text: Bool
+    }
+
+    private var recognitionDemand: RecognitionDemand {
+        let scanning = cameraSurfaceVisible && !camera.isRecording && !camera.isFinishingRecording
+        return RecognitionDemand(qr: scanning && scanQR, text: scanning && scanText)
+    }
+
+    private var wantsPressure: Bool {
+        cameraSurfaceVisible && stampEnabled && stampProfiles.selected.layout.showsInformation
     }
 
     private var canConsultForecast: Bool {

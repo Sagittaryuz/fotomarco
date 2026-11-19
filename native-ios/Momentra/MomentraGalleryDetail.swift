@@ -106,7 +106,7 @@ struct MomentraGalleryDetail: View {
                 Button { panel = .stamp } label: { Label("Adicionar carimbo", systemImage: "seal") }
                 Button { panel = .text } label: { Label("Ler texto", systemImage: "text.viewfinder") }
             }
-        } label: { icon("ellipsis").modifier(GalleryControlSurface()) }
+        } label: { icon("ellipsis").modifier(GalleryControlSurface(rounded: true)) }
             .accessibilityLabel("Mais opções")
             .disabled(busy)
     }
@@ -123,7 +123,7 @@ struct MomentraGalleryDetail: View {
                 grouped("info.circle", label: "Informações") { panel = .information }
                 grouped("slider.horizontal.3", label: "Editar foto") { panel = .edit }.disabled(item.isVideo)
             }
-            .padding(.horizontal, 4).modifier(GalleryControlSurface(interactive: false))
+            .padding(.horizontal, 4).modifier(GalleryControlSurface(rounded: true, interactive: false))
             Spacer(minLength: 1)
             GalleryTrashButton(label: "Excluir captura", message: item.trashMessage) { trash(item) }
                 .disabled(!item.canTrash)
@@ -144,7 +144,7 @@ struct MomentraGalleryDetail: View {
     }
 
     private func button(_ name: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { icon(name).modifier(GalleryControlSurface()) }
+        Button(action: action) { icon(name).modifier(GalleryControlSurface(rounded: true)) }
             .buttonStyle(.plain).accessibilityLabel(label)
     }
 

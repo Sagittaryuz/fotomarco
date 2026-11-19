@@ -12,6 +12,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private let movieOutput = AVCaptureMovieFileOutput()
     private let recognitionOutput = AVCaptureVideoDataOutput()
     let recognition = LiveRecognitionEngine()
+    private var wantsRecognition = false
     private var input: AVCaptureDeviceInput?
     private var microphoneInput: AVCaptureDeviceInput?
     private var configured = false
@@ -92,7 +93,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
         let candidate = try AVCaptureDeviceInput(device: device)
         session.beginConfiguration()
-        defer { session.commitConfiguration() }
+        defer {
+            session.commitConfiguration()
+            applyRecognitionDemand()
+        }
         session.sessionPreset = .photo
         guard session.canAddInput(candidate), session.canAddOutput(photoOutput) else { throw CameraError.configuration }
         session.addInput(candidate)
@@ -114,6 +118,20 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private func publishFlashModes(for device: AVCaptureDevice) {
         let modes = device.hasFlash ? photoOutput.supportedFlashModes : [.off]
         DispatchQueue.main.async { self.availableFlashModes = modes }
+    }
+
+    func setRecognition(qr: Bool, text: Bool) {
+        recognition.setEnabled(qr: qr, text: text)
+        queue.async {
+            self.wantsRecognition = qr || text
+            self.applyRecognitionDemand()
+        }
+    }
+
+    private func applyRecognitionDemand() {
+        if let connection = recognitionOutput.connection(with: .video), connection.isEnabled != wantsRecognition {
+            connection.isEnabled = wantsRecognition
+        }
     }
 
     func stop() {
@@ -173,7 +191,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         guard ready, !isCapturing, !isSwitching, !isRecording, !isFinishingRecording else { return }
         isSwitching = true
         queue.async {
-            defer { DispatchQueue.main.async { self.isSwitching = false } }
+            defer {
+                self.applyRecognitionDemand()
+                DispatchQueue.main.async { self.isSwitching = false }
+            }
             guard self.wantsSession, let previous = self.input else { return }
             let position: AVCaptureDevice.Position = previous.device.position == .back ? .front : .back
             guard let device = self.preferredCamera(position: position),

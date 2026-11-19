@@ -16,7 +16,7 @@ struct GalleryCapacitySummary: View {
     }
 
     var body: some View {
-        VStack(spacing: compact ? 3 : 8) {
+        VStack(spacing: compact ? 4 : 8) {
             if section != 2 {
                 let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
                 let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
@@ -45,7 +45,11 @@ struct GalleryCapacitySummary: View {
                 }
             }
         }
-        .padding(.horizontal, 14).padding(.bottom, compact ? 4 : 10)
+        .padding(.horizontal, compact ? 10 : 14).padding(.vertical, compact ? 5 : 0)
+        .background {
+            if compact { RoundedRectangle(cornerRadius: 23).fill(.white.opacity(0.075)) }
+        }
+        .padding(.horizontal, compact ? 13 : 0).padding(.bottom, compact ? 4 : 10)
         .task { await refreshLocal() }
         .task(id: accounts.map(\.id)) {
             let destinations = accounts.map(\.id)
@@ -82,7 +86,14 @@ struct GalleryCapacitySummary: View {
                     }
                 }
                 if let quota {
-                    ProgressView(value: min(1, Double(quota.used) / Double(quota.total))).tint(tint)
+                    GeometryReader { geometry in
+                        let fraction = min(1, max(0, Double(quota.used) / Double(quota.total)))
+                        Capsule().fill(.white.opacity(0.12))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(LinearGradient(colors: [tint.opacity(0.68), tint], startPoint: .leading, endPoint: .trailing))
+                                    .frame(width: geometry.size.width * fraction)
+                            }
+                    }.frame(height: compact ? 4 : 5).accessibilityHidden(true)
                     if !compact {
                         Text("\(format(quota.used)) de \(format(quota.total))")
                             .font(.caption2).foregroundStyle(.secondary)
@@ -92,11 +103,13 @@ struct GalleryCapacitySummary: View {
                 }
             }
         }
+        .padding(.horizontal, compact ? 6 : 0).frame(minHeight: compact ? 24 : nil)
         .accessibilityElement(children: .combine)
     }
 
     private func refreshLocal() async {
-        local = await Task.detached(priority: .utility) { StorageTotals.local() }.value
+        let includeAppBytes = section == 0 && !compact
+        local = await Task.detached(priority: .utility) { StorageTotals.local(includeAppBytes: includeAppBytes) }.value
     }
 
     private func format(_ bytes: Int64) -> String {
@@ -243,12 +256,13 @@ struct StorageTotals {
         self.total = total; self.used = used; self.primary = primary
     }
 
-    static func local() -> StorageTotals? {
+    static func local(includeAppBytes: Bool = true) -> StorageTotals? {
         let root = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
         guard let values = try? root.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]),
               let total = values.volumeTotalCapacity, let free = values.volumeAvailableCapacityForImportantUsage,
               total > 0, free >= 0, free <= Int64(total) else { return nil }
         let used = Int64(total) - free
+        guard includeAppBytes else { return StorageTotals(total: Int64(total), used: used, primary: 0) }
         let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .fileAllocatedSizeKey]
         let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: Array(keys), options: [])
         var appBytes: Int64 = 0

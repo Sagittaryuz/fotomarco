@@ -1,22 +1,87 @@
 import AVFoundation
 import SwiftUI
 
-struct CameraPreview: UIViewRepresentable {
+struct CameraPreview: View {
     let session: AVCaptureSession
     let device: AVCaptureDevice?
     let onCaptureRotation: (CGFloat) -> Void
     let focus: (CGPoint, AVCaptureDevice, @escaping (Bool) -> Void) -> Void
     var onTap: () -> Void = {}
+    @State private var bridge = CameraPreviewBridge()
+    @State private var marker: FocusMarker?
+    @State private var focusRequest = UUID()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private struct FocusMarker: Identifiable {
+        let id = UUID()
+        let point: CGPoint
+    }
+
+    var body: some View {
+        CameraPreviewLayer(session: session, device: device, onCaptureRotation: onCaptureRotation, bridge: bridge)
+            .overlay {
+                Rectangle().fill(.clear)
+                    .contentShape(Rectangle())
+                    .onTapGesture(coordinateSpace: .local, perform: tapPreview)
+                    .accessibilityHidden(true)
+            }
+            .overlay {
+                if let marker {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Color(uiColor: .systemYellow), lineWidth: 1.5)
+                        .frame(width: 68, height: 68)
+                        .position(marker.point)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .clipped()
+            .task(id: marker?.id) {
+                guard let marker else { return }
+                do { try await Task.sleep(for: .seconds(1.25)) } catch { return }
+                guard self.marker?.id == marker.id else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { self.marker = nil }
+            }
+            .onChange(of: device?.uniqueID) { _, _ in
+                focusRequest = UUID()
+                marker = nil
+            }
+    }
+
+    private func tapPreview(at position: CGPoint) {
+        onTap()
+        guard let device, let point = bridge.view?.captureDevicePoint(at: position) else { return }
+        let request = UUID()
+        focusRequest = request
+        focus(point, device) { accepted in
+            guard accepted, focusRequest == request else { return }
+            marker = FocusMarker(point: position)
+        }
+    }
+}
+
+private final class CameraPreviewBridge {
+    weak var view: PreviewView?
+}
+
+private struct CameraPreviewLayer: UIViewRepresentable {
+    let session: AVCaptureSession
+    let device: AVCaptureDevice?
+    let onCaptureRotation: (CGFloat) -> Void
+    let bridge: CameraPreviewBridge
+
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView(frame: .zero)
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
-        view.update(device: device, onCaptureRotation: onCaptureRotation, focus: focus, onTap: onTap)
+        view.update(device: device, onCaptureRotation: onCaptureRotation)
+        bridge.view = view
         return view
     }
+
     func updateUIView(_ view: PreviewView, context: Context) {
-        view.previewLayer.session = session
-        view.update(device: device, onCaptureRotation: onCaptureRotation, focus: focus, onTap: onTap)
+        if view.previewLayer.session !== session { view.previewLayer.session = session }
+        view.update(device: device, onCaptureRotation: onCaptureRotation)
     }
 }
 
@@ -29,35 +94,9 @@ final class PreviewView: UIView {
     private var captureObservation: NSKeyValueObservation?
     private var currentPreviewRotation: CGFloat = 0
     private var onCaptureRotation: ((CGFloat) -> Void)?
-    private var focus: ((CGPoint, AVCaptureDevice, @escaping (Bool) -> Void) -> Void)?
-    private var onTap: (() -> Void)?
-    private let reticle = CAShapeLayer()
-    private var lastFocus = UUID()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        clipsToBounds = true
-        reticle.bounds = CGRect(x: 0, y: 0, width: 68, height: 68)
-        reticle.path = UIBezierPath(roundedRect: reticle.bounds.insetBy(dx: 1, dy: 1), cornerRadius: 4).cgPath
-        reticle.strokeColor = UIColor.systemYellow.cgColor
-        reticle.fillColor = UIColor.clear.cgColor
-        reticle.lineWidth = 1.5
-        reticle.opacity = 0
-        layer.addSublayer(reticle)
-        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapPreview(_:))))
-    }
-
-    required init?(coder: NSCoder) { return nil }
-
-    func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void,
-                focus: @escaping (CGPoint, AVCaptureDevice, @escaping (Bool) -> Void) -> Void,
-                onTap: @escaping () -> Void) {
+    func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void) {
         self.onCaptureRotation = onCaptureRotation
-        self.focus = focus
-        self.onTap = onTap
         guard currentDevice !== device else { applyPreviewRotation(); return }
-        lastFocus = UUID()
-        reticle.removeAllAnimations()
         currentDevice = device
         previewObservation = nil
         captureObservation = nil
@@ -85,46 +124,41 @@ final class PreviewView: UIView {
         connection.videoRotationAngle = currentPreviewRotation
     }
 
-    @objc private func tapPreview(_ sender: UITapGestureRecognizer) {
-        onTap?()
-        let position = sender.location(in: self)
-        guard bounds.contains(position), let device = currentDevice, previewLayer.connection?.isActive == true else { return }
+    func captureDevicePoint(at position: CGPoint) -> CGPoint? {
+        guard bounds.contains(position), previewLayer.connection?.isEnabled == true else { return nil }
         let point = previewLayer.captureDevicePointConverted(fromLayerPoint: position)
-        let request = UUID()
-        lastFocus = request
-        focus?(point, device) { [weak self] accepted in
-            guard let self, self.lastFocus == request, accepted, self.bounds.contains(position) else { return }
-            self.showFocus(at: position)
-        }
-    }
-
-    private func showFocus(at point: CGPoint) {
-        let opacity = CAKeyframeAnimation(keyPath: "opacity")
-        opacity.values = [1, 1, 0]
-        opacity.keyTimes = [0, 0.8, 1]
-        opacity.duration = 1.25
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        reticle.position = point
-        reticle.add(opacity, forKey: "focusFeedback")
-        CATransaction.commit()
+        return CameraPointFocus.isValid(point) ? point : nil
     }
 }
 
 enum CameraPointFocus {
+    static func isValid(_ point: CGPoint) -> Bool {
+        point.x.isFinite && point.y.isFinite && (0...1).contains(point.x) && (0...1).contains(point.y)
+    }
+
+    static func focusMode(pointSupported: Bool, supports: (AVCaptureDevice.FocusMode) -> Bool) -> AVCaptureDevice.FocusMode? {
+        guard pointSupported else { return nil }
+        return [.autoFocus, .continuousAutoFocus].first(where: supports)
+    }
+
+    static func exposureMode(pointSupported: Bool, supports: (AVCaptureDevice.ExposureMode) -> Bool) -> AVCaptureDevice.ExposureMode? {
+        guard pointSupported else { return nil }
+        return [.continuousAutoExposure, .autoExpose].first(where: supports)
+    }
+
     static func apply(point: CGPoint, to device: AVCaptureDevice) -> Bool {
-        guard point.x.isFinite, point.y.isFinite,
-              (0...1).contains(point.x), (0...1).contains(point.y),
-              device.isFocusPointOfInterestSupported else { return false }
-        let mode: AVCaptureDevice.FocusMode = device.isFocusModeSupported(.autoFocus) ? .autoFocus : .continuousAutoFocus
-        guard device.isFocusModeSupported(mode), (try? device.lockForConfiguration()) != nil else { return false }
+        guard isValid(point), (try? device.lockForConfiguration()) != nil else { return false }
         defer { device.unlockForConfiguration() }
-        device.focusPointOfInterest = point
-        device.focusMode = mode
-        if device.isExposurePointOfInterestSupported, device.isExposureModeSupported(.continuousAutoExposure) {
-            device.exposurePointOfInterest = point
-            device.exposureMode = .continuousAutoExposure
+        let focus = focusMode(pointSupported: device.isFocusPointOfInterestSupported, supports: device.isFocusModeSupported)
+        let exposure = exposureMode(pointSupported: device.isExposurePointOfInterestSupported, supports: device.isExposureModeSupported)
+        if let focus {
+            device.focusPointOfInterest = point
+            device.focusMode = focus
         }
-        return true
+        if let exposure {
+            device.exposurePointOfInterest = point
+            device.exposureMode = exposure
+        }
+        return focus != nil || exposure != nil
     }
 }

@@ -17,12 +17,12 @@ struct GallerySelectionBar<Share: View>: View {
                 Text("Mostrar seleção (\(count))").font(.subheadline.weight(.semibold))
                     .lineLimit(1).minimumScaleFactor(0.72)
                     .frame(minHeight: 44).padding(.horizontal, 12)
-                    .modifier(GalleryControlSurface(tint: .yellow))
+                    .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
             }
             Spacer(minLength: 0)
             Button(role: .destructive, action: delete) {
                 Image(systemName: "trash").frame(width: 44, height: 44)
-                    .modifier(GalleryControlSurface(tint: .red))
+                    .modifier(GalleryControlSurface(rounded: true, tint: .red))
             }
             .accessibilityLabel("Excluir seleção")
         }
@@ -37,7 +37,7 @@ struct GallerySelectionBar<Share: View>: View {
 struct GalleryShareIcon: View {
     var body: some View {
         Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
-            .modifier(GalleryControlSurface())
+            .modifier(GalleryControlSurface(rounded: true))
     }
 }
 
@@ -54,7 +54,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
             HStack(spacing: 12) {
                 Button { columns = columns == 3 ? 2 : 3 } label: {
                     Image(systemName: "square.grid.2x2").frame(width: 44, height: 44)
-                        .modifier(GalleryControlSurface())
+                        .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Alterar tamanho das miniaturas")
                 Spacer(minLength: 0)
                 VStack(spacing: 3) {
@@ -65,7 +65,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
                 Spacer(minLength: 0)
                 Button { dismiss() } label: {
                     Image(systemName: "checkmark").font(.body.weight(.bold))
-                        .frame(width: 44, height: 44).modifier(GalleryControlSurface(tint: .yellow))
+                        .frame(width: 44, height: 44).modifier(GalleryControlSurface(rounded: true, tint: .yellow))
                 }.accessibilityLabel("Concluir revisão")
             }
             .buttonStyle(.plain)
@@ -81,7 +81,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
             Button { selected.removeAll() } label: {
                 Text("Desmarcar tudo").font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 18).frame(minHeight: 44)
-                    .modifier(GalleryControlSurface())
+                    .modifier(GalleryControlSurface(rounded: true))
             }
             .buttonStyle(.plain).disabled(selection.isEmpty)
             .opacity(selection.isEmpty ? 0.52 : 1)

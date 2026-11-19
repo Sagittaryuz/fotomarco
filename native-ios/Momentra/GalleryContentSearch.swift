@@ -78,7 +78,7 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
                         }
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .frame(minHeight: 44)
-                        .modifier(GalleryControlSurface())
+                        .modifier(GalleryControlSurface(rounded: true))
                     }
                     .buttonStyle(.plain)
                 }
@@ -157,7 +157,7 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
             }
             .padding(.leading, 14).padding(.trailing, query.isEmpty ? 14 : 0)
             .frame(minHeight: 48)
-            .modifier(GalleryControlSurface(interactive: false))
+            .modifier(GalleryControlSurface(rounded: true, interactive: false))
 
             Button {
                 searchFocused = false
@@ -165,7 +165,7 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
             } label: {
                 Image(systemName: "xmark").font(.body.weight(.semibold))
                     .frame(width: 48, height: 48)
-                    .modifier(GalleryControlSurface())
+                    .modifier(GalleryControlSurface(rounded: true))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Fechar busca")
