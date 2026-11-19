@@ -1,5 +1,7 @@
 # Atualizações do Momentra nativo
 
+> Para a construção, os componentes e o fluxo de produção vigentes, veja o [Guia de desenvolvimento](GUIA-DE-DESENVOLVIMENTO.md). O conteúdo abaixo registra etapas anteriores do projeto.
+
 O app consulta as releases públicas do repositório GitHub. Ele só considera versões estáveis cuja tag siga `native-ios-vMAJOR.MINOR.PATCH` e seja maior que `CFBundleShortVersionString` do aplicativo instalado. Releases em rascunho ou marcadas como pré-lançamento não geram aviso. A versão e o número de compilação são definidos em `project.yml`.
 
 Quando uma versão estiver pronta e houver autorização para disponibilizá-la:

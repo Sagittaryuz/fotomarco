@@ -1,5 +1,7 @@
 # Momentra nativo — desenvolvimento
 
+> Para a construção, os componentes e o fluxo de produção vigentes, veja o [Guia de desenvolvimento](GUIA-DE-DESENVOLVIMENTO.md). O conteúdo abaixo registra etapas anteriores do projeto.
+
 Este diretório é uma migração em andamento para SwiftUI. O projeto Scripting permanece separado e não é substituído automaticamente. Existe um IPA de teste que foi instalado pelo Signulous; a versão nativa ainda não está concluída nem validada para uso definitivo.
 
 ## Evidência no iPhone
