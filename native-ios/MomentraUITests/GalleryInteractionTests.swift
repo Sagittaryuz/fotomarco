@@ -77,9 +77,17 @@ final class GalleryInteractionTests: XCTestCase {
         let allowPhotos = app.buttons["Permitir acesso"]
         if allowPhotos.exists {
             allowPhotos.tap()
-            let permission = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
-                .matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "Full Access", "Acesso Total")).firstMatch
-            if permission.waitForExistence(timeout: 4) { permission.tap() }
+            let access = NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Allow Full Access", "Permitir Acesso Total")
+            let visibleAccess = app.buttons.matching(access).firstMatch
+            if visibleAccess.waitForExistence(timeout: 3) { visibleAccess.tap() }
+            else {
+                let systemAccess = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons.matching(access).firstMatch
+                if systemAccess.exists { systemAccess.tap() }
+                else {
+                    // The remote Photos authorization panel can be visible outside both accessibility trees.
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.739)).tap()
+                }
+            }
         }
         let select = app.buttons["Selecionar"]
         XCTAssertTrue(select.waitForExistence(timeout: 8))
