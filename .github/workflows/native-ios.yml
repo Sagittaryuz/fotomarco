@@ -201,6 +201,12 @@ jobs:
           PYTHON
             exit 0
           fi
+          if [ "$TEST_METHOD" = testVideoEditingOpensAStampedPreviewAndSavesACopy ]; then
+            command -v ffmpeg || brew install ffmpeg
+            mkdir -p "$CONTAINER/Documents/Videos"
+            ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=black:s=640x480:r=15 -t 1 -c:v libx264 -pix_fmt yuv420p "$CONTAINER/Documents/Videos/00000000-0000-0000-0000-000000000099.mov"
+            exit 0
+          fi
           if [ "$TEST_METHOD" = sharing ] || [ "$TEST_METHOD" = cameraExperience ]; then exit 0; fi
           mkdir -p "$RUNNER_TEMP/camera-roll"
           for number in $(seq 1 24); do
@@ -246,7 +252,7 @@ jobs:
           fi
           SKIP_BENCHMARK=()
           if [ -z "$TEST_METHOD" ]; then
-            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch -skip-testing:MomentraUITests/GalleryInteractionTests/testCameraThumbnailSharesOnlyTheDisplayedPhoto -skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryGroupsCopyBadgesOnOneThumbnail -skip-testing:MomentraUITests/GalleryInteractionTests/testRetappingGalleryTabsReturnsToNewestDate -skip-testing:MomentraUITests/GalleryInteractionTests/testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter -skip-testing:MomentraUITests/GalleryInteractionTests/testUpdateBannerChecksAgainAndOpensInstallerDirectly)
+            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch -skip-testing:MomentraUITests/GalleryInteractionTests/testCameraThumbnailSharesOnlyTheDisplayedPhoto -skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryGroupsCopyBadgesOnOneThumbnail -skip-testing:MomentraUITests/GalleryInteractionTests/testRetappingGalleryTabsReturnsToNewestDate -skip-testing:MomentraUITests/GalleryInteractionTests/testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter -skip-testing:MomentraUITests/GalleryInteractionTests/testUpdateBannerChecksAgainAndOpensInstallerDirectly -skip-testing:MomentraUITests/GalleryInteractionTests/testVideoEditingOpensAStampedPreviewAndSavesACopy)
           fi
           xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "${TEST_TARGETS[@]}" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence

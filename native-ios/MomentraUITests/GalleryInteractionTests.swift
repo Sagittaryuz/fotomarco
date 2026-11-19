@@ -163,6 +163,30 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Cancelar"].waitForExistence(timeout: 7))
     }
 
+    func testVideoEditingOpensAStampedPreviewAndSavesACopy() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        let video = grid.cells.element(boundBy: 3)
+        XCTAssertTrue(video.waitForExistence(timeout: 8))
+        video.tap()
+        let edit = app.buttons["Editar vídeo"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 8))
+        edit.tap()
+        XCTAssertTrue(app.navigationBars["Carimbo do vídeo"].waitForExistence(timeout: 8))
+        let save = app.buttons["Salvar cópia com carimbo"]
+        XCTAssertTrue(save.waitForExistence(timeout: 12))
+        XCTAssertTrue(save.isEnabled)
+        snapshot("Prévia do carimbo do vídeo", app: app)
+        save.tap()
+        XCTAssertTrue(save.waitForNonExistence(timeout: 25))
+        XCTAssertTrue(edit.isHittable)
+        edit.tap()
+        XCTAssertTrue(app.navigationBars["Carimbo do vídeo"].waitForExistence(timeout: 8))
+        XCTAssertFalse(save.exists, "Uma cópia já carimbada deve abrir sem reaplicar o carimbo.")
+    }
+
     func testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter() {
         let samples = [("0.5", "meio", "0,5×"), ("1.8", "1", "1,8×"),
                        ("3.6", "2", "3,6×"), ("7.6", "4", "7,6×")]
