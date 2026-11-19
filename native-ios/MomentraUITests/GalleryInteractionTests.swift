@@ -68,6 +68,19 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(sync.waitForNonExistence(timeout: 12))
         XCTAssertEqual(quota.value as? String, "31%")
 
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.isHittable)
+        let top = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.54, dy: 0.18))
+        let bottom = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.54, dy: 0.83))
+        top.press(forDuration: 0.05, thenDragTo: bottom)
+        XCTAssertFalse(sync.exists)
+        bottom.press(forDuration: 0.05, thenDragTo: top)
+        XCTAssertTrue(sync.waitForExistence(timeout: 4), "Continuar arrastando depois da última fileira deve atualizar.")
+        XCTAssertTrue(app.staticTexts["4 itens"].exists)
+        XCTAssertEqual(quota.value as? String, "31%")
+        snapshot("Sincronização puxada pela última fileira", app: app)
+        XCTAssertTrue(sync.waitForNonExistence(timeout: 12))
+
         XCUIDevice.shared.press(.home)
         app.activate()
         openFixtureGallery(app)
