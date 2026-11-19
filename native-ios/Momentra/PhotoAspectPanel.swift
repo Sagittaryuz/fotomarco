@@ -11,8 +11,11 @@ struct PhotoAspectPanel: View {
                 HStack {
                     Button(action: close) {
                         Image(systemName: "chevron.left").font(.headline)
-                            .frame(width: 40, height: 40).background(.black.opacity(0.35), in: Circle())
-                    }.accessibilityLabel("Fechar proporções")
+                            .frame(width: 44, height: 44)
+                            .modifier(GalleryControlSurface(rounded: true))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Fechar proporções")
                     Spacer()
                 }
             }
@@ -27,18 +30,19 @@ struct PhotoAspectPanel: View {
                             Image(systemName: "viewfinder").font(.system(size: 30, weight: .medium))
                             Text(aspect.rawValue).font(.system(size: 10, weight: .semibold))
                         }
-                        .foregroundStyle(selection == aspect.rawValue ? Color.yellow : Color.white)
                         .frame(maxWidth: .infinity).frame(height: 48)
-                        .contentShape(Rectangle())
+                        .contentShape(Capsule())
+                        .modifier(GalleryControlSurface(rounded: true, tint: selection == aspect.rawValue ? .yellow : .white))
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Proporção \(aspect.rawValue)")
                     .accessibilityAddTraits(selection == aspect.rawValue ? .isSelected : [])
                 }
-            }.padding(.horizontal, 36)
+            }
         }
         .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 24)
-        .background(Color(white: 0.11).opacity(0.94), in: RoundedRectangle(cornerRadius: 40))
-        .overlay(RoundedRectangle(cornerRadius: 40).stroke(.white.opacity(0.18), lineWidth: 1))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .environment(\.colorScheme, .dark)
         .padding(.horizontal, 8).padding(.bottom, 6)
     }
 }

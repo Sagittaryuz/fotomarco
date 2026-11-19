@@ -46,13 +46,15 @@ struct StampLayoutEditor: View {
                     let corner = corners[index]
                     let selected = point.wrappedValue == corner.1
                     Button { point.wrappedValue = corner.1 } label: {
-                        RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.blue : Color.secondary, lineWidth: selected ? 2 : 1)
+                        RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.secondary, lineWidth: selected ? 2 : 1)
                             .frame(width: 36, height: 42)
                             .overlay(alignment: corner.2) {
-                                RoundedRectangle(cornerRadius: 2).fill(selected ? Color.blue : Color.secondary)
+                                RoundedRectangle(cornerRadius: 2).fill(selected ? Color.yellow : Color.secondary)
                                     .frame(width: 12, height: 9).padding(4)
                             }
-                            .frame(maxWidth: .infinity).padding(.vertical, 4).contentShape(Rectangle())
+                            .frame(maxWidth: .infinity).padding(.vertical, 4)
+                            .contentShape(Capsule())
+                            .modifier(GalleryControlSurface(rounded: true))
                     }
                     .buttonStyle(.plain).accessibilityLabel(corner.0)
                     .accessibilityAddTraits(selected ? .isSelected : [])
@@ -75,14 +77,21 @@ struct StampLayoutEditor: View {
                     Button("Renomear perfil") { draftName = store.selected.name; renameProfile = true }
                     if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { confirmRemove = true } }
                 } label: {
-                    Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square").font(.headline)
+                    Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square")
+                        .font(.headline).lineLimit(1)
+                        .padding(.horizontal, 14).frame(minHeight: 44)
+                        .modifier(GalleryControlSurface(rounded: true))
                 }
                 Spacer()
                 Button {
                     let wasSingle = store.profiles.count == 1
                     if store.create() { if wasSingle { chooseStartup = true } } else { showLimit = true }
-                } label: { Image(systemName: "plus").padding(8).background(.thinMaterial, in: Circle()) }
-                    .accessibilityLabel("Criar perfil")
+                } label: {
+                    Image(systemName: "plus").frame(width: 44, height: 44)
+                        .modifier(GalleryControlSurface(rounded: true))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Criar perfil")
             }
             Picker("Composição", selection: layout.mode) {
                 Text("Carimbo único").tag(StampLayout.Mode.combined)
@@ -97,13 +106,21 @@ struct StampLayoutEditor: View {
                 ForEach(Element.allCases, id: \.self) { element in
                     if element != .combined || layout.wrappedValue.mode == .combined {
                         Button(element.rawValue) { editingElement = element }
-                            .font(.caption.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
-                            .background(editingElement == element ? Color.blue : Color.secondary.opacity(0.15), in: Capsule())
-                            .foregroundStyle(editingElement == element ? Color.white : Color.primary)
+                            .font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity).frame(minHeight: 44)
+                            .contentShape(Capsule())
+                            .modifier(GalleryControlSurface(rounded: true))
+                            .overlay {
+                                if editingElement == element {
+                                    Capsule().strokeBorder(.yellow, lineWidth: 1.5).allowsHitTesting(false)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(editingElement == element ? .isSelected : [])
                     }
                 }
             }
-            elementEditor.padding(10).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+            elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
         }.padding(.horizontal, 12).padding(.vertical, 6)
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)

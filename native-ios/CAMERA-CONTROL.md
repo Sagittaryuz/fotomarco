@@ -1,5 +1,26 @@
 # Integração com Controle da Câmera
 
+## Configuração no iPhone
+
+O projeto inclui a extensão LockedCameraCapture, a intenção compartilhada e o
+controle do WidgetKit. No iPhone compatível, abra **Ajustes → Câmera → Controle
+da Câmera** e selecione **Momentra** se o sistema mostrar o app na lista. A escolha
+é feita pelo usuário. A instalação e a presença na lista precisam ser conferidas
+no aparelho físico, com a tela bloqueada e desbloqueada.
+
+O disparo físico usa os eventos de captura do AVKit. Já o painel que o iOS
+mostra com um toque leve no botão é configurado na sessão do AVFoundation.
+Para acrescentar zoom ou exposição nesse painel, verifique `supportsControls`
+e `canAddControl` antes de registrar os controles de sistema correspondentes.
+Para uma escolha discreta do Momentra, como perfil de carimbo, a API oferece
+`AVCaptureIndexPicker`. A integração desse painel é uma etapa futura.
+
+- [Manual do iPhone](https://support.apple.com/guide/iphone/iph3940f00d2/ios)
+- [Integração com o Controle da Câmera](https://developer.apple.com/documentation/avfoundation/enhancing-your-app-experience-with-the-camera-control)
+- [Controles de captura na WWDC25](https://developer.apple.com/videos/play/wwdc2025/253/)
+
+## Diagnóstico inicial do projeto
+
 O Momentra ainda não aparece na lista de apps para abrir pelo Controle da Câmera. Ter acesso à câmera não é suficiente: a Apple exige uma extensão `LockedCameraCapture` para essa integração. A extensão e o app devem compartilhar um `CameraCaptureIntent`; o sistema decide se abre o app ou a extensão conforme o estado do aparelho. Para tratar o botão como disparador, a Apple indica `AVCaptureEventInteraction` do AVKit.
 
 ## Trabalho necessário

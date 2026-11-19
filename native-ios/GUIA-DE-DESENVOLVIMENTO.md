@@ -4,6 +4,11 @@ Este guia descreve a versão nativa em SwiftUI. O código de produção do app f
 
 ## Construção e componentes
 
+A câmera inicial e as opções gerais são as referências aprovadas. Nos painéis
+internos, use a superfície arredondada de `GalleryControlSurface`, com Liquid
+Glass no iOS 26 e material do sistema nas versões anteriores. Preserve as
+funções, os gestos e a semântica acessível de cada controle ao reaplicar o estilo.
+
 | Área | Código e recursos |
 | --- | --- |
 | Projeto Xcode | `project.yml` define fontes, dependências, versão e builds. `Configuration/` mantém identificadores e configurações declarativas. |

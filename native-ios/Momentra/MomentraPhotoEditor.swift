@@ -88,28 +88,31 @@ struct MomentraPhotoEditor: View {
         VStack(spacing: 8) {
             HStack {
                 Button("Cancelar") { if changed { confirmCancel = true } else { dismiss() } }
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.primary)
                     .disabled(saving)
                 Spacer()
                 Text("Editor Momentra").font(.headline).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button("Salvar cópia", action: save)
-                    .buttonStyle(.borderedProminent).tint(.yellow).foregroundStyle(.black)
+                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).tint(.yellow).foregroundStyle(.black)
                     .disabled(!changed || input == nil || saving)
             }
-            HStack(spacing: 10) {
-                icon("arrow.uturn.backward", label: "Desfazer", action: undoEdit).disabled(undo.isEmpty)
-                icon("arrow.uturn.forward", label: "Refazer", action: redoEdit).disabled(redo.isEmpty)
-                Spacer()
-                icon("pencil.tip", label: "Marcação") { section = .tools; markup.toggle() }
-                Menu {
-                    Button(showingOriginal ? "Mostrar edição" : "Comparar com o original") { showingOriginal.toggle() }
-                    Button("Redefinir ajustes", role: .destructive) {
-                        commit { $0 = PhotoEditRecipe() }
-                        stampID = nil
-                    }.disabled(!changed)
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 44, height: 44).modifier(GalleryControlSurface())
-                }.accessibilityLabel("Mais opções de edição")
+            editorGlassGroup {
+                HStack(spacing: 10) {
+                    icon("arrow.uturn.backward", label: "Desfazer", action: undoEdit).disabled(undo.isEmpty)
+                    icon("arrow.uturn.forward", label: "Refazer", action: redoEdit).disabled(redo.isEmpty)
+                    Spacer()
+                    icon("pencil.tip", label: "Marcação") { section = .tools; markup.toggle() }
+                    Menu {
+                        Button(showingOriginal ? "Mostrar edição" : "Comparar com o original") { showingOriginal.toggle() }
+                        Button("Redefinir ajustes", role: .destructive) {
+                            commit { $0 = PhotoEditRecipe() }
+                            stampID = nil
+                        }.disabled(!changed)
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 44, height: 44).modifier(GalleryControlSurface(rounded: true))
+                    }.accessibilityLabel("Mais opções de edição")
+                }
             }
             .disabled(input == nil || saving)
         }
@@ -165,7 +168,8 @@ struct MomentraPhotoEditor: View {
                     ProgressView("Abrindo foto…")
                 }
                 if saving {
-                    ProgressView("Salvando cópia…").padding(14).background(.regularMaterial, in: Capsule())
+                    ProgressView("Salvando cópia…").padding(14)
+                        .modifier(GalleryControlSurface(rounded: true, interactive: false))
                 }
             }
         }
@@ -173,7 +177,7 @@ struct MomentraPhotoEditor: View {
     }
 
     private var controls: some View {
-        Group {
+        editorGlassGroup {
             switch section {
             case .adjust: adjustments
             case .filters: filters
@@ -196,7 +200,7 @@ struct MomentraPhotoEditor: View {
     private var adjustments: some View {
         VStack(alignment: .leading, spacing: 7) {
             ScrollView(.horizontal) {
-                HStack(spacing: 7) {
+                LazyHStack(spacing: 7) {
                     chip("Auto", active: recipe.automatic, icon: "wand.and.stars") { commit { $0.automatic.toggle() } }
                     ForEach(PhotoAdjustment.allCases, id: \.self) { value in
                         chip(value.rawValue, active: adjustment == value) { adjustment = value }
@@ -219,7 +223,12 @@ struct MomentraPhotoEditor: View {
                                 if let image = filterPreviews[filter] {
                                     Image(decorative: image, scale: 1).resizable().scaledToFill()
                                         .frame(width: 52, height: 36).clipped()
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .clipShape(.rect(cornerRadius: 8))
+                                        .overlay {
+                                            if recipe.filter == filter {
+                                                RoundedRectangle(cornerRadius: 8).strokeBorder(.yellow, lineWidth: 2)
+                                            }
+                                        }
                                 }
                                 Text(filter.rawValue).font(.caption2).lineLimit(1)
                             }.foregroundStyle(recipe.filter == filter ? .yellow : .primary)
@@ -242,8 +251,14 @@ struct MomentraPhotoEditor: View {
                     ForEach(PhotoCropRatio.allCases, id: \.self) { ratio in
                         Button(ratio.rawValue) { commit { $0.crop = ratio } }
                     }
-                } label: { Label(recipe.crop.rawValue, systemImage: "rectangle.ratio.4.to.3").font(.subheadline) }
+                } label: {
+                    Label(recipe.crop.rawValue, systemImage: "rectangle.ratio.4.to.3")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10).frame(minHeight: 40)
+                        .modifier(GalleryControlSurface(rounded: true, tint: recipe.crop == .free ? .primary : .yellow))
+                }
                 .accessibilityLabel("Proporção")
+                .accessibilityValue(recipe.crop.rawValue)
                 Spacer()
             }
             Picker("Controle de recorte", selection: $cropControl) {
@@ -270,8 +285,13 @@ struct MomentraPhotoEditor: View {
                             Button(profile.name.isEmpty ? "Sem nome" : profile.name) { stampID = profile.id }
                         }
                     } label: {
-                        Label(stampID == nil ? "Carimbo" : "Com carimbo", systemImage: "seal").font(.caption)
-                    }.accessibilityLabel("Adicionar carimbo")
+                        Label(stampID == nil ? "Carimbo" : "Com carimbo", systemImage: "seal")
+                            .font(.caption.weight(.semibold)).lineLimit(1)
+                            .padding(.horizontal, 10).frame(minHeight: 40)
+                            .modifier(GalleryControlSurface(rounded: true, tint: stampID == nil ? .primary : .yellow))
+                    }
+                    .accessibilityLabel("Adicionar carimbo")
+                    .accessibilityValue(stampID == nil ? "Sem carimbo" : "Com carimbo")
                 }
             }
             if markup {
@@ -281,6 +301,7 @@ struct MomentraPhotoEditor: View {
                             Circle().fill(Color(uiColor: color.color)).frame(width: 25, height: 25)
                                 .padding(3).overlay(Circle().strokeBorder(ink == color ? .white : .secondary))
                                 .frame(width: 44, height: 44)
+                                .modifier(GalleryControlSurface(rounded: true))
                         }.buttonStyle(.plain).accessibilityLabel(color.rawValue)
                         .accessibilityAddTraits(ink == color ? .isSelected : [])
                     }
@@ -292,9 +313,18 @@ struct MomentraPhotoEditor: View {
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @ViewBuilder
+    private func editorGlassGroup<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if #available(iOS 26, *) {
+            GlassEffectContainer(spacing: 0) { content() }
+        } else {
+            content()
+        }
+    }
+
     private func icon(_ image: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: image).frame(width: 44, height: 44).modifier(GalleryControlSurface())
+            Image(systemName: image).frame(width: 44, height: 44).modifier(GalleryControlSurface(rounded: true))
         }.buttonStyle(.plain).accessibilityLabel(label)
     }
 
@@ -305,8 +335,8 @@ struct MomentraPhotoEditor: View {
                 Text(title).lineLimit(1)
             }
             .font(.caption.weight(.semibold)).padding(.horizontal, 10).frame(minHeight: 40)
-            .background(active ? Color.yellow.opacity(0.18) : Color.white.opacity(0.07), in: Capsule())
-            .foregroundStyle(active ? .yellow : .primary)
+            .background(active ? Color.yellow.opacity(0.15) : .clear, in: Capsule())
+            .modifier(GalleryControlSurface(rounded: true, tint: active ? .yellow : .primary))
         }.buttonStyle(.plain).accessibilityAddTraits(active ? .isSelected : [])
     }
 
