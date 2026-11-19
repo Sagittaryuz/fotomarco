@@ -15,6 +15,11 @@ final class DirectUpdateAccess: ObservableObject {
     static let shared = DirectUpdateAccess()
     private static let service = "br.com.momentra.camera.updates"
     private static let account = "installer-token"
+    private static let currentHost = "momentra-instalacao.vercel.app"
+    private static let installerPath = "/api/install"
+    private static let installerHost = configuredInstallerHost(
+        Bundle.main.object(forInfoDictionaryKey: "MomentraInstallerHost") as? String
+    )
     @Published private(set) var ready: Bool
     @Published private(set) var busy = false
     @Published var message: String?
@@ -33,25 +38,36 @@ final class DirectUpdateAccess: ObservableObject {
         token.count == 64 && token.unicodeScalars.allSatisfy { (48...57).contains($0.value) || (97...102).contains($0.value) }
     }
 
-    static func manifestURL(_ raw: String) -> URL? {
+    static func configuredInstallerHost(_ value: String?) -> String {
+        guard let value, value.utf8.count <= 253,
+              value.range(of: #"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$"#,
+                          options: .regularExpression) != nil else { return currentHost }
+        return value
+    }
+
+    static func manifestURL(_ raw: String, expectedHost: String? = nil) -> URL? {
         guard let parts = URLComponents(string: raw), parts.scheme == "https",
-              parts.host == "momentra-instalacao.vercel.app", parts.port == nil,
+              parts.host == (expectedHost ?? installerHost), parts.port == nil,
               parts.user == nil, parts.password == nil, parts.fragment == nil,
-              parts.path == "/api/install", let items = parts.queryItems, items.count == 2,
+              parts.path == installerPath, let items = parts.queryItems, items.count == 2,
               items.contains(where: { $0.name == "stage" && $0.value == "manifest" }),
               let ticket = items.first(where: { $0.name == "ticket" })?.value,
               ticket.range(of: #"^[0-9]{13}\.[0-9a-f]{32}\.[0-9a-f]{64}$"#, options: .regularExpression) != nil else { return nil }
         return parts.url
     }
 
-    private static func endpoint(token: String, stage: String) -> URL? {
-        var parts = URLComponents(string: "https://momentra-instalacao.vercel.app/api/install")
-        parts?.queryItems = [URLQueryItem(name: "stage", value: stage), URLQueryItem(name: "token", value: token)]
-        return parts?.url
+    private static func endpoint(stage: String, token: String? = nil) -> URL? {
+        var parts = URLComponents()
+        parts.scheme = "https"
+        parts.host = installerHost
+        parts.path = installerPath
+        parts.queryItems = [URLQueryItem(name: "stage", value: stage)]
+        if let token { parts.queryItems?.append(URLQueryItem(name: "token", value: token)) }
+        return parts.url
     }
 
     func activate(_ url: URL) async {
-        guard let token = Self.token(from: url), let metadata = Self.endpoint(token: token, stage: "activate"), !busy else {
+        guard let token = Self.token(from: url), let metadata = Self.endpoint(stage: "activate", token: token), !busy else {
             message = "Não foi possível ativar as atualizações diretas."; return
         }
         busy = true; defer { busy = false }
@@ -74,7 +90,7 @@ final class DirectUpdateAccess: ObservableObject {
     }
 
     private func publishedRelease(token: String) async throws -> (version: String, manifest: URL) {
-        let issueURL = URL(string: "https://momentra-instalacao.vercel.app/api/install?stage=issue")!
+        guard let issueURL = Self.endpoint(stage: "issue") else { throw URLError(.badURL) }
         var request = URLRequest(url: issueURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)

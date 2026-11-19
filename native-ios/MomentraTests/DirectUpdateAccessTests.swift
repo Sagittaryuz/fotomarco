@@ -21,4 +21,17 @@ final class DirectUpdateAccessTests: XCTestCase {
         XCTAssertNil(DirectUpdateAccess.manifestURL(valid + "&extra=1"))
         XCTAssertNil(DirectUpdateAccess.manifestURL(valid.replacingOccurrences(of: "manifest", with: "package")))
     }
+
+    func testTransitionHostIsRestrictedToOneConfiguredHTTPSOrigin() {
+        let host = "momentra-atualizacoes.example.com"
+        let ticket = "1234567890123." + String(repeating: "a", count: 32) + "." + String(repeating: "b", count: 64)
+        let manifest = "https://\(host)/api/install?stage=manifest&ticket=" + ticket
+        XCTAssertEqual(DirectUpdateAccess.configuredInstallerHost(host), host)
+        XCTAssertNotNil(DirectUpdateAccess.manifestURL(manifest, expectedHost: host))
+        XCTAssertNil(DirectUpdateAccess.manifestURL(manifest))
+        XCTAssertNil(DirectUpdateAccess.manifestURL(manifest.replacingOccurrences(of: host, with: host + ".example.org"), expectedHost: host))
+        for value in ["", "https://" + host, host + ":443", host + "/ota", "account@" + host] {
+            XCTAssertEqual(DirectUpdateAccess.configuredInstallerHost(value), "momentra-instalacao.vercel.app")
+        }
+    }
 }

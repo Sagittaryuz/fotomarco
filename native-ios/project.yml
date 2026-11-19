@@ -25,6 +25,7 @@ targets:
           - br.com.momentra.camera.cloud-processing
         UIBackgroundModes:
           - processing
+        MomentraInstallerHost: '$(MOMENTRA_INSTALLER_HOST)'
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
@@ -36,6 +37,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.momentra.camera
         PRODUCT_NAME: Momentra
+        MOMENTRA_INSTALLER_HOST: momentra-instalacao.vercel.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: 'MomentraIcon1 MomentraIcon2 MomentraIcon3 MomentraIcon4 MomentraIcon5 MomentraIcon6 MomentraIcon7 MomentraIcon8 MomentraIconOriginal'
         GENERATE_INFOPLIST_FILE: YES
