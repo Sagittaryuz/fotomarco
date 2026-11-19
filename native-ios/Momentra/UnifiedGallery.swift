@@ -6,6 +6,7 @@ struct OriginalsView: View {
     let returnToCamera: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @ScaledMetric(relativeTo: .caption2) private var storageBandHeight = 44.0
     @StateObject private var archive = CloudArchiveAccounts.shared
     @AppStorage("native.gallery.favoriteCaptureKeys") private var captureFavorites = Data()
     @AppStorage("native.gallery.favoriteCloudKeys") private var cloudFavorites = Data()
@@ -87,13 +88,10 @@ struct OriginalsView: View {
         let items = projection.items
         VStack(spacing: 0) {
             header(total: items.count, latest: items.last?.date)
-            ScrollView {
-                GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true)
-            }
-            .scrollIndicators(.hidden)
-            .frame(height: tab == .captures ? min(CGFloat(archive.accounts.count + 1) * 29 + 12, 99) : 0)
-            .clipped()
-            .accessibilityHidden(tab != .captures)
+            GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true)
+                .frame(height: tab == .captures ? storageBandHeight : 0)
+                .clipped()
+                .accessibilityHidden(tab != .captures)
             if cloudError, origin != .local {
                 Button { cloudRefresh += 1 } label: {
                     Label("Algumas contas estão indisponíveis. Tentar novamente", systemImage: "arrow.clockwise")
@@ -199,7 +197,7 @@ struct OriginalsView: View {
     @State private var pendingSearchResult: GalleryItem?
 
     private func header(total: Int, latest: Date?) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.down").frame(width: 44, height: 44)
@@ -234,7 +232,7 @@ struct OriginalsView: View {
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 7)
+        .padding(.horizontal, 13).padding(.top, 8).padding(.bottom, 5)
     }
 
     private var originMenu: some View {

@@ -16,40 +16,24 @@ struct GalleryCapacitySummary: View {
     }
 
     var body: some View {
-        VStack(spacing: compact ? 4 : 8) {
-            if section != 2 {
-                let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
-                let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
-                row(name: name, quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
-                    Image(systemName: "photo.on.rectangle.fill")
-                        .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
-                        .frame(width: compact ? 17 : 25, height: compact ? 17 : 25)
-                        .background(AngularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
-                                                    center: .center, startAngle: .zero, endAngle: .degrees(360)), in: Circle())
-                }
-            }
-            if section != 1 {
-                ForEach(accounts) { account in
-                    let google = account.id.provider == .googleDrive
-                    let name = (google ? "Google Drive" : "OneDrive") + " · " + account.label
-                    row(name: name, quota: quotas[account.id],
-                        unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Limite não informado pelo serviço",
-                        tint: google ? .green : .blue) {
-                        Image(google ? "GoogleDriveMark" : "OneDriveMark")
-                            .renderingMode(.original).resizable().scaledToFit().frame(width: compact ? 17 : 24, height: compact ? 17 : 24)
+        Group {
+            if compact {
+                GeometryReader { geometry in
+                    let count = max(1, (section == 2 ? 0 : 1) + (section == 1 ? 0 : accounts.count))
+                    let width = max(100, (geometry.size.width - 12 - CGFloat(min(3, count) - 1) * 5) / CGFloat(min(3, count)))
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 5) { rows(width: width) }
+                            .padding(5)
                     }
+                    .scrollIndicators(.hidden)
+                    .background(.white.opacity(0.075), in: Capsule())
                 }
-                if section == 2 && accounts.isEmpty {
-                    Text("Conecte uma conta para consultar a capacidade da nuvem.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                .padding(.horizontal, 13)
+            } else {
+                VStack(spacing: 8) { rows() }
+                    .padding(.horizontal, 14).padding(.bottom, 10)
             }
         }
-        .padding(.horizontal, compact ? 10 : 14).padding(.vertical, compact ? 5 : 0)
-        .background {
-            if compact { RoundedRectangle(cornerRadius: 23).fill(.white.opacity(0.075)) }
-        }
-        .padding(.horizontal, compact ? 13 : 0).padding(.bottom, compact ? 4 : 10)
         .task { await refreshLocal() }
         .task(id: accounts.map(\.id)) {
             let destinations = accounts.map(\.id)
@@ -71,40 +55,99 @@ struct GalleryCapacitySummary: View {
         }
     }
 
-    private func row<Icon: View>(name: String, quota: CloudQuota?, unavailable: String, tint: Color,
-                                 @ViewBuilder icon: () -> Icon) -> some View {
-        HStack(spacing: 9) {
-            icon().accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(name).font((compact ? Font.caption2 : Font.caption).weight(.semibold)).lineLimit(1)
-                    Spacer(minLength: 0)
-                    if let quota {
-                        let fraction = Double(quota.used) / Double(quota.total)
-                        Text(fraction, format: .percent.precision(.fractionLength(0...1)))
-                            .font(.caption.monospacedDigit()).foregroundStyle(tint)
-                    }
-                }
-                if let quota {
-                    GeometryReader { geometry in
-                        let fraction = min(1, max(0, Double(quota.used) / Double(quota.total)))
-                        Capsule().fill(.white.opacity(0.12))
-                            .overlay(alignment: .leading) {
-                                Capsule().fill(LinearGradient(colors: [tint.opacity(0.68), tint], startPoint: .leading, endPoint: .trailing))
-                                    .frame(width: geometry.size.width * fraction)
-                            }
-                    }.frame(height: compact ? 4 : 5).accessibilityHidden(true)
-                    if !compact {
-                        Text("\(format(quota.used)) de \(format(quota.total))")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text(unavailable).font(.caption2).foregroundStyle(.secondary)
-                }
+    @ViewBuilder
+    private func rows(width: CGFloat? = nil) -> some View {
+        if section != 2 {
+            let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
+            let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
+            row(name: name, shortName: "iPhone", quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
+                Image(systemName: "photo.on.rectangle.fill")
+                    .font(.system(size: compact ? 9 : 15, weight: .medium)).foregroundStyle(.white)
+                    .frame(width: compact ? 15 : 25, height: compact ? 15 : 25)
+                    .background(AngularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
+                                                center: .center), in: Circle())
+            }.frame(width: width)
+        }
+        if section != 1 {
+            ForEach(accounts) { account in
+                let google = account.id.provider == .googleDrive
+                let name = (google ? "Google Drive" : "OneDrive") + " · " + account.label
+                let duplicateProvider = accounts.lazy.filter { $0.id.provider == account.id.provider }.dropFirst().first != nil
+                let shortName = duplicateProvider ? account.label : google ? "Drive" : "OneDrive"
+                row(name: name, shortName: shortName, quota: quotas[account.id],
+                    unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Limite não informado pelo serviço",
+                    tint: google ? .green : .blue) {
+                    Image(google ? "GoogleDriveMark" : "OneDriveMark")
+                        .renderingMode(.original).resizable().scaledToFit().frame(width: compact ? 15 : 24, height: compact ? 15 : 24)
+                }.frame(width: width)
+            }
+            if section == 2 && accounts.isEmpty {
+                Text("Conecte uma conta para consultar a capacidade da nuvem.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, compact ? 6 : 0).frame(minHeight: compact ? 24 : nil)
-        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func row<Icon: View>(name: String, shortName: String, quota: CloudQuota?, unavailable: String, tint: Color,
+                                 @ViewBuilder icon: () -> Icon) -> some View {
+        if compact {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 3) {
+                    icon()
+                    Text(shortName).lineLimit(1)
+                    Spacer(minLength: 1)
+                    if let quota {
+                        Text(fraction(quota), format: .percent.precision(.fractionLength(0)))
+                            .monospacedDigit().foregroundStyle(tint)
+                    } else { Text("—").foregroundStyle(.secondary) }
+                }
+                .font(.caption2.weight(.semibold))
+                .accessibilityHidden(true)
+                progress(fraction: quota.map(fraction), tint: tint, height: 3)
+            }
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(.white.opacity(0.065), in: Capsule())
+            .accessibilityElement()
+            .accessibilityLabel(name)
+            .accessibilityValue(quota.map { fraction($0).formatted(.percent.precision(.fractionLength(0...1))) } ?? unavailable)
+        } else {
+            HStack(spacing: 9) {
+                icon().accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(name).font(.caption.weight(.semibold)).lineLimit(1)
+                        Spacer(minLength: 0)
+                        if let quota {
+                            Text(fraction(quota), format: .percent.precision(.fractionLength(0...1)))
+                                .font(.caption.monospacedDigit()).foregroundStyle(tint)
+                        }
+                    }
+                    if let quota {
+                        progress(fraction: fraction(quota), tint: tint, height: 5)
+                        Text("\(format(quota.used)) de \(format(quota.total))")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    } else { Text(unavailable).font(.caption2).foregroundStyle(.secondary) }
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func fraction(_ quota: CloudQuota) -> Double {
+        min(1, max(0, Double(quota.used) / Double(quota.total)))
+    }
+
+    private func progress(fraction: Double?, tint: Color, height: CGFloat) -> some View {
+        GeometryReader { geometry in
+            Capsule().fill(.white.opacity(0.12))
+                .overlay(alignment: .leading) {
+                    Capsule().fill(LinearGradient(colors: [tint.opacity(0.65), tint], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geometry.size.width * (fraction ?? 0))
+                }
+        }
+        .frame(height: height)
+        .accessibilityHidden(true)
     }
 
     private func refreshLocal() async {
