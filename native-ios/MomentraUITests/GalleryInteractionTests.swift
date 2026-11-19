@@ -276,13 +276,22 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.collectionViews["activityCollectionView"].waitForExistence(timeout: 12))
     }
 
-    func testViewerSwipeDownReturnsDirectlyToCamera() {
+    func testViewerSwipeDownKeepsGalleryOpen() {
         let app = launch()
         openCapture(app)
         let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.48, dy: 0.35))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.48, dy: 0.72))
         origin.press(forDuration: 0.08, thenDragTo: end)
         XCTAssertTrue(app.buttons["Voltar à galeria"].waitForNonExistence(timeout: 10))
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 10))
+        XCTAssertTrue(grid.cells.firstMatch.isHittable)
+        XCTAssertEqual(grid.cells.count, 3)
+        grid.cells.element(boundBy: 1).tap()
+        XCTAssertTrue(app.buttons["Voltar à galeria"].waitForExistence(timeout: 8))
+        origin.press(forDuration: 0.08, thenDragTo: end)
+        XCTAssertTrue(app.buttons["Fechar galeria"].waitForExistence(timeout: 8))
+        app.buttons["Fechar galeria"].tap()
         XCTAssertTrue(app.buttons["Abrir capturas"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Abrir capturas"].isHittable)
     }
