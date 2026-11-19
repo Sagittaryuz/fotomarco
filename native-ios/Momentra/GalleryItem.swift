@@ -40,8 +40,11 @@ struct GalleryItem: Identifiable {
     }
 
     var isVideo: Bool {
-        if case .capture(let item) = source { return item.isVideo }
-        return false
+        switch source {
+        case .capture(let item): item.isVideo
+        case .device(let asset): asset.mediaType == .video
+        case .cloud: false
+        }
     }
 
     var displaySource: String {
@@ -122,7 +125,9 @@ struct GalleryItem: Identifiable {
     @MainActor @ViewBuilder func preview(active: Bool) -> some View {
         switch source {
         case .capture(let item): CapturePage(item: item, active: active)
-        case .device(let asset): DeviceThumbnail(asset: asset, fullView: true)
+        case .device(let asset):
+            if isVideo { DeviceVideoPreview(asset: asset, active: active) }
+            else { DeviceThumbnail(asset: asset, fullView: true) }
         case .cloud(let item): item.fullImage()
         }
     }

@@ -107,7 +107,17 @@ struct OriginalsView: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .task(id: reloadVersion) { await reload() }
-        .onChange(of: archive.accounts.map(\.id)) { _, _ in reloadVersion += 1 }
+        .onChange(of: archive.accounts.map(\.id)) { _, destinations in
+            remote.removeAll { item in
+                if case .cloud(let cloud) = item.source { return !destinations.contains(cloud.destination) }
+                return false
+            }
+            remoteTrash.removeAll { item in
+                if case .cloud(let cloud) = item.source { return !destinations.contains(cloud.destination) }
+                return false
+            }
+            reloadVersion += 1
+        }
         .onChange(of: scenePhase) { _, phase in if phase == .active { reloadVersion += 1 } }
         .onChange(of: tab) { oldTab, newTab in
             resetSelection()
@@ -361,7 +371,9 @@ struct OriginalsView: View {
             local = files.map { Self.capture($0, lookup: lookup) }
             authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
             if authorization == .authorized || authorization == .limited {
-                let assets = PHAsset.fetchAssets(with: .image, options: nil)
+                let options = PHFetchOptions()
+                options.predicate = NSPredicate(format: "mediaType IN %@", [PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue])
+                let assets = PHAsset.fetchAssets(with: options)
                 var photos: [GalleryItem] = []
                 assets.enumerateObjects { asset, _, _ in
                     photos.append(GalleryItem(source: .device(asset), date: asset.creationDate,

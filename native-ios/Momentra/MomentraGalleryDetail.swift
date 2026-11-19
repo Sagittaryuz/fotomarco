@@ -19,6 +19,7 @@ struct MomentraGalleryDetail: View {
     @State private var favoriteStates: [GalleryItem.ID: Bool] = [:]
     @State private var panel: Panel?
     @State private var fullscreen = false
+    @State private var zoomed = false
     @State private var busy = false
     @State private var message: String?
     @Environment(\.dismiss) private var dismiss
@@ -50,15 +51,26 @@ struct MomentraGalleryDetail: View {
             }
             TabView(selection: $selection) {
                 ForEach(items) { item in
-                    item.preview(active: item.id == selection).tag(item.id)
+                    let active = item.id == selection
+                    if item.isVideo {
+                        item.preview(active: active).tag(item.id)
+                    } else {
+                        GalleryPhotoViewport(active: active, controlsHidden: $fullscreen, zoomed: $zoomed) {
+                            item.preview(active: active)
+                        }.tag(item.id)
+                    }
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             .overlay(alignment: .topTrailing) {
-                button(fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                       label: fullscreen ? "Mostrar controles" : "Expandir visualização") {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { fullscreen.toggle() }
-                }.padding(12)
+                if current?.isVideo == true {
+                    button(fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                           label: fullscreen ? "Mostrar controles" : "Expandir visualização") {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { fullscreen.toggle() }
+                    }.padding(12)
+                }
             }
             .overlay(alignment: .bottomTrailing) {
                 if let current, !current.isVideo, !fullscreen {
@@ -72,7 +84,8 @@ struct MomentraGalleryDetail: View {
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .modifier(GalleryCameraSwipe(action: { if !busy { returnToCamera() } }))
+        .modifier(GalleryCameraSwipe(action: { if !busy && !zoomed { returnToCamera() } }))
+        .onChange(of: selection) { _, _ in zoomed = false }
         .sheet(item: $panel) { route in
             if let current { sheet(route, item: current) }
         }
