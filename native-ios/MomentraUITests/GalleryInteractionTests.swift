@@ -45,6 +45,10 @@ final class GalleryInteractionTests: XCTestCase {
         let count = app.staticTexts["3 itens"]
         XCTAssertTrue(count.waitForExistence(timeout: 8))
         XCTAssertEqual(app.collectionViews.cells.count, 3)
+        let storage = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Armazenamento do iPhone")).firstMatch
+        XCTAssertTrue(storage.waitForExistence(timeout: 8))
+        XCTAssertLessThanOrEqual(storage.frame.height, 50)
+        XCTAssertLessThan(storage.frame.maxY, app.collectionViews.firstMatch.frame.minY + 1)
         app.buttons["Favoritos"].tap()
         XCTAssertTrue(app.staticTexts["Nenhum favorito"].waitForExistence(timeout: 8))
         app.buttons["Capturas"].tap()
