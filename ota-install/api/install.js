@@ -19,8 +19,7 @@ async function signBlob(pathname, operation, maximumSizeInBytes) {
     : {};
   const delegation = await issueSignedToken({ pathname, operations: [operation], validUntil, ...constraints });
   const request = await presignUrl(delegation, {
-    pathname, operation, validUntil,
-    ...(operation === 'put' ? { contentType: 'application/octet-stream' } : {})
+    pathname, operation, access: 'private', validUntil, ...constraints
   });
   return request;
 }
