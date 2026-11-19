@@ -114,16 +114,15 @@ struct OriginalsView: View {
 
     private var galleryContent: some View {
         let items = projection.items
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             header(total: items.count, latest: items.last?.date)
                 .contentShape(Rectangle())
                 .simultaneousGesture(gallerySwipe(toward: .down))
             GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true,
                                    syncingCatalog: cloudSyncing, syncingQuota: $quotaSyncing,
                                    refresh: cloudActivation + cloudRefresh)
-                .frame(height: tab == .captures ? storageBandHeight : 0)
+                .frame(height: storageBandHeight)
                 .clipped()
-                .accessibilityHidden(tab != .captures)
             if cloudError, origin != .local {
                 Button { cloudRefresh += 1 } label: {
                     Label("Algumas contas estão indisponíveis. Tentar novamente", systemImage: "arrow.clockwise")
@@ -384,14 +383,26 @@ struct OriginalsView: View {
     }
 
     private func tile(_ item: GalleryItem) -> some View {
-        item.thumbnail().overlay(alignment: .bottomTrailing) {
-            if tab == .trash {
-                let days = item.daysRemaining()
-                Text(days.map { $0 == 1 ? "1 dia" : "\($0) dias" } ?? "Prazo no provedor")
-                    .font(.caption2.weight(.semibold)).padding(5)
-                    .background(.black.opacity(0.8), in: Capsule()).padding(4)
+        item.thumbnail()
+            .overlay(alignment: .topTrailing) {
+                let origin = item.origin
+                GalleryOriginMark(origin: origin, size: origin == .local ? 14 : 11)
+                    .frame(width: 16, height: 16)
+                    .background(.white.opacity(0.88), in: Circle())
+                    .overlay { Circle().strokeBorder(.black.opacity(0.26), lineWidth: 0.5) }
+                    .padding(4)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(origin == .local ? "No iPhone" : origin.title)
+                    .allowsHitTesting(false)
             }
-        }
+            .overlay(alignment: .bottomTrailing) {
+                if tab == .trash {
+                    let days = item.daysRemaining()
+                    Text(days.map { $0 == 1 ? "1 dia" : "\($0) dias" } ?? "Prazo no provedor")
+                        .font(.caption2.weight(.semibold)).padding(5)
+                        .background(.black.opacity(0.8), in: Capsule()).padding(4)
+                }
+            }
     }
 
     private func trashDetail(_ item: GalleryItem) -> some View {
@@ -563,7 +574,7 @@ struct OriginalsView: View {
             if !cached.isEmpty { applyCloud(remote + cached.map { galleryItem($0, lookup: lookup) }, trash: false) }
         }
         if !trash && !force && stale.isEmpty { return }
-        cloudSyncing = !trash
+        cloudSyncing = true
         defer { if !Task.isCancelled { cloudSyncing = false } }
         var results: [GalleryItem] = []
         var failed = false

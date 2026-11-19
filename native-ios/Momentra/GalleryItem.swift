@@ -13,6 +13,25 @@ enum GalleryOrigin: String, CaseIterable, Identifiable {
     }
 }
 
+struct GalleryOriginMark: View {
+    let origin: GalleryOrigin
+    let size: CGFloat
+
+    var body: some View {
+        switch origin {
+        case .local:
+            Image(systemName: "photo.on.rectangle.fill")
+                .font(.system(size: size * 0.60, weight: .medium)).foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(AngularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
+                                            center: .center), in: Circle())
+        case .google, .oneDrive:
+            Image(origin == .google ? "GoogleDriveMark" : "OneDriveMark")
+                .renderingMode(.original).resizable().scaledToFit().frame(width: size, height: size)
+        }
+    }
+}
+
 struct GalleryItem: Identifiable {
     enum Source {
         case capture(OriginalFile)

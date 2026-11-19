@@ -95,11 +95,7 @@ struct GalleryCapacitySummary: View {
             let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
             let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
             row(name: name, shortName: "iPhone", quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
-                Image(systemName: "photo.on.rectangle.fill")
-                    .font(.system(size: compact ? 9 : 15, weight: .medium)).foregroundStyle(.white)
-                    .frame(width: compact ? 15 : 25, height: compact ? 15 : 25)
-                    .background(AngularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
-                                                center: .center), in: Circle())
+                GalleryOriginMark(origin: .local, size: compact ? 15 : 25)
             }.frame(width: width)
         }
         if section != 1 {
@@ -112,8 +108,7 @@ struct GalleryCapacitySummary: View {
                     unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Capacidade indisponível",
                     status: status(for: account.id),
                     tint: google ? .green : .blue) {
-                    Image(google ? "GoogleDriveMark" : "OneDriveMark")
-                        .renderingMode(.original).resizable().scaledToFit().frame(width: compact ? 15 : 24, height: compact ? 15 : 24)
+                    GalleryOriginMark(origin: google ? .google : .oneDrive, size: compact ? 15 : 24)
                 }.frame(width: width)
             }
             if section == 2 && accounts.isEmpty {

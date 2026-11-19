@@ -42,8 +42,9 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 - Na grade, arraste para a esquerda sobre as fotos ou para baixo pelo cabeçalho para voltar à câmera. Anime a passagem com desfoque progressivo e respeite Reduzir Movimento.
 - O compartilhamento usa o painel do iOS. Só abra o app de destino após a confirmação de conclusão sem erro e quando houver um link de abertura conhecido. O WhatsApp usa `whatsapp://app` e recebe apenas o link de abertura nesse passo.
 - Em Capturas, mostre arquivos do Momentra e cópias do Fotos com vínculo confirmado pelo índice do aplicativo. Os filtros mudam a projeção da galeria. Itens com envio pendente mantêm as proteções do arquivo e da fila.
+- Identifique a origem de cada miniatura no canto superior direito com um selo circular discreto. Reuse as marcas da faixa de armazenamento.
 - Reúna o armazenamento em uma faixa compacta acima da grade. Mostre cada origem em uma cápsula com ícone, trilho e percentual real. Para várias contas, use rolagem horizontal de altura fixa. A lixeira local conserva o item por 30 dias. Use os dados reais do provedor para indicar a expiração de itens remotos.
-- Mostre a última capacidade válida de cada conta e do iPhone enquanto consulta os valores em segundo plano. A linha fina sob a faixa aparece durante a sincronização e some quando as consultas terminam.
+- Mostre a última capacidade válida de cada conta e do iPhone em Capturas, Favoritos e Lixeira enquanto consulta os valores em segundo plano. A linha fina sob a faixa aparece durante a sincronização e some quando as consultas terminam.
 - Em Capturas, arrastar para além da última fileira pede uma nova consulta de catálogo e capacidade. Limite a um pedido por gesto e preserve a grade durante a atualização.
 
 ## Processamento e validação
