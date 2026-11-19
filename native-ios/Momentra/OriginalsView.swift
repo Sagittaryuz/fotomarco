@@ -206,7 +206,10 @@ struct OriginalsView: View {
                     catch { return nil }
                 }
             }.value
-            selectedCaptureIDs.subtract(removed)
+            if !removed.isEmpty {
+                selectingCaptures = false
+                selectedCaptureIDs.removeAll()
+            }
             deletingSelection = false
             if removed.count != items.count {
                 message = "Alguns itens não puderam ser excluídos. Confira se há envios pendentes."
