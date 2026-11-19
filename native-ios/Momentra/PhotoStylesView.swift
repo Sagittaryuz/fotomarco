@@ -18,7 +18,11 @@ struct PhotoStylesView: View {
             .frame(maxHeight: 450)
             Text(candidate.detail).multilineTextAlignment(.center).frame(minHeight: 44).padding(.horizontal)
             Button("Usar \(candidate.rawValue)") { selected = candidate.rawValue; dismiss() }
-                .buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20).frame(minHeight: 44)
+                .contentShape(Capsule())
+                .modifier(GalleryControlSurface(rounded: true))
+                .frame(maxWidth: .infinity)
             Text("Efeitos aplicados à cópia fotografada pelo Momentra. O original é preservado.")
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
         }
@@ -36,8 +40,11 @@ private struct StylePreview: View {
         ZStack(alignment: .bottom) {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
             else { Color.gray.opacity(0.3) }
-            Text(style.rawValue.uppercased()).font(.caption.bold()).padding(8)
-                .background(.black.opacity(0.65), in: Capsule()).padding(.bottom, 45)
+            Text(style.rawValue.uppercased()).font(.caption.bold())
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .modifier(GalleryControlSurface(rounded: true, tint: .white, interactive: false))
+                .environment(\.colorScheme, .dark)
+                .padding(.bottom, 45)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
         .clipShape(RoundedRectangle(cornerRadius: 20))
