@@ -39,6 +39,7 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 - Preserve miniaturas quadradas e a foto inteira no visualizador inicial. Toque simples alterna os controles. Dois toques alternam a aproximação com controles ocultos. Pinça ajusta o zoom. O X da busca retorna à aba e aos filtros de origem.
 - Escreva as datas das seções por extenso, seguidas de ` · ` e do dia da semana. No dia atual, mantenha também o prefixo `Hoje · `.
 - Deslizar para baixo no visualizador fecha a mídia e volta à grade na mesma aba. Para voltar à câmera, feche a galeria pela própria grade.
+- Tocar em Capturas, Favoritos ou Lixeira leva à fileira mais recente da aba, inclusive ao tocar novamente na aba ativa. Preserve os filtros aplicados.
 - Na grade, arraste para a esquerda sobre as fotos ou para baixo pelo cabeçalho para voltar à câmera. Anime a passagem com desfoque progressivo e respeite Reduzir Movimento.
 - O painel de compartilhamento do iOS informa a conclusão da ação. Após conclusão sem erro, restaure a superfície de origem. No visualizador, mantenha a foto aberta e feche os painéis de compartilhamento. Na grade, encerre a seleção em lote e preserve a aba. Preserve o visualizador e a seleção em caso de cancelamento ou erro. Use a ação Copiar para verificar o retorno no simulador e teste extensões externas no iPhone.
 - Na câmera, o toque simples na miniatura abre Capturas. O toque prolongado abre o painel do iOS com apenas o arquivo integral da foto exibida. A miniatura conserva a identidade do arquivo local ou da entrega verificada na nuvem.

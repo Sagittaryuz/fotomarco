@@ -334,7 +334,10 @@ struct OriginalsView: View {
         HStack(spacing: 10) {
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { choice in
-                    Button { tab = choice } label: {
+                    Button {
+                        if tab == choice { scrollRequest += 1 }
+                        else { tab = choice }
+                    } label: {
                         VStack(spacing: 3) {
                             Image(systemName: choice.icon).font(.callout.weight(.semibold))
                             Text(choice.rawValue).font(.caption2.weight(.semibold)).lineLimit(1)
