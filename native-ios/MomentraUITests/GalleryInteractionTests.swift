@@ -326,6 +326,7 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(activities.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "Copy", "Copiar")).firstMatch.exists)
         snapshot("Compartilhamento rápido", app: app)
         completeShareByCopying(in: app)
+        XCTAssertTrue(app.staticTexts["Foto ampliada"].waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.collectionViews["momentra-gallery-grid"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Selecionar"].isHittable)
     }
@@ -346,9 +347,12 @@ final class GalleryInteractionTests: XCTestCase {
         snapshot("Compartilhar duas capturas", app: app)
         app.buttons["Compartilhar seleção"].tap()
         completeShareByCopying(in: app)
-        XCTAssertTrue(app.buttons["Voltar à galeria"].waitForNonExistence(timeout: 10))
-        XCTAssertTrue(app.collectionViews["momentra-gallery-grid"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["Selecionar"].isHittable)
+        let share = app.buttons["Compartilhar"]
+        XCTAssertTrue(app.buttons["Compartilhar seleção"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Voltar à galeria"].isHittable)
+        XCTAssertTrue(app.descendants(matching: .any)["gallery-photo-viewport"].firstMatch.isHittable)
+        share.tap()
+        XCTAssertTrue(app.staticTexts["1 item selecionado"].waitForExistence(timeout: 8))
     }
 
     func testCompletedBatchShareExitsSelectionMode() {
