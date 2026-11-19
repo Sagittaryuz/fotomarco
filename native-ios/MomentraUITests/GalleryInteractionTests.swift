@@ -163,12 +163,42 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Cancelar"].waitForExistence(timeout: 7))
     }
 
+    func testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter() {
+        let samples = [("0.5", "meio", "0,5×"), ("1.8", "1", "1,8×"),
+                       ("3.6", "2", "3,6×"), ("7.6", "4", "7,6×")]
+        for (value, anchor, display) in samples {
+            let app = launch(extraArguments: ["-qaCameraZoom", value])
+            let selected = app.buttons["Zoom \(anchor) vezes"]
+            let shutter = app.buttons["Fotografar"]
+            XCTAssertTrue(selected.waitForExistence(timeout: 8))
+            XCTAssertTrue(selected.isSelected)
+            XCTAssertEqual(selected.value as? String, display)
+            XCTAssertEqual(selected.frame.midX, shutter.frame.midX, accuracy: 2)
+            XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Zoom ")).count, 5)
+            snapshot("Zoom \(display) centralizado", app: app)
+            app.terminate()
+        }
+    }
+
+    func testUpdateBannerChecksAgainAndOpensInstallerDirectly() {
+        let app = launch(extraArguments: ["-qaUpdateFixture"])
+        XCTAssertTrue(app.buttons["Atualização 9.9.1 disponível"].waitForExistence(timeout: 8))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let updated = app.buttons["Atualização 9.9.2 disponível"]
+        XCTAssertTrue(updated.waitForExistence(timeout: 8))
+        updated.tap()
+        XCTAssertTrue(app.alerts["Atualização do Momentra"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Instalador solicitado para 9.9.2"].exists)
+        XCTAssertFalse(app.buttons["Concluído"].exists)
+    }
+
     func testSupportPanelClosesOnOutsideTap() {
         let app = launch()
         let mark = app.buttons["Momentra"]
         XCTAssertTrue(mark.waitForExistence(timeout: 10))
         mark.tap()
-        let pix = app.staticTexts["649-9221-9172"]
+        let pix = app.staticTexts["(64) 99921-9172"]
         XCTAssertTrue(pix.waitForExistence(timeout: 7))
         snapshot("Painel de apoio", app: app)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.77)).tap()

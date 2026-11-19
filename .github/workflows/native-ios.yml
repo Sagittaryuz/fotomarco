@@ -6,7 +6,7 @@ on:
         type: boolean
         default: false
       test_method:
-        description: GalleryInteractionTests method, sharing, or cameraGallery
+        description: GalleryInteractionTests method, sharing, cameraGallery, or cameraExperience
         type: string
         default: ''
       baseline_gallery:
@@ -69,9 +69,9 @@ jobs:
           from pathlib import Path
           camera = Path("native-ios/Momentra/CameraScreen.swift")
           source = camera.read_text()
-          anchor = "        .task { await updates.check() }"
+          anchor = "        .onAppear {\n            if !addressPreviewMigrated {"
           assert source.count(anchor) == 1
-          camera.write_text(source.replace(anchor, anchor + "\n        .modifier(CloudCatalogFixture())", 1))
+          camera.write_text(source.replace(anchor, "        .modifier(CloudCatalogFixture())\n" + anchor, 1))
           accounts = Path("native-ios/Momentra/CloudArchiveAccounts.swift")
           with accounts.open("a") as file:
               file.write("""
@@ -91,6 +91,41 @@ jobs:
                       return nil
                   }
           """, 1))
+          PYTHON
+      - name: Add simulator-only camera and updater fixtures
+        if: inputs.test_method == 'cameraExperience'
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+
+          def replace(name, before, after):
+              p = Path("native-ios/Momentra") / name
+              source = p.read_text()
+              assert source.count(before) == 1, name
+              p.write_text(source.replace(before, after))
+
+          replace("CameraScreen.swift",
+              "} else if !camera.zoomOptions.isEmpty {\n                        CameraZoomStrip(presets: camera.zoomOptions, zoom: camera.zoomFactor)",
+              """} else if !camera.zoomOptions.isEmpty || UserDefaults.standard.string(forKey: "qaCameraZoom") != nil {
+                                  let sample = UserDefaults.standard.string(forKey: "qaCameraZoom").flatMap(Double.init)
+                                  CameraZoomStrip(presets: sample == nil ? camera.zoomOptions : [0.5, 1, 2, 4, 8], zoom: sample.map { CGFloat($0) } ?? camera.zoomFactor)""")
+          replace("UpdateService.swift", "    func check() async {",
+              """    private var simulatedChecks = 0
+              func check() async {
+                  if ProcessInfo.processInfo.arguments.contains("-qaUpdateFixture") {
+                      simulatedChecks += 1
+                      availableVersion = "9.9." + String(simulatedChecks)
+                      return
+                  }""")
+          replace("DirectUpdateAccess.swift", "private init() { ready = Self.readToken() != nil }",
+              'private init() { ready = Self.readToken() != nil || ProcessInfo.processInfo.arguments.contains("-qaUpdateFixture") }')
+          replace("DirectUpdateAccess.swift",
+              "    func install(expectedVersion: String, canClose: @escaping @MainActor () -> Bool) async {",
+              """    func install(expectedVersion: String, canClose: @escaping @MainActor () -> Bool) async {
+                  if ProcessInfo.processInfo.arguments.contains("-qaUpdateFixture") {
+                      message = "Instalador solicitado para " + expectedVersion
+                      return
+                  }""")
           PYTHON
       - name: Generate project and start simulator
         working-directory: native-ios
@@ -166,7 +201,7 @@ jobs:
           PYTHON
             exit 0
           fi
-          if [ "$TEST_METHOD" = sharing ]; then exit 0; fi
+          if [ "$TEST_METHOD" = sharing ] || [ "$TEST_METHOD" = cameraExperience ]; then exit 0; fi
           mkdir -p "$RUNNER_TEMP/camera-roll"
           for number in $(seq 1 24); do
             sips -Z "$((256 + number * 8))" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" --out "$RUNNER_TEMP/camera-roll/$number.jpg" >/dev/null
@@ -202,9 +237,16 @@ jobs:
               "-only-testing:$TEST_SUITE/testRetappingGalleryTabsReturnsToNewestDate"
             )
           fi
+          if [ "$TEST_METHOD" = cameraExperience ]; then
+            TEST_TARGETS=(
+              "-only-testing:$TEST_SUITE/testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter"
+              "-only-testing:$TEST_SUITE/testUpdateBannerChecksAgainAndOpensInstallerDirectly"
+              "-only-testing:$TEST_SUITE/testSupportPanelClosesOnOutsideTap"
+            )
+          fi
           SKIP_BENCHMARK=()
           if [ -z "$TEST_METHOD" ]; then
-            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch -skip-testing:MomentraUITests/GalleryInteractionTests/testCameraThumbnailSharesOnlyTheDisplayedPhoto -skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryGroupsCopyBadgesOnOneThumbnail -skip-testing:MomentraUITests/GalleryInteractionTests/testRetappingGalleryTabsReturnsToNewestDate)
+            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch -skip-testing:MomentraUITests/GalleryInteractionTests/testCameraThumbnailSharesOnlyTheDisplayedPhoto -skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryGroupsCopyBadgesOnOneThumbnail -skip-testing:MomentraUITests/GalleryInteractionTests/testRetappingGalleryTabsReturnsToNewestDate -skip-testing:MomentraUITests/GalleryInteractionTests/testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter -skip-testing:MomentraUITests/GalleryInteractionTests/testUpdateBannerChecksAgainAndOpensInstallerDirectly)
           fi
           xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "${TEST_TARGETS[@]}" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence
