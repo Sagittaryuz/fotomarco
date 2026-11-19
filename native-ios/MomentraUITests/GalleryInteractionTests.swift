@@ -352,6 +352,32 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Abrir capturas"].isHittable)
     }
 
+    func testGalleryReturnsToCameraWithHorizontalAndHeaderGestures() {
+        let app = launch()
+        let entry = app.buttons["Abrir capturas"]
+        let close = app.buttons["Fechar galeria"]
+        entry.tap()
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        let start = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.83, dy: 0.55))
+        let short = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.55))
+        start.press(forDuration: 0.06, thenDragTo: short)
+        XCTAssertTrue(close.isHittable, "Um gesto curto deve manter a galeria aberta.")
+        let left = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.55))
+        start.press(forDuration: 0.06, thenDragTo: left)
+        XCTAssertTrue(close.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(entry.isHittable)
+
+        entry.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        let headerY = close.frame.midY / app.frame.height
+        let header = app.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: headerY))
+        let below = app.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: headerY + 0.32))
+        header.press(forDuration: 0.06, thenDragTo: below)
+        XCTAssertTrue(close.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(entry.isHittable)
+    }
+
     func testViewerTrashCanBeDismissedAndCaptureRestored() {
         let app = launch()
         openCapture(app)
