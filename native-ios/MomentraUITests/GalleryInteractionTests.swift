@@ -211,6 +211,9 @@ final class GalleryInteractionTests: XCTestCase {
         app.activate()
         let updated = app.buttons["Atualização 9.9.2 disponível"]
         XCTAssertTrue(updated.waitForExistence(timeout: 8))
+        let noCamera = app.alerts["Momentra"].buttons["OK"]
+        if noCamera.waitForExistence(timeout: 4) { noCamera.tap() }
+        XCTAssertTrue(updated.isHittable)
         updated.tap()
         XCTAssertTrue(app.alerts["Atualização do Momentra"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["Instalador solicitado para 9.9.2"].exists)

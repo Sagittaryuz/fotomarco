@@ -105,10 +105,10 @@ jobs:
               p.write_text(source.replace(before, after))
 
           replace("CameraScreen.swift",
-              "} else if !camera.zoomOptions.isEmpty {\n                        CameraZoomStrip(presets: camera.zoomOptions, zoom: camera.zoomFactor)",
+              "} else if !camera.zoomOptions.isEmpty {\n                        CameraZoomStrip(presets: camera.zoomOptions, zoom: camera.zoomFactor, shutterCenterX: shutterCenterX)",
               """} else if !camera.zoomOptions.isEmpty || UserDefaults.standard.string(forKey: "qaCameraZoom") != nil {
                                   let sample = UserDefaults.standard.string(forKey: "qaCameraZoom").flatMap(Double.init)
-                                  CameraZoomStrip(presets: sample == nil ? camera.zoomOptions : [0.5, 1, 2, 4, 8], zoom: sample.map { CGFloat($0) } ?? camera.zoomFactor)""")
+                                  CameraZoomStrip(presets: sample == nil ? camera.zoomOptions : [0.5, 1, 2, 4, 8], zoom: sample.map { CGFloat($0) } ?? camera.zoomFactor, shutterCenterX: shutterCenterX)""")
           replace("UpdateService.swift", "    func check() async {",
               """    private var simulatedChecks = 0
               func check() async {
@@ -201,7 +201,7 @@ jobs:
           PYTHON
             exit 0
           fi
-          if [ "$TEST_METHOD" = testVideoEditingOpensAStampedPreviewAndSavesACopy ]; then
+          if [ "$TEST_METHOD" = testVideoEditingOpensAStampedPreviewAndSavesACopy ] || [ "$TEST_METHOD" = cameraExperience ]; then
             command -v ffmpeg || brew install ffmpeg
             mkdir -p "$CONTAINER/Documents/Videos"
             ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=black:s=640x480:r=15 -t 1 -c:v libx264 -pix_fmt yuv420p "$CONTAINER/Documents/Videos/00000000-0000-0000-0000-000000000099.mov"
@@ -248,6 +248,7 @@ jobs:
               "-only-testing:$TEST_SUITE/testIntermediateZoomReplacesTheLowerPresetAndCentersAboveShutter"
               "-only-testing:$TEST_SUITE/testUpdateBannerChecksAgainAndOpensInstallerDirectly"
               "-only-testing:$TEST_SUITE/testSupportPanelClosesOnOutsideTap"
+              "-only-testing:$TEST_SUITE/testVideoEditingOpensAStampedPreviewAndSavesACopy"
             )
           fi
           SKIP_BENCHMARK=()
