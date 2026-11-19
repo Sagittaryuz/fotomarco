@@ -28,6 +28,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     var showsSectionHeaders = true
     var contentVersion: Int? = nil
     var newestScrollRequest: Int? = nil
+    var bottomInset: CGFloat = 0
     let tile: (Item) -> Tile
     let open: (Item) -> Void
     var longPress: ((Item) -> Void)? = nil
@@ -44,6 +45,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
         view.backgroundColor = .clear
         view.alwaysBounceVertical = true
+        view.contentInset.bottom = bottomInset
+        view.verticalScrollIndicatorInsets.bottom = bottomInset
         view.allowsMultipleSelection = true
         view.allowsSelectionDuringEditing = true
         view.allowsMultipleSelectionDuringEditing = true
@@ -87,6 +90,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
                 old.groups.map(\.title) != groups.map(\.title)
         }
         coordinator.parent = self
+        coordinator.updateBottomInset(bottomInset)
         if view.isEditing != selecting { view.isEditing = selecting }
         if contentChanged { coordinator.rebuildIndex() }
         if contentChanged || old.columns != columns || old.refreshKey != refreshKey ||
@@ -125,12 +129,26 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             guard !parent.selecting, !refreshedThisDrag, scrollView.isDragging,
                   let refresh = parent.reachedEnd else { return }
-            let maximum = max(-scrollView.adjustedContentInset.top,
-                              scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom)
+            let maximum = maximumOffset(in: scrollView)
             let movement = scrollView.panGestureRecognizer.translation(in: scrollView)
             guard GalleryEndRefresh.reached(offset: scrollView.contentOffset.y, maximum: maximum, fingerMovement: movement) else { return }
             refreshedThisDrag = true
             refresh()
+        }
+
+        func updateBottomInset(_ inset: CGFloat) {
+            guard let collection, collection.contentInset.bottom != inset else { return }
+            let wasAtEnd = collection.contentOffset.y >= maximumOffset(in: collection) - 2
+            collection.contentInset.bottom = inset
+            collection.verticalScrollIndicatorInsets.bottom = inset
+            if wasAtEnd && !collection.isDragging && !collection.isDecelerating {
+                collection.contentOffset.y = maximumOffset(in: collection)
+            }
+        }
+
+        private func maximumOffset(in scrollView: UIScrollView) -> CGFloat {
+            max(-scrollView.adjustedContentInset.top,
+                scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom)
         }
 
         func scrollToLastIfRequested(_ request: Int) {
@@ -298,7 +316,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             let edge: CGFloat = 52
             let speed: CGFloat = visibleY < edge ? -8 : visibleY > collection.bounds.height - edge ? 8 : 0
             guard speed != 0 else { return }
-            let maximum = max(-collection.adjustedContentInset.top, collection.contentSize.height - collection.bounds.height + collection.adjustedContentInset.bottom)
+            let maximum = maximumOffset(in: collection)
             let y = min(max(-collection.adjustedContentInset.top, collection.contentOffset.y + speed), maximum)
             let delta = y - collection.contentOffset.y
             guard delta != 0 else { return }

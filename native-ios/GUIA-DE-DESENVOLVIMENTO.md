@@ -35,6 +35,7 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 
 - Use a identidade do Momentra. Fundo preto na galeria e no visualizador, amarelo como destaque, ícones já disponíveis e rótulos em português. Preserve as marcas de Google Drive e OneDrive.
 - Reuse `GalleryControlSurface(rounded: true)` nas ações da galeria. Ícones ficam em superfícies redondas de pelo menos 44 pt. Ações de texto e grupos de botões usam cápsulas. Use Liquid Glass nativo onde estiver disponível e material padrão nas versões anteriores.
+- Sobreponha os controles inferiores à grade para que o Liquid Glass refrate as miniaturas atrás deles. Reserve a altura dos controles como margem de rolagem para deixar a última fileira acessível.
 - Preserve miniaturas quadradas e a foto inteira no visualizador inicial. Toque simples alterna os controles. Dois toques alternam a aproximação com controles ocultos. Pinça ajusta o zoom. O X da busca retorna à aba e aos filtros de origem.
 - Escreva as datas das seções por extenso, seguidas de ` · ` e do dia da semana. No dia atual, mantenha também o prefixo `Hoje · `.
 - Deslizar para baixo no visualizador fecha a mídia e volta à grade na mesma aba. Para voltar à câmera, feche a galeria pela própria grade.

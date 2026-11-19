@@ -47,6 +47,7 @@ struct OriginalsView: View {
     @State private var galleryVisible = false
     @State private var galleryDrag = CGSize.zero
     @State private var galleryExit: ExitDirection?
+    @State private var galleryFooterHeight: CGFloat = 74
 
     private enum ExitDirection { case left, down }
 
@@ -133,24 +134,32 @@ struct OriginalsView: View {
             if tab == .trash {
                 trashSources
             }
-            if items.isEmpty {
-                emptyState
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(gallerySwipe(toward: .left))
-            } else {
-                GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
-                            contentVersion: projectionVersion, newestScrollRequest: scrollRequest, tile: tile,
-                            open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
-                            reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
-                            dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) })
-                    .accessibilityIdentifier("momentra-gallery-grid")
+            Group {
+                if items.isEmpty {
+                    emptyState
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(gallerySwipe(toward: .left))
+                } else {
+                    GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
+                                contentVersion: projectionVersion, newestScrollRequest: scrollRequest,
+                                bottomInset: selecting ? 0 : galleryFooterHeight,
+                                tile: tile, open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
+                                reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
+                                dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) })
+                        .accessibilityIdentifier("momentra-gallery-grid")
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if !selecting {
+                    footer.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { galleryFooterHeight = $0 }
+                }
             }
             if selecting {
                 GallerySelectionBar(count: selected.count, busy: busy,
                                     review: { pane = .selection }, delete: { confirmBatch = true }) {
                     Button { shareSelection(items) } label: { GalleryShareIcon() }
                 }
-            } else { footer }
+            }
         }
         .background(.black)
         .preferredColorScheme(.dark)
@@ -314,7 +323,15 @@ struct OriginalsView: View {
         if active { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
-    private var footer: some View {
+    @ViewBuilder private var footer: some View {
+        if #available(iOS 26, *) {
+            GlassEffectContainer(spacing: 0) { footerControls }
+        } else {
+            footerControls
+        }
+    }
+
+    private var footerControls: some View {
         HStack(spacing: 10) {
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { choice in
