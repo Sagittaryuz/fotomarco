@@ -77,7 +77,7 @@ final class GalleryInteractionTests: XCTestCase {
         top.press(forDuration: 0.05, thenDragTo: bottom)
         XCTAssertFalse(sync.exists)
         XCTAssertFalse(retry.exists)
-        bottom.press(forDuration: 0.05, thenDragTo: top)
+        bottom.press(forDuration: 0.05, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 0.2)
         XCTAssertTrue(retry.waitForExistence(timeout: 8), "Arrastar depois da última fileira deve tentar consultar a conta de teste.")
         XCTAssertTrue(app.staticTexts["4 itens"].exists)
         XCTAssertEqual(quota.value as? String, "31%")
