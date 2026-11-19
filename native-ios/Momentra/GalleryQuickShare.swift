@@ -1,0 +1,88 @@
+import AVKit
+import SwiftUI
+
+struct GalleryQuickShare: View {
+    let load: () async throws -> PhotoEditorInput
+    var isVideo = false
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var source: PhotoEditorInput?
+    @State private var picture: CGImage?
+    @State private var player: AVPlayer?
+    @State private var sharePresented = false
+    @State private var attempted = false
+    @State private var failed = false
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Button("Fechar") { dismiss() }.frame(minHeight: 44)
+                Spacer()
+                Text(isVideo ? "Vídeo ampliado" : "Foto ampliada").font(.headline)
+                Spacer()
+                Button { sharePresented = true } label: {
+                    GalleryShareIcon()
+                }.accessibilityLabel("Compartilhar").disabled(source == nil)
+            }.padding(.horizontal, 16)
+            Group {
+                if let picture {
+                    Image(decorative: picture, scale: 1).resizable().scaledToFit()
+                } else if let player {
+                    VideoPlayer(player: player)
+                } else if failed {
+                    ContentUnavailableView("Não foi possível abrir o arquivo", systemImage: "photo.badge.exclamationmark")
+                } else {
+                    ProgressView("Preparando compartilhamento…")
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(.black.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .task { await prepare() }
+        .task(id: source?.url) {
+            guard source != nil, !attempted else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            attempted = true
+            sharePresented = true
+        }
+        .sheet(isPresented: $sharePresented) {
+            if let source { Activity(source: source) }
+        }
+        .onDisappear {
+            player?.pause()
+        }
+    }
+
+    private func prepare() async {
+        guard source == nil else { return }
+        do {
+            let input = try await load()
+            do {
+                if !isVideo {
+                    picture = try await Task.detached(priority: .userInitiated) {
+                        try PhotoEditRenderer.previewSource(input.url, maximumPixels: 1800)
+                    }.value
+                }
+                try Task.checkCancellation()
+                if isVideo { player = AVPlayer(url: input.url) }
+                source = input
+            } catch {
+                input.close()
+                throw error
+            }
+        } catch { if !Task.isCancelled { failed = true } }
+    }
+
+    private struct Activity: UIViewControllerRepresentable {
+        let source: PhotoEditorInput
+
+        func makeUIViewController(context: Context) -> UIActivityViewController {
+            let controller = UIActivityViewController(activityItems: [source.url], applicationActivities: nil)
+            controller.completionWithItemsHandler = { [source] _, _, _, _ in withExtendedLifetime(source) {} }
+            return controller
+        }
+
+        func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+    }
+}

@@ -1,8 +1,15 @@
 import SwiftUI
 
-struct PhotoEditorInput {
+final class PhotoEditorInput {
     let url: URL
-    var temporary = false
+    private let temporary: Bool
+
+    init(url: URL, temporary: Bool = false) {
+        self.url = url
+        self.temporary = temporary
+    }
+
+    deinit { close() }
 
     func close() {
         if temporary { try? FileManager.default.removeItem(at: url) }
