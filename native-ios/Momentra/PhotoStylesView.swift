@@ -17,12 +17,17 @@ struct PhotoStylesView: View {
             .tabViewStyle(.page(indexDisplayMode: .always))
             .frame(maxHeight: 450)
             Text(candidate.detail).multilineTextAlignment(.center).frame(minHeight: 44).padding(.horizontal)
-            Button("Usar \(candidate.rawValue)") { selected = candidate.rawValue; dismiss() }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 20).frame(minHeight: 44)
-                .contentShape(Capsule())
-                .modifier(GalleryControlSurface(rounded: true))
-                .frame(maxWidth: .infinity)
+            Button {
+                selected = candidate.rawValue
+                dismiss()
+            } label: {
+                Text("Usar \(candidate.rawValue)")
+                    .padding(.horizontal, 20).frame(minHeight: 44)
+                    .contentShape(Capsule())
+                    .modifier(GalleryControlSurface(rounded: true))
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
             Text("Efeitos aplicados à cópia fotografada pelo Momentra. O original é preservado.")
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
         }
