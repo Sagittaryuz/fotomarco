@@ -314,6 +314,28 @@ final class GalleryInteractionTests: XCTestCase {
         snapshot("Interruptores nativos", app: app)
     }
 
+    func testCameraThumbnailSharesOnlyTheDisplayedPhoto() {
+        let app = launch()
+        let thumbnail = app.buttons["Abrir capturas"]
+        XCTAssertTrue(thumbnail.waitForExistence(timeout: 8))
+        thumbnail.tap()
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        app.buttons["Fechar galeria"].tap()
+        XCTAssertTrue(grid.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(thumbnail.isHittable)
+
+        thumbnail.press(forDuration: 0.75)
+        let activities = app.collectionViews["activityCollectionView"]
+        XCTAssertTrue(activities.waitForExistence(timeout: 10))
+        XCTAssertFalse(grid.exists)
+        XCTAssertFalse(app.staticTexts["Foto ampliada"].exists)
+        snapshot("Compartilhar foto pela miniatura da câmera", app: app)
+        completeShareByCopying(in: app)
+        XCTAssertTrue(thumbnail.isHittable)
+        XCTAssertFalse(grid.exists)
+    }
+
     func testHoldingGalleryPhotoAutomaticallyOpensSystemShareSheet() {
         let app = launch()
         app.buttons["Abrir capturas"].tap()
