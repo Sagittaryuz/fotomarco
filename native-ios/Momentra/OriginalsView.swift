@@ -190,26 +190,25 @@ struct Thumbnail: View {
             .clipped()
         }
         .task(id: url) {
-            let fileURL = url
-            if isVideo {
-                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: fileURL))
-                generator.appliesPreferredTrackTransform = true
-                generator.maximumSize = CGSize(width: 256, height: 256)
-                if let preview = try? await generator.image(at: .zero), !Task.isCancelled {
-                    image = UIImage(cgImage: preview.image)
+            let file = url
+            let video = isVideo
+            let pixels = video ? 256 : 320
+            let thumbnail = try? await GalleryThumbnailCache.shared.image(forFile: file, isVideo: video,
+                                                                           maximumPixels: pixels) {
+                if video {
+                    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: file))
+                    generator.appliesPreferredTrackTransform = true
+                    generator.maximumSize = CGSize(width: pixels, height: pixels)
+                    return try await generator.image(at: .zero).image
                 }
-                return
+                guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
+                return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: pixels
+                ] as CFDictionary)
             }
-            let thumbnail = await Task.detached(priority: .utility) { () -> UIImage? in
-                guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil),
-                      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 160
-                      ] as CFDictionary) else { return nil }
-                return UIImage(cgImage: image)
-            }.value
-            image = thumbnail
+            if !Task.isCancelled { image = thumbnail.map { UIImage(cgImage: $0) } }
         }
     }
 }

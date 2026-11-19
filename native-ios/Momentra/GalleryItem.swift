@@ -128,7 +128,7 @@ struct GalleryItem: Identifiable {
         case .device(let asset):
             if isVideo { DeviceVideoPreview(asset: asset, active: active) }
             else { DeviceThumbnail(asset: asset, fullView: true) }
-        case .cloud(let item): item.fullImage()
+        case .cloud(let item): item.fullImage(active: active)
         }
     }
 
