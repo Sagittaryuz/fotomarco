@@ -74,6 +74,13 @@ final class GalleryInteractionTests: XCTestCase {
         device.press(forDuration: 0.15, thenDragTo: captures)
         XCTAssertTrue(captures.isSelected)
         device.tap()
+        let allowPhotos = app.buttons["Permitir acesso"]
+        if allowPhotos.exists {
+            allowPhotos.tap()
+            let permission = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
+                .matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "Full Access", "Acesso Total")).firstMatch
+            if permission.waitForExistence(timeout: 4) { permission.tap() }
+        }
         let select = app.buttons["Selecionar"]
         XCTAssertTrue(select.waitForExistence(timeout: 8))
         select.tap()
@@ -108,8 +115,8 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(save.isEnabled)
         snapshot("Editor de foto", app: app)
         save.tap()
+        XCTAssertTrue(app.staticTexts["Editor Momentra"].waitForNonExistence(timeout: 14))
         XCTAssertTrue(app.buttons["Editar foto"].waitForExistence(timeout: 12))
-        XCTAssertFalse(app.staticTexts["Editor Momentra"].exists)
     }
 
     func testSettingsUsesADraggableNativeSwitch() {
@@ -119,8 +126,9 @@ final class GalleryInteractionTests: XCTestCase {
         if !grid.isHittable { app.swipeUp() }
         XCTAssertTrue(grid.waitForExistence(timeout: 8))
         XCTAssertEqual(grid.value as? String, "0")
-        let rightEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5))
-        let leftEdge = rightEdge.withOffset(CGVector(dx: -42, dy: 0))
+        let rightEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+            .withOffset(CGVector(dx: -12, dy: 0))
+        let leftEdge = rightEdge.withOffset(CGVector(dx: -32, dy: 0))
         leftEdge.press(forDuration: 0.15, thenDragTo: rightEdge)
         XCTAssertEqual(grid.value as? String, "1")
         rightEdge.press(forDuration: 0.15, thenDragTo: leftEdge)
