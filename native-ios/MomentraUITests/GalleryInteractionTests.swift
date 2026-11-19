@@ -325,6 +325,9 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(activities.waitForExistence(timeout: 12))
         XCTAssertTrue(activities.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "Copy", "Copiar")).firstMatch.exists)
         snapshot("Compartilhamento rápido", app: app)
+        completeShareByCopying(in: app)
+        XCTAssertTrue(app.collectionViews["momentra-gallery-grid"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Selecionar"].isHittable)
     }
 
     func testViewerAddsNearbyPhotosToNativeShare() {
@@ -342,7 +345,39 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2 itens selecionados"].exists)
         snapshot("Compartilhar duas capturas", app: app)
         app.buttons["Compartilhar seleção"].tap()
-        XCTAssertTrue(app.collectionViews["activityCollectionView"].waitForExistence(timeout: 12))
+        completeShareByCopying(in: app)
+        XCTAssertTrue(app.buttons["Voltar à galeria"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.collectionViews["momentra-gallery-grid"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Selecionar"].isHittable)
+    }
+
+    func testCompletedBatchShareExitsSelectionMode() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        let select = app.buttons["Selecionar"]
+        select.tap()
+        grid.cells.element(boundBy: 0).tap()
+        grid.cells.element(boundBy: 1).tap()
+        XCTAssertTrue(app.buttons["Mostrar seleção (2)"].exists)
+        app.buttons["Compartilhar seleção"].tap()
+        completeShareByCopying(in: app)
+        XCTAssertTrue(select.waitForExistence(timeout: 10))
+        XCTAssertTrue(select.isHittable)
+        XCTAssertTrue(app.buttons["Capturas"].isHittable)
+        XCTAssertFalse(app.buttons["Mostrar seleção (2)"].exists)
+        select.tap()
+        XCTAssertTrue(app.buttons["Mostrar seleção (0)"].exists)
+    }
+
+    private func completeShareByCopying(in app: XCUIApplication) {
+        let activities = app.collectionViews["activityCollectionView"]
+        XCTAssertTrue(activities.waitForExistence(timeout: 12))
+        let copy = activities.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "Copy", "Copiar")).firstMatch
+        XCTAssertTrue(copy.waitForExistence(timeout: 8))
+        copy.tap()
+        XCTAssertTrue(activities.waitForNonExistence(timeout: 10))
     }
 
     func testViewerSwipeDownKeepsGalleryOpen() {
