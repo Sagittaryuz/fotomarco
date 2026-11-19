@@ -1,0 +1,6 @@
+{
+  "name": "momentra-ota",
+  "private": true,
+  "scripts": { "test": "node --test install.test.js" },
+  "dependencies": { "@vercel/blob": "2.9.0" }
+}

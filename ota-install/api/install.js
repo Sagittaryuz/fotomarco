@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
-const { serveIpa } = require('../lib/ipa');
+const { issueSignedToken, presignUrl } = require('@vercel/blob');
+const { serveIpa, serveBlobIpa } = require('../lib/ipa');
 
 function matches(value, expected) {
   if (typeof value !== 'string' || typeof expected !== 'string' || !expected) return false;
@@ -11,11 +12,41 @@ function escapeXml(value) {
   return String(value).replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[ch]));
 }
 
+async function signBlob(pathname, operation, maximumSizeInBytes) {
+  const validUntil = Date.now() + 5 * 60 * 1000;
+  const constraints = operation === 'put'
+    ? { allowedContentTypes: ['application/octet-stream'], maximumSizeInBytes }
+    : {};
+  const delegation = await issueSignedToken({ pathname, operations: [operation], validUntil, ...constraints });
+  const request = await presignUrl(delegation, {
+    pathname, operation, validUntil,
+    ...(operation === 'put' ? { contentType: 'application/octet-stream' } : {})
+  });
+  return request;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   const stage = typeof req.query.stage === 'string' ? req.query.stage : '';
+  if (stage === 'upload') {
+    const key = process.env.OTA_UPLOAD_TOKEN;
+    const basename = process.env.OTA_UPLOAD_FILE;
+    const size = Number(process.env.OTA_UPLOAD_SIZE);
+    if (req.method !== 'POST' || !/^[0-9a-f]{64}$/.test(key || '') ||
+        !matches(req.headers.authorization, 'Bearer ' + key) ||
+        !(Date.now() < Number(process.env.OTA_UPLOAD_EXPIRES)) ||
+        !/^ota\/Momentra-\d+\.\d+\.\d+-\d+-[0-9a-f]{12}\.ipa$/.test(basename || '') ||
+        !Number.isSafeInteger(size) || size < 1 || size > 150_000_000) {
+      return res.status(404).send('Link indisponível.');
+    }
+    try {
+      const signed = await signBlob(basename, 'put', size);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.send(JSON.stringify(signed));
+    } catch { return res.status(503).send('Armazenamento indisponível.'); }
+  }
   const bootstrap = matches(req.query.token, process.env.INSTALL_TOKEN) &&
     Number.isFinite(Number(process.env.INSTALL_EXPIRES)) && Date.now() < Number(process.env.INSTALL_EXPIRES);
   const secret = process.env.DEVICE_UPDATE_TOKEN || '';
@@ -50,6 +81,15 @@ module.exports = async function handler(req, res) {
   const authorizationQuery = ticket ? 'ticket=' + encodeURIComponent(req.query.ticket) : 'token=' + token;
   const version = process.env.RELEASE_VERSION || '0.1.5';
   if (!/^\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(version)) return res.status(503).send('Versão indisponível.');
+  const legacyOrigin = process.env.SIGNED_IPA_URL;
+  const build = process.env.RELEASE_BUILD;
+  const pathname = process.env.SIGNED_IPA_BLOB;
+  const size = Number(process.env.SIGNED_IPA_SIZE);
+  const blob = pathname?.startsWith(`ota/Momentra-${version}-${build}-`) &&
+    /^ota\/Momentra-\d+\.\d+\.\d+-\d+-[0-9a-f]{12}\.ipa$/.test(pathname) &&
+    Number.isSafeInteger(size) && size > 0 && size <= 150_000_000
+    ? { pathname, size } : null;
+  const available = pathname ? blob !== null : /^https:\/\/cdn\d+\.signulous\.com\/downloads\//.test(legacyOrigin || '');
   if (stage === 'issue') {
     if (!authorizedDevice || !signingKey) return res.status(404).send('Link indisponível.');
     const expires = String(Date.now() + ttl);
@@ -65,10 +105,7 @@ module.exports = async function handler(req, res) {
     return res.send(JSON.stringify({version}));
   }
   if (req.query.stage === 'manifest') {
-    const remote = process.env.SIGNED_IPA_URL;
-    const build = process.env.RELEASE_BUILD;
-    if (!remote || !/^https:\/\/cdn\d+\.signulous\.com\/downloads\//.test(remote) ||
-        !build || !/^\d+(?:\.\d+){0,2}$/.test(build)) {
+    if (!available || !build || !/^\d+(?:\.\d+){0,2}$/.test(build)) {
       return res.status(503).send('Arquivo indisponível.');
     }
     const ipa = escapeXml(`${endpoint}?stage=package&${authorizationQuery}`);
@@ -76,9 +113,9 @@ module.exports = async function handler(req, res) {
     return res.send(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>br.com.momentra.camera</string><key>bundle-version</key><string>${build}</string><key>kind</key><string>software</string><key>title</key><string>Momentra</string></dict></dict></array></dict></plist>`);
   }
   if (req.query.stage === 'package') {
-    const remote = process.env.SIGNED_IPA_URL;
-    if (!remote || !/^https:\/\/cdn\d+\.signulous\.com\/downloads\//.test(remote)) return res.status(503).send('Arquivo indisponível.');
-    return serveIpa(req, res, remote);
+    if (!available) return res.status(503).send('Arquivo indisponível.');
+    if (blob) return serveBlobIpa(req, res, blob, async (path, method) => (await signBlob(path, method)).presignedUrl);
+    return serveIpa(req, res, legacyOrigin);
   }
   const manifest = `${endpoint}?stage=manifest&token=${token}`;
   const install = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifest)}`;

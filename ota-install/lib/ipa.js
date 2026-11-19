@@ -1,4 +1,5 @@
 const { pipeline } = require('node:stream/promises');
+const { Readable } = require('node:stream');
 
 const blockSize = 512 * 1024;
 const concurrentBlocks = 8;
@@ -77,4 +78,45 @@ async function serveIpa(req, res, url) {
   }
 }
 
-module.exports = { serveIpa };
+async function serveBlobIpa(req, res, source, signUrl) {
+  const range = requestedRange(req.headers.range, source.size);
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (!range) {
+    res.setHeader('Content-Range', `bytes */${source.size}`);
+    return res.status(416).end();
+  }
+  const [first, last] = range;
+  const partial = req.headers.range !== undefined;
+  const expectedStatus = partial ? 206 : 200;
+  const rangeHeader = `bytes ${first}-${last}/${source.size}`;
+  const count = last - first + 1;
+  let upstream;
+  try {
+    const method = req.method === 'HEAD' ? 'head' : 'get';
+    const url = await signUrl(source.pathname, method);
+    const headers = { 'Accept-Encoding': 'identity' };
+    if (partial && method === 'get') headers.Range = `bytes=${first}-${last}`;
+    upstream = await fetch(url, {
+      method: method.toUpperCase(), headers, redirect: 'error', signal: AbortSignal.timeout(180_000)
+    });
+    const status = method === 'head' ? 200 : expectedStatus;
+    const length = method === 'head' ? source.size : count;
+    if (upstream.status !== status || +upstream.headers.get('content-length') !== length ||
+        (method === 'get' && partial && upstream.headers.get('content-range') !== rangeHeader)) {
+      await upstream.body?.cancel();
+      return res.status(502).send('Download indisponível.');
+    }
+  } catch {
+    return res.status(502).send('Download indisponível.');
+  }
+  res.status(expectedStatus);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Length', count);
+  if (partial) res.setHeader('Content-Range', rangeHeader);
+  if (req.method === 'HEAD') return res.end();
+  res.flushHeaders();
+  try { await pipeline(Readable.fromWeb(upstream.body), res); }
+  catch { res.destroy(); }
+}
+
+module.exports = { serveIpa, serveBlobIpa };

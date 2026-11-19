@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const handler = require('./api/install');
-const { serveIpa } = require('./lib/ipa');
+const { serveIpa, serveBlobIpa } = require('./lib/ipa');
 
 async function request(query, authorization = '', method = 'GET') {
   const headers = {};
@@ -113,4 +113,55 @@ test('package streams all bytes in order and supports HEAD and resume', async (t
   assert.deepEqual(Buffer.from(await resume.arrayBuffer()), ipa.subarray(100, 2097153));
   const invalid = await fetch(local, { headers: { Range: `bytes=${ipa.length}-` } });
   assert.equal(invalid.status, 416);
+});
+
+test('private origin replaces the legacy origin only for the selected build', async () => {
+  process.env.INSTALL_TOKEN = 'f'.repeat(64);
+  process.env.INSTALL_EXPIRES = String(Date.now() + 60_000);
+  process.env.RELEASE_VERSION = '0.1.17';
+  process.env.RELEASE_BUILD = '18';
+  process.env.SIGNED_IPA_URL = '';
+  process.env.SIGNED_IPA_SIZE = '56814619';
+  process.env.SIGNED_IPA_BLOB = 'ota/Momentra-0.1.17-18-a15ca411d84d.ipa';
+  const access = { stage: 'manifest', token: process.env.INSTALL_TOKEN };
+  assert.equal((await request(access)).code, 200);
+  assert.equal((await request({ stage: 'package' })).code, 404);
+  assert.equal((await request({ stage: 'upload' }, 'Bearer ' + process.env.INSTALL_TOKEN, 'POST')).code, 404);
+  process.env.RELEASE_BUILD = '19';
+  assert.equal((await request(access)).code, 503);
+  delete process.env.SIGNED_IPA_BLOB;
+  delete process.env.SIGNED_IPA_SIZE;
+});
+
+test('the private upstream serves HEAD and range without exposing its URL', async (t) => {
+  const ipa = Buffer.from('signed package bytes');
+  const listen = async listener => {
+    const server = http.createServer(listener);
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => { server.close(); server.closeAllConnections(); });
+    return `http://127.0.0.1:${server.address().port}`;
+  };
+  const upstream = await listen((req, res) => {
+    if (req.headers.range) {
+      assert.equal(req.headers.range, 'bytes=2-7');
+      res.writeHead(206, { 'Content-Length': 6, 'Content-Range': `bytes 2-7/${ipa.length}` });
+      return res.end(ipa.subarray(2, 8));
+    }
+    res.writeHead(200, { 'Content-Length': ipa.length });
+    res.end(req.method === 'HEAD' ? undefined : ipa);
+  });
+  const app = await listen((req, res) => {
+    res.status = code => { res.statusCode = code; return res; };
+    res.send = body => res.end(body);
+    return serveBlobIpa(req, res, { pathname: 'private', size: ipa.length }, async () => upstream);
+  });
+  assert.equal(+(await fetch(app, { method: 'HEAD' })).headers.get('content-length'), ipa.length);
+  const partial = await fetch(app, { headers: { Range: 'bytes=2-7' } });
+  assert.equal(partial.status, 206);
+  assert.deepEqual(Buffer.from(await partial.arrayBuffer()), ipa.subarray(2, 8));
+  const full = await fetch(app);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get('location'), null);
+  assert.deepEqual(Buffer.from(await full.arrayBuffer()), ipa);
+  assert.equal((await fetch(app, { headers: { Range: 'bytes=500-' } })).status, 416);
 });
