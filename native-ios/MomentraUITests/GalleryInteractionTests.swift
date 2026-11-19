@@ -1,12 +1,13 @@
 import XCTest
 
 final class GalleryInteractionTests: XCTestCase {
-    private func launch(seedBenchmark: Bool = false) -> XCUIApplication {
+    private func launch(seedBenchmark: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.19",
                                "-native.gps.enabled", "NO"]
         if seedBenchmark { app.launchArguments.append("-seedGalleryBenchmark") }
+        app.launchArguments += extraArguments
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let permission = springboard.alerts.buttons["Allow"].firstMatch
@@ -51,6 +52,24 @@ final class GalleryInteractionTests: XCTestCase {
         attachment.name = "Medição da galeria"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    func testCloudCatalogSurvivesAppRelaunch() {
+        let app = launch(extraArguments: ["-galleryCloudFixture", "-seedGalleryCloudFixture"])
+        XCTAssertTrue(app.staticTexts["cloud-catalog-fixture"].waitForExistence(timeout: 8))
+        app.buttons["Abrir capturas"].tap()
+        let count = app.staticTexts["4 itens"]
+        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        app.terminate()
+
+        let reopened = launch(extraArguments: ["-galleryCloudFixture"])
+        XCTAssertTrue(reopened.staticTexts["cloud-catalog-fixture"].waitForExistence(timeout: 8))
+        reopened.buttons["Abrir capturas"].tap()
+        XCTAssertTrue(reopened.staticTexts["4 itens"].waitForExistence(timeout: 8))
+        snapshot("Catálogo da nuvem reaberto sem conta autenticada", app: reopened)
     }
 
     func testAppCapturesExcludeUntrackedPhotosEvenAfterVisitingFavorites() {

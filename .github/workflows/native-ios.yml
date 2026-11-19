@@ -61,6 +61,27 @@ jobs:
           assert source.count(previous) == 1
           p.write_text(source.replace(previous, previous + "\n        .modifier(GalleryBenchmarkFixture())", 1))
           PYTHON
+      - name: Add simulator-only offline cloud catalog fixture
+        if: inputs.test_method == 'testCloudCatalogSurvivesAppRelaunch'
+        run: |
+          cp .github/qa/CloudCatalogFixture.swift native-ios/Momentra/CloudCatalogFixture.swift
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          camera = Path("native-ios/Momentra/CameraScreen.swift")
+          source = camera.read_text()
+          anchor = "        .task { await updates.check() }"
+          assert source.count(anchor) == 1
+          camera.write_text(source.replace(anchor, anchor + "\n        .modifier(CloudCatalogFixture())", 1))
+          accounts = Path("native-ios/Momentra/CloudArchiveAccounts.swift")
+          with accounts.open("a") as file:
+              file.write("""
+          extension CloudArchiveAccounts {
+              func installCloudCatalogFixture(_ destination: CloudDeliveryPlan.Destination) {
+                  accounts = [Account(id: destination, label: "Conta de teste", enabled: false)]
+              }
+          }
+          """)
+          PYTHON
       - name: Generate project and start simulator
         working-directory: native-ios
         run: |
@@ -111,7 +132,7 @@ jobs:
           TEST_TARGET="MomentraUITests/GalleryInteractionTests${TEST_METHOD:+/$TEST_METHOD}"
           SKIP_BENCHMARK=()
           if [ -z "$TEST_METHOD" ]; then
-            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement)
+            SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch)
           fi
           xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "-only-testing:$TEST_TARGET" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence
