@@ -4,6 +4,14 @@ import LockedCameraCapture
 /// Session content is invalidated only after all recognized files and metadata have verified durable copies.
 @available(iOS 18.0, *)
 enum LockedCaptureImporter {
+    private actor Imports {
+        var active = Set<URL>()
+        func begin(_ directory: URL) -> Bool { active.insert(directory).inserted }
+        func end(_ directory: URL) { active.remove(directory) }
+    }
+
+    private static let imports = Imports()
+
     static func watch() async {
         for await update in LockedCameraCaptureManager.shared.sessionContentUpdates {
             switch update {
@@ -29,24 +37,68 @@ enum LockedCaptureImporter {
     }
 
     private static func copySession(_ directory: URL) async {
-        let outcome = await Task.detached(priority: .utility) { () -> (staged: Int, safe: Bool) in
+        guard await imports.begin(directory) else { return }
+        let outcome = await Task.detached(priority: .utility) { () -> (staged: Int, safe: Bool, cleanup: [UnselectedOriginal]) in
             let fm = FileManager.default
-            guard let root = try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return (0, false) }
+            guard let root = try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return (0, false, []) }
             let queue = CloudCaptureQueue(directory: root.appendingPathComponent("CloudPending"))
             let archive = CloudArchiveJournal(root: root)
             copyFiles(from: directory, to: root.appendingPathComponent("Originals", isDirectory: true), cloudQueue: queue, archive: archive)
             copyFiles(from: directory.appendingPathComponent("Processed", isDirectory: true),
                       to: root.appendingPathComponent("Processed", isDirectory: true), cloudQueue: queue, archive: archive)
             let staged = importMetadata(from: directory, to: root, allowedCloudOwnerHash: nil, preserveLegacy: true)
-            return (staged, sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: nil, preserveLegacy: true))
+            let safe = sessionIsSafelyImported(directory, root: root, allowedCloudOwnerHash: nil, preserveLegacy: true)
+            return (staged, safe, safe ? unselectedOriginals(in: directory, root: root) : [])
         }.value
         if outcome.safe {
             // The system owns these session URLs; never remove a session directory directly.
-            try? await LockedCameraCaptureManager.shared.invalidateSessionContent(at: directory)
+            do {
+                try await LockedCameraCaptureManager.shared.invalidateSessionContent(at: directory)
+                if !outcome.cleanup.isEmpty {
+                    await Task.detached(priority: .utility) {
+                        for item in outcome.cleanup {
+                            CloudArchiveJournal(root: item.root).serializeCleanup {
+                                guard (try? CloudFileFingerprint.read(item.stamped)) == item.stampedHash,
+                                      (try? CloudFileFingerprint.read(item.original)) == item.originalHash else { return }
+                                try? FileManager.default.removeItem(at: item.original)
+                            }
+                        }
+                    }.value
+                }
+            } catch { /* Keep the verified local copies if the system retains the session. */ }
         }
         if outcome.staged > 0 {
             CloudBackgroundScheduler.scheduleIfNeeded()
             NotificationCenter.default.post(name: .momentraCloudCaptureStaged, object: nil)
+        }
+        await imports.end(directory)
+    }
+
+    private struct UnselectedOriginal {
+        let root: URL
+        let original: URL
+        let stamped: URL
+        let originalHash: CloudFileFingerprint
+        let stampedHash: CloudFileFingerprint
+    }
+
+    private static func unselectedOriginals(in directory: URL, root: URL) -> [UnselectedOriginal] {
+        let metadata = directory.appendingPathComponent("Metadata")
+        let files = (try? FileManager.default.contentsOfDirectory(at: metadata, includingPropertiesForKeys: nil)) ?? []
+        return files.compactMap { file in
+            guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
+                  let bytes = try? Data(contentsOf: file), bytes.count <= 64 * 1024,
+                  let capture = try? JSONDecoder().decode(LockedCaptureMetadata.self, from: bytes),
+                  capture.isValid(for: id), capture.cloudOwnerHash == nil,
+                  capture.archivePlan?.keepsOriginal == false else { return nil }
+            let name = id.uuidString + ".jpg"
+            let original = directory.appendingPathComponent(name)
+            let stamped = directory.appendingPathComponent("Processed").appendingPathComponent(name)
+            guard let originalHash = try? CloudFileFingerprint.read(original),
+                  let stampedHash = try? CloudFileFingerprint.read(stamped) else { return nil }
+            return UnselectedOriginal(root: root, original: root.appendingPathComponent("Originals").appendingPathComponent(name),
+                stamped: root.appendingPathComponent("Processed").appendingPathComponent(name),
+                originalHash: originalHash, stampedHash: stampedHash)
         }
     }
 
@@ -92,7 +144,8 @@ enum LockedCaptureImporter {
             let item = try? archive.read(id)
             if let plan = metadata.archivePlan, !plan.deliveries.isEmpty {
                 guard let item, item.plan.deliveries.map(\.destination) == plan.deliveries.map(\.destination),
-                      item.plan.keepLocal == plan.keepLocal else { return false }
+                      item.plan.keepLocal == plan.keepLocal,
+                      item.plan.keepsOriginal == plan.keepsOriginal else { return false }
             }
             if let item, item.cleanupStarted {
                 guard item.original == originalHash, item.stamped == stampedHash else { return false }
@@ -169,8 +222,10 @@ enum LockedCaptureImporter {
                     let profile = metadata.profileID.flatMap { id in
                         metadata.profileName.map { CaptureProfileTag(id: id, name: $0) }
                     }
-                    try CloudArchiveJournal(root: root).enqueue(id: id, date: metadata.capturedAt,
-                                                                originalExtension: "jpg", plan: plan, profile: profile)
+                    let journal = CloudArchiveJournal(root: root)
+                    try journal.enqueue(id: id, date: metadata.capturedAt,
+                                        originalExtension: "jpg", plan: plan, profile: profile)
+                    if !plan.keepsOriginal { try journal.markReady(id: id) }
                 } else if let ownerHash {
                     try CloudCaptureStager.stage(root: root, captureID: id, ownerHash: ownerHash, originalExtension: "jpg")
                 }

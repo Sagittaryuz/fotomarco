@@ -54,8 +54,10 @@ actor CloudArchiveDelivery {
         let stampedName = item.remoteName(stamped: true)
 
         if !item.cleanupStarted {
-            guard try CloudFileFingerprint.read(originalURL) == original,
-                  try CloudFileFingerprint.read(stampedURL) == stamped else { throw CocoaError(.fileReadCorruptFile) }
+            if item.plan.keepsOriginal, try CloudFileFingerprint.read(originalURL) != original {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            guard try CloudFileFingerprint.read(stampedURL) == stamped else { throw CocoaError(.fileReadCorruptFile) }
         }
 
         var failures: [Error] = []
@@ -74,33 +76,43 @@ actor CloudArchiveDelivery {
                     } else {
                         guard delivery.phase != .verified else { throw CocoaError(.fileReadCorruptFile) }
                         let folder = try await google.folder(accessToken: token)
-                        let first = try await google.reserveFileID(accessToken: token)
+                        let first = item.plan.keepsOriginal ? try await google.reserveFileID(accessToken: token) : nil
                         let second = try await google.reserveFileID(accessToken: token)
                         guard first != second else { throw CocoaError(.fileReadCorruptFile) }
                         reservation = .init(destination: destination, folder: folder, original: first, stamped: second)
                         item.reservations.append(reservation)
                         try journal.write(item)
                     }
+                    guard item.plan.keepsOriginal == (reservation.original != nil) else { throw CocoaError(.fileReadCorruptFile) }
                     if delivery.phase == .verified {
                         guard delivery.originalID == reservation.original, delivery.stampedID == reservation.stamped else {
                             throw CocoaError(.fileReadCorruptFile)
                         }
-                        try await google.verify(id: reservation.original, folderID: reservation.folder, name: originalName, mimeType: mime, fingerprint: original, accessToken: token)
+                        if let first = reservation.original {
+                            try await google.verify(id: first, folderID: reservation.folder, name: originalName, mimeType: mime, fingerprint: original, accessToken: token)
+                        }
                         try await google.verify(id: reservation.stamped, folderID: reservation.folder, name: stampedName, mimeType: "image/jpeg", fingerprint: stamped, accessToken: token)
                     } else {
-                        let first = try await google.upload(file: originalURL, id: reservation.original, folderID: reservation.folder, name: originalName, mimeType: mime, fingerprint: original, accessToken: token)
+                        let first: String?
+                        if let id = reservation.original {
+                            first = try await google.upload(file: originalURL, id: id, folderID: reservation.folder, name: originalName, mimeType: mime, fingerprint: original, accessToken: token)
+                        } else { first = nil }
                         let second = try await google.upload(file: stampedURL, id: reservation.stamped, folderID: reservation.folder, name: stampedName, mimeType: "image/jpeg", fingerprint: stamped, accessToken: token)
                         try confirm(&item, destination: destination, original: first, stamped: second, journal: journal)
                     }
                 case .oneDrive:
                     if delivery.phase == .verified {
-                        guard let first = delivery.originalID, let second = delivery.stampedID, first != second else {
+                        guard let second = delivery.stampedID, delivery.originalID != second,
+                              item.plan.keepsOriginal == (delivery.originalID != nil) else {
                             throw CocoaError(.fileReadCorruptFile)
                         }
-                        try await microsoft.verify(id: first, name: originalName, fingerprint: original, accessToken: token)
+                        if let first = delivery.originalID {
+                            try await microsoft.verify(id: first, name: originalName, fingerprint: original, accessToken: token)
+                        }
                         try await microsoft.verify(id: second, name: stampedName, fingerprint: stamped, accessToken: token)
                     } else {
-                        let first = try await microsoft.upload(originalURL, name: originalName, fingerprint: original, accessToken: token)
+                        let first = item.plan.keepsOriginal
+                            ? try await microsoft.upload(originalURL, name: originalName, fingerprint: original, accessToken: token) : nil
                         let second = try await microsoft.upload(stampedURL, name: stampedName, fingerprint: stamped, accessToken: token)
                         try confirm(&item, destination: destination, original: first, stamped: second, journal: journal)
                     }
@@ -134,8 +146,9 @@ actor CloudArchiveDelivery {
     }
 
     private func confirm(_ item: inout CloudArchiveJournal.Capture, destination: CloudDeliveryPlan.Destination,
-                         original: String, stamped: String, journal: CloudArchiveJournal) throws {
-        guard !original.isEmpty, !stamped.isEmpty, original != stamped else { throw CocoaError(.fileReadCorruptFile) }
+                         original: String?, stamped: String, journal: CloudArchiveJournal) throws {
+        guard item.plan.keepsOriginal == (original != nil), original?.isEmpty != true,
+              !stamped.isEmpty, original != stamped else { throw CocoaError(.fileReadCorruptFile) }
         item.plan.confirm(destination: destination, originalID: original, stampedID: stamped)
         try journal.write(item)
     }
@@ -146,7 +159,8 @@ actor CloudArchiveDelivery {
         let stampedFile = journal.file(item, stamped: true)
         let files = [(originalFile, original), (stampedFile, stamped)]
         for (file, fingerprint) in files {
-            if item.cleanupStarted && !FileManager.default.fileExists(atPath: file.path) { continue }
+            if (item.cleanupStarted || (!item.plan.keepsOriginal && file == originalFile)),
+               !FileManager.default.fileExists(atPath: file.path) { continue }
             guard try CloudFileFingerprint.read(file) == fingerprint else { throw CocoaError(.fileReadCorruptFile) }
         }
         if !item.cleanupStarted {

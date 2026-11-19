@@ -13,5 +13,7 @@ final class UpdateCloseReadinessTests: XCTestCase {
         XCTAssertFalse(allowed(false, false, false, true))
         XCTAssertFalse(allowed(false, false, false, false, 1))
         XCTAssertFalse(allowed(false, false, false, false, 0, true))
+        XCTAssertFalse(UpdateCloseReadiness.allowsClose(capturing: false, switching: false, recording: false,
+                                                        finishing: false, processingVideos: 0, processingPhotos: 1, cloudBusy: false))
     }
 }

@@ -33,6 +33,7 @@ struct StampLayout: Codable, Equatable {
     var logoCorner = "auto"
     var compact = false
     var showsAddress = true
+    var showsForecast = true
     var map = StampPoint(x: 0.15, y: 0.13)
     var information = StampPoint(x: 0.72, y: 0.16)
     var logo = StampPoint(x: 0.85, y: 0.90)
@@ -42,7 +43,7 @@ struct StampLayout: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case mode, showsMap, showsInformation, showsLogo, mapStyle, mapSize, informationSize, logoSize, combinedSize
         case fontStyle, dateFormat, textAlignment, position, horizontal, mapScale, mapCorner, logoCorner, compact, showsAddress
-        case map, information, logo
+        case map, information, logo, showsForecast
     }
 
     init(from decoder: Decoder) throws {
@@ -75,6 +76,7 @@ struct StampLayout: Codable, Equatable {
         logoCorner = try choice(.logoCorner, allowed: corners, fallback: "auto")
         compact = try values.decodeIfPresent(Bool.self, forKey: .compact) ?? false
         showsAddress = try values.decodeIfPresent(Bool.self, forKey: .showsAddress) ?? true
+        showsForecast = try values.decodeIfPresent(Bool.self, forKey: .showsForecast) ?? true
         map = try values.decodeIfPresent(StampPoint.self, forKey: .map) ?? StampPoint(x: 0.15, y: 0.13)
         information = try values.decodeIfPresent(StampPoint.self, forKey: .information) ?? StampPoint(x: 0.72, y: 0.16)
         logo = try values.decodeIfPresent(StampPoint.self, forKey: .logo) ?? StampPoint(x: 0.85, y: 0.90)

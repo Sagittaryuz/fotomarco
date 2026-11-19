@@ -9,6 +9,7 @@ final class ForecastService: ObservableObject {
     private var generation = 0
     private var forecast: Forecast?
     private var coordinateKey: String?
+    private var nextRefresh = Date.distantPast
 
     func consult(location: CLLocation?, consent: Bool) {
         guard !isLoading else { return }
@@ -37,6 +38,15 @@ final class ForecastService: ObservableObject {
             isLoading = false
             task = nil
         }
+    }
+
+    func refresh(location: CLLocation?) {
+        let now = Date()
+        guard !isLoading, now >= nextRefresh, let location, location.horizontalAccuracy >= 0,
+              location.timestamp <= now, now.timeIntervalSince(location.timestamp) <= 60,
+              current(location: location, at: now) == nil else { return }
+        nextRefresh = now.addingTimeInterval(60)
+        consult(location: location, consent: true)
     }
 
     func cancel() {

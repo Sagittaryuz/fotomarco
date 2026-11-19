@@ -91,7 +91,7 @@ struct StampSnapshot {
         } else { validLocation = nil }
         self.location = validLocation
         self.cachedAddress = self.addressEnabled && validLocation != nil ? cachedAddress.map { String($0.prefix(240)) } : nil
-        self.forecast = validLocation == nil ? nil : forecast.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
+        self.forecast = validLocation == nil || !layout.showsForecast ? nil : forecast.flatMap { $0.isValid(at: capturedAt) ? $0 : nil }
         if gpsEnabled, let heading, heading.headingAccuracy >= 0, heading.timestamp <= capturedAt,
            capturedAt.timeIntervalSince(heading.timestamp) <= 10 {
             self.heading = heading
@@ -123,7 +123,6 @@ struct StampSnapshot {
             if let pressure = forecast.seaLevelPressureHpa { values.append(String(format: "%.1f hPa (nível do mar)", pressure)) }
             if !values.isEmpty {
                 result.append("Previsão válida em " + formatter.string(from: forecast.validAt) + ": " + values.joined(separator: " · "))
-                result.append("MET Norway · CC BY 4.0 · creativecommons.org/licenses/by/4.0/")
             }
         }
         if !note.isEmpty { result.insert(note, at: 0) }
@@ -439,6 +438,12 @@ enum PhotoMetadata {
         }
         copyFields(kCGImagePropertyTIFFDictionary, [kCGImagePropertyTIFFMake, kCGImagePropertyTIFFModel, kCGImagePropertyTIFFSoftware])
         copyFields(kCGImagePropertyExifDictionary, [kCGImagePropertyExifDateTimeOriginal, kCGImagePropertyExifExposureTime, kCGImagePropertyExifFNumber, kCGImagePropertyExifISOSpeedRatings, kCGImagePropertyExifFocalLength, kCGImagePropertyExifLensModel])
+        if snapshot?.forecast != nil, snapshot?.layout.showsInformation == true {
+            result[kCGImagePropertyIPTCDictionary as String] = [
+                kCGImagePropertyIPTCCredit as String: "MET Norway",
+                kCGImagePropertyIPTCSource as String: "Locationforecast · CC BY 4.0 · https://creativecommons.org/licenses/by/4.0/"
+            ]
+        }
         if let location = snapshot?.location, snapshot?.gpsEnabled == true {
             let latitude = location.coordinate.latitude, longitude = location.coordinate.longitude
             let formatter = DateFormatter()

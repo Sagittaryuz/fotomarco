@@ -29,6 +29,7 @@ struct CameraScreen: View {
     @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @StateObject private var archiveAccounts = CloudArchiveAccounts.shared
     @AppStorage("native.archive.keepLocal") private var keepArchiveLocal = true
+    @AppStorage("native.archive.keepOriginal") private var keepArchiveOriginal = true
     @State private var archiveStatus = CloudArchiveDelivery.Summary()
     @State private var archiveNotice: String?
     @State private var archiveConnectionError: String?
@@ -65,7 +66,6 @@ struct CameraScreen: View {
     @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
     @State private var showLogoImport = false
-    @State private var showForecastTerms = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
@@ -82,6 +82,7 @@ struct CameraScreen: View {
     @State private var photoFlight: PhotoFlight?
     @State private var photoLanded = false
     @State private var shutterOpacity = 0.0
+    @State private var shutterFeedbackTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct PhotoFlight: Identifiable {
@@ -193,6 +194,28 @@ struct CameraScreen: View {
         }
     }
 
+    private var captureModePicker: some View {
+        let available = !camera.isRecording && !camera.isFinishingRecording && !camera.isCapturing &&
+            !camera.isSwitching && countdown == 0
+        return SlidingCapsule(selectedRight: mode == .photo, canSelectLeft: available && camera.videoAvailable,
+            canSelectRight: available, selectionChanged: { mode = $0 ? .photo : .video },
+            height: 48, compact: false) { proposedRight in
+            HStack(spacing: 0) {
+                ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
+                    Button { mode = value } label: {
+                        Text(value.rawValue).font(.subheadline.weight(.medium))
+                            .foregroundStyle(proposedRight == (value == .photo) ? Color.yellow : Color.white)
+                            .frame(maxWidth: .infinity).frame(height: 42)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!available || (value == .video && !camera.videoAvailable))
+                    .accessibilityAddTraits(mode == value ? .isSelected : [])
+                }
+            }
+        }.frame(maxWidth: 220)
+    }
+
     private var cameraContent: some View {
         GeometryReader { geometry in
             let previewFrame = mode == .photo && !camera.isRecording
@@ -222,6 +245,10 @@ struct CameraScreen: View {
                 }
                 VStack(spacing: 0) {
                     cameraHeader
+                    if camera.processingPhotos > 0 && !camera.isRecording {
+                        Text(camera.processingPhotos == 1 ? "Processando foto…" : "Processando \(camera.processingPhotos) fotos…")
+                            .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
+                    }
                     if camera.processingVideos > 0 && !camera.isRecording {
                         Text(camera.processingVideos == 1 ? "Aplicando carimbo ao vídeo…" : "Aplicando carimbo a \(camera.processingVideos) vídeos…")
                             .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
@@ -296,6 +323,8 @@ struct CameraScreen: View {
                                 .frame(width: 54, height: 54)
                                 .background(.black.opacity(0.5), in: Circle())
                                 .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
+                                .padding(8)
+                                .contentShape(Rectangle())
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Escolher perfil do carimbo")
@@ -405,18 +434,7 @@ struct CameraScreen: View {
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Abrir capturas")
                         Spacer(minLength: 0)
-                        HStack(spacing: 0) {
-                            ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
-                                Button { mode = value } label: {
-                                    Text(value.rawValue).font(.subheadline.weight(.medium))
-                                        .foregroundStyle(mode == value ? Color.yellow : Color.white)
-                                        .frame(maxWidth: .infinity).frame(height: 42)
-                                        .background(mode == value ? Color.white.opacity(0.12) : Color.clear, in: Capsule())
-                                }
-                                .disabled((value == .video && !camera.videoAvailable) || camera.isRecording || camera.isFinishingRecording || camera.isCapturing || camera.isSwitching || countdown > 0)
-                                .accessibilityAddTraits(mode == value ? .isSelected : [])
-                            }
-                        }.padding(3).background(.white.opacity(0.10), in: Capsule()).frame(maxWidth: 220)
+                        captureModePicker
                         Spacer(minLength: 0)
                         Button { camera.flipCamera() } label: {
                             Image(systemName: "camera.rotate").font(.title2).frame(width: 52, height: 52)
@@ -461,7 +479,6 @@ struct CameraScreen: View {
                 guard let flight = photoFlight else { return }
                 do { try await Task.sleep(for: .milliseconds(60)) } catch { return }
                 guard photoFlight?.id == flight.id else { return }
-                withAnimation(.easeOut(duration: 0.12)) { shutterOpacity = 0 }
                 withAnimation(.easeInOut(duration: 0.34), completionCriteria: .logicallyComplete) {
                     photoLanded = true
                 } completion: {
@@ -475,7 +492,7 @@ struct CameraScreen: View {
     private var observedCamera: some View {
         cameraContent
         .statusBarHidden()
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showForecastTerms, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport, action: handleHardwareCapture))
         .task { await updates.check() }
         .onAppear { if !addressPreviewMigrated { var layout = stampProfiles.selected.layout; layout.showsAddress = true; stampProfiles.setLayout(layout); addressEnabled = true; addressPreviewMigrated = true }; refreshGalleryThumbnail(); camera.recognition.setEnabled(qr: scanQR, text: scanText); camera.start(); location.setEnabled(gpsEnabled); pressure.setEnabled(true); refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
@@ -487,9 +504,13 @@ struct CameraScreen: View {
 
     private var locationObservedCamera: some View {
         observedCamera
-        .onReceive(location.$location) { fix in addressPreview.update(location: fix, enabled: canPreviewAddress) }
+        .onReceive(location.$location) { fix in
+            addressPreview.update(location: fix, enabled: canPreviewAddress)
+            if canConsultForecast { weather.refresh(location: fix) }
+        }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             if canPreviewAddress { refreshAddress() }
+            if canConsultForecast { weather.refresh(location: location.location) }
             if scenePhase == .active && Date().timeIntervalSince(lastCloudAttempt) >= 30 { retryCloudCaptures() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .momentraCloudCaptureStaged).receive(on: RunLoop.main)) { _ in
@@ -501,7 +522,6 @@ struct CameraScreen: View {
             showMap = false
             showSettingsImport = false
             showLogoImport = false
-            showForecastTerms = false
             showAspectPanel = false
             selectedRecognizedText = nil
             camera.start()
@@ -533,6 +553,7 @@ struct CameraScreen: View {
                 suppressQuickPhoto = false
             }
         }
+        .onReceive(camera.capturedPhoto) { _ in showShutterFeedback() }
         .onReceive(camera.completedPhoto) { showCapturedPhoto($0) }
         .onChange(of: reduceMotion) { _, enabled in if enabled { finishPhotoFlight() } }
     }
@@ -546,6 +567,10 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selected.name) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.note) { _, _ in publishCaptureContext() }
         .onChange(of: keepArchiveLocal) { _, _ in publishCaptureContext() }
+        .onChange(of: keepArchiveOriginal) { _, _ in publishCaptureContext() }
+        .onChange(of: canConsultForecast) { _, enabled in
+            if enabled { weather.refresh(location: location.location) } else { weather.cancel() }
+        }
         .onChange(of: archiveAccounts.accounts.map { $0.enabled ? $0.id : nil }) { _, _ in
             publishCaptureContext()
             retryCloudCaptures()
@@ -606,7 +631,7 @@ struct CameraScreen: View {
             }.disabled(connectingArchive)
             Button { connectArchive(.oneDrive) } label: {
                 Label {
-                    Text("Adicionar conta OneDrive")
+                    Text("Adicionar OneDrive ou Microsoft 365")
                 } icon: {
                     Image("OneDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
                 }
@@ -629,7 +654,9 @@ struct CameraScreen: View {
                 applyArchivePolicy(keepLocal: $0)
             }))
                 .disabled(pendingArchivePolicy != nil || (keepArchiveLocal && archiveDestinations.isEmpty))
-            Text("Cada captura usa os destinos ativos no disparo. Sem conexão, o original e a versão processada ficam no iPhone. Os envios são retomados ao abrir o app ou quando o iOS permitir.")
+            Toggle("Manter também o original sem carimbo", isOn: $keepArchiveOriginal)
+                .disabled(pendingArchivePolicy != nil)
+            Text("A escolha vale para as próximas fotos e seus destinos. Com o envio pendente, a foto fica no iPhone para ser enviada quando houver conexão.")
                 .font(.footnote).foregroundStyle(.secondary)
             if archiveStatus.pending > 0 {
                 Text("\(archiveStatus.pending) captura(s) aguardando envio").font(.footnote)
@@ -657,7 +684,8 @@ struct CameraScreen: View {
                                         await directUpdate.install(expectedVersion: version) {
                                             UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
                                                 recording: camera.isRecording, finishing: camera.isFinishingRecording,
-                                                processingVideos: camera.processingVideos, cloudBusy: connectingArchive)
+                                                processingVideos: camera.processingVideos, processingPhotos: camera.processingPhotos,
+                                                cloudBusy: connectingArchive)
                                         }
                                     }
                                 }
@@ -716,17 +744,10 @@ struct CameraScreen: View {
                          ? "Adiciona uma cópia à biblioteca Fotos do iPhone. A opção Armazenamento local define onde o Momentra guarda as capturas."
                          : "No modo somente nuvem, novas fotos não são copiadas para o app Fotos do iPhone.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Section("Previsão meteorológica") {
-                        Link("Ler termos da MET Norway", destination: URL(string: "https://docs.api.met.no/doc/TermsOfService")!)
-                        Button("Consultar previsão") { showForecastTerms = true }
-                            .disabled(!gpsEnabled || weather.isLoading)
-                        Text("Consulta manual: envia sua localização aproximada e IP à MET Norway. Temperatura e umidade são previsões; pressão ao nível do mar não é a medida do sensor.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        if let status = weather.status { Text(status).font(.footnote) }
-                        Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
-                    }
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
+                        Link("Dados meteorológicos: MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
+                        Text("A previsão usa a localização aproximada quando permitida e o app está aberto.").font(.footnote).foregroundStyle(.secondary)
                     } header: {
                         Text("Sobre")
                     } footer: {
@@ -734,6 +755,7 @@ struct CameraScreen: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
+                .toggleStyle(MomentraSwitchStyle())
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
@@ -742,10 +764,6 @@ struct CameraScreen: View {
                 )) {
                     Button("OK", role: .cancel) { archiveConnectionError = nil }
                 } message: { Text(archiveConnectionError ?? "") }
-                .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
-                    Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
-                    Button("Cancelar", role: .cancel) {}
-                }
                 .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
                     guard let url = try? result.get() else { return }
                     let targetProfile = stampProfiles.selectedID
@@ -914,7 +932,7 @@ struct CameraScreen: View {
     private var effectiveLocalStorage: Bool { keepArchiveLocal || archiveDestinations.isEmpty }
 
     private var currentArchivePlan: CloudDeliveryPlan? {
-        CloudDeliveryPlan(keepLocal: effectiveLocalStorage, destinations: archiveDestinations)
+        CloudDeliveryPlan(keepLocal: effectiveLocalStorage, destinations: archiveDestinations, keepOriginal: keepArchiveOriginal)
     }
 
     private func applyArchivePolicy(keepLocal: Bool, destination: CloudDeliveryPlan.Destination? = nil,
@@ -926,7 +944,7 @@ struct CameraScreen: View {
             if enabled { destinations.append(destination) }
         }
         guard let proposed = CloudDeliveryPlan(keepLocal: keepLocal || destinations.isEmpty,
-                                               destinations: destinations) else { return }
+                                               destinations: destinations, keepOriginal: keepArchiveOriginal) else { return }
         pendingArchivePolicy = proposed
         archiveNotice = nil
         let sync = publishCaptureContext()
@@ -977,15 +995,24 @@ struct CameraScreen: View {
         }
     }
 
+    private func showShutterFeedback() {
+        guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel, !reduceMotion else { return }
+        shutterFeedbackTask?.cancel()
+        shutterOpacity = 0.35
+        shutterFeedbackTask = Task {
+            do { try await Task.sleep(for: .milliseconds(65)) } catch { return }
+            withAnimation(.easeOut(duration: 0.10)) { shutterOpacity = 0 }
+        }
+    }
+
     private func showCapturedPhoto(_ image: UIImage) {
         finishPhotoFlight()
         galleryThumbnailRevision = UUID()
-        guard scenePhase == .active, !showSettings, !showOriginals, !showAspectPanel,
+        guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel,
               !reduceMotion, !galleryThumbnailFrame.isEmpty else {
             galleryThumbnail = image
             return
         }
-        shutterOpacity = 0.35
         photoFlight = PhotoFlight(image: image)
     }
 
@@ -1035,6 +1062,11 @@ struct CameraScreen: View {
         return controller
     }
 
+    private var canConsultForecast: Bool {
+        scenePhase == .active && gpsEnabled && stampEnabled && stampProfiles.selected.layout.showsInformation &&
+            stampProfiles.selected.layout.showsForecast
+    }
+
     private func makeSnapshot(at date: Date) -> StampSnapshot {
         StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled,
             mapEnabled: stampProfiles.selected.layout.showsMap, addressEnabled: stampProfiles.selected.layout.showsAddress,
@@ -1043,7 +1075,7 @@ struct CameraScreen: View {
             position: stampProfiles.selected.layout.position, horizontal: stampProfiles.selected.layout.horizontal,
             longDate: stampProfiles.selected.layout.dateFormat == "long", fontStyle: stampProfiles.selected.layout.fontStyle,
             mapScale: stampProfiles.selected.layout.mapScale, mapCorner: "auto",
-            pressure: pressure.sample, forecast: gpsEnabled ? weather.current(location: location.location, at: date) : nil,
+            pressure: pressure.sample, forecast: canConsultForecast ? weather.current(location: location.location, at: date) : nil,
             location: location.location, heading: location.heading, layout: stampProfiles.selected.layout)
     }
 
@@ -1161,19 +1193,13 @@ private struct LiveStampView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            if snapshot.mapEnabled, let coordinate = snapshot.location?.coordinate {
-                Map(position: .constant(.region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))), interactionModes: []) {
-                    Annotation("Localização", coordinate: coordinate) {
-                        Circle().fill(.blue).frame(width: 13, height: 13).overlay(Circle().stroke(.white, lineWidth: 2))
-                    }
-                }
-                .mapStyle(snapshot.layout.mapStyle == .satellite ? .imagery : .standard)
+            if snapshot.mapEnabled, snapshot.location != nil {
+                StampMapPreview(snapshot: snapshot, markerSize: 13)
                 .frame(width: (snapshot.mapScale == "small" ? 60 : snapshot.mapScale == "large" ? 100 : 80) * snapshot.layout.mapSize * snapshot.layout.combinedSize,
                        height: (snapshot.mapScale == "small" ? 75 : snapshot.mapScale == "large" ? 125 : 100) * snapshot.layout.mapSize * snapshot.layout.combinedSize)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-                .id("\(Int(coordinate.latitude * 1000))-\(Int(coordinate.longitude * 1000))")
             }
             if snapshot.layout.showsInformation {
             VStack(alignment: snapshot.layout.textAlignment == "right" ? .trailing : snapshot.layout.textAlignment == "center" ? .center : .leading, spacing: 2) {

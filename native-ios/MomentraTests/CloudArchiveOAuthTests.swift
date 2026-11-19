@@ -24,6 +24,8 @@ final class CloudArchiveOAuthTests: XCTestCase {
             "CFBundleURLTypes": [["CFBundleURLSchemes": ["msauth.br.com.momentra.camera"]]]
         ])
         XCTAssertEqual(configuration.callback.absoluteString, "msauth.br.com.momentra.camera://auth")
+        XCTAssertEqual(configuration.authorizeURL.path, "/common/oauth2/v2.0/authorize")
+        XCTAssertEqual(configuration.tokenURL.path, "/common/oauth2/v2.0/token")
         XCTAssertTrue(configuration.includesStorageScope("https://graph.microsoft.com/Files.ReadWrite.AppFolder"))
         XCTAssertFalse(configuration.includesStorageScope("Files.ReadWrite"))
     }

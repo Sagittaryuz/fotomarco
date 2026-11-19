@@ -159,6 +159,7 @@ struct StampLayoutEditor: View {
                         Picker("Data e hora", selection: layout.dateFormat) { Text("Numérica").tag("numeric"); Text("Por extenso").tag("long") }
                         Toggle("Texto compacto", isOn: flag(\.compact))
                         Toggle("Incluir endereço", isOn: flag(\.showsAddress))
+                        Toggle("Incluir previsão do tempo", isOn: flag(\.showsForecast))
                         Button("Observação") { draftNote = store.selected.note; editNote = true }
                     }
                     Toggle("Mostrar informações", isOn: flag(\.showsInformation)).labelsHidden()
@@ -278,14 +279,10 @@ private struct StampLayoutPreview: View {
 
     private var previewMap: some View {
         let coordinate = CLLocationCoordinate2D(latitude: -17.908894, longitude: -51.744607)
-        return Map(position: .constant(.region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))), interactionModes: []) {
-            Annotation("Exemplo", coordinate: coordinate) {
-                Circle().fill(.blue).frame(width: 9, height: 9).overlay(Circle().stroke(.white, lineWidth: 2))
-            }
-        }
-        .mapStyle(layout.mapStyle == .satellite ? .imagery : .standard)
-        .allowsHitTesting(false)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: true, mapEnabled: true,
+                                     location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                                     heading: nil, layout: layout)
+        return StampMapPreview(snapshot: snapshot, markerSize: 9)
     }
     private var textAlignment: TextAlignment {
         switch layout.textAlignment {

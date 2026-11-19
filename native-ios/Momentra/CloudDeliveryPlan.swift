@@ -32,8 +32,8 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
             phase = .uncertain
         }
 
-        mutating func confirm(originalID: String, stampedID: String) {
-            guard phase == .pending, !originalID.isEmpty, !stampedID.isEmpty else { return }
+        mutating func confirm(originalID: String?, stampedID: String) {
+            guard phase == .pending, originalID?.isEmpty != true, !stampedID.isEmpty else { return }
             self.originalID = originalID
             self.stampedID = stampedID
             phase = .verified
@@ -50,11 +50,14 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
     }
 
     let keepLocal: Bool
+    private let keepOriginal: Bool?
+    var keepsOriginal: Bool { keepOriginal ?? true }
     private(set) var deliveries: [Delivery]
 
-    init?(keepLocal: Bool, destinations: [Destination]) {
+    init?(keepLocal: Bool, destinations: [Destination], keepOriginal: Bool = true) {
         guard keepLocal || !destinations.isEmpty, Set(destinations).count == destinations.count else { return nil }
         self.keepLocal = keepLocal
+        self.keepOriginal = keepOriginal ? nil : false
         self.deliveries = destinations.map { Delivery(destination: $0) }
     }
 
@@ -63,8 +66,9 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
         deliveries[index].markUncertain()
     }
 
-    mutating func confirm(destination: Destination, originalID: String, stampedID: String) {
-        guard let index = deliveries.firstIndex(where: { $0.destination == destination }) else { return }
+    mutating func confirm(destination: Destination, originalID: String?, stampedID: String) {
+        guard keepsOriginal == (originalID != nil), originalID != stampedID,
+              let index = deliveries.firstIndex(where: { $0.destination == destination }) else { return }
         deliveries[index].confirm(originalID: originalID, stampedID: stampedID)
     }
 
@@ -73,7 +77,7 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
     var destinationsVerified: Bool {
         !deliveries.isEmpty && Set(deliveries.map(\.destination)).count == deliveries.count &&
         deliveries.allSatisfy { delivery in
-            delivery.phase == .verified && !(delivery.originalID ?? "").isEmpty &&
+            delivery.phase == .verified && (keepsOriginal ? !(delivery.originalID ?? "").isEmpty : delivery.originalID == nil) &&
             !(delivery.stampedID ?? "").isEmpty &&
             Destination(provider: delivery.destination.provider, accountHash: delivery.destination.accountHash) != nil
         }

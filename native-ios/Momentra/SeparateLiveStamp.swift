@@ -11,20 +11,14 @@ struct SeparateLiveStamp: View {
             let margin = unit * 0.025
             let layout = snapshot.layout
             ZStack {
-                if layout.showsMap, snapshot.mapEnabled, let coordinate = snapshot.location?.coordinate {
+                if layout.showsMap, snapshot.mapEnabled, snapshot.location != nil {
                     let space = StampRenderer.availableSize(size: size, anchor: layout.map, margin: margin)
                     let side = min(space.width, space.height, unit * 0.5, unit * (snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20) * CGFloat(layout.mapSize))
                     let rect = StampRenderer.positionedRect(size: size, element: CGSize(width: side, height: side),
                                                            centre: layout.map, margin: margin)
-                    Map(position: .constant(.region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))), interactionModes: []) {
-                        Annotation("Localização", coordinate: coordinate) {
-                            Circle().fill(.blue).frame(width: 11, height: 11).overlay(Circle().stroke(.white, lineWidth: 2))
-                        }
-                    }
-                    .mapStyle(layout.mapStyle == .satellite ? .imagery : .standard)
+                    StampMapPreview(snapshot: snapshot, markerSize: 11)
                     .frame(width: side, height: side)
                     .position(x: rect.midX, y: rect.midY)
-                    .id("\(Int(coordinate.latitude * 1000))-\(Int(coordinate.longitude * 1000))")
                 }
                 if layout.showsInformation {
                     let lines = (snapshot.addressEnabled && snapshot.location != nil ? [snapshot.cachedAddress ?? "Buscando endereço…"] : []) + snapshot.lines

@@ -283,12 +283,15 @@ private struct Thumbnail: View {
     @State private var image: UIImage?
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 8).fill(.gray.opacity(0.2))
-            if let image { Image(uiImage: image).resizable().scaledToFill() }
-            else { Image(systemName: isVideo ? "video.fill" : "photo").foregroundStyle(.secondary) }
+        GeometryReader { proxy in
+            ZStack {
+                Rectangle().fill(.gray.opacity(0.2))
+                if let image { Image(uiImage: image).resizable().scaledToFill() }
+                else { Image(systemName: isVideo ? "video.fill" : "photo").foregroundStyle(.secondary) }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
         }
-        .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit).clipped()
         .task(id: url) {
             guard !isVideo else { return }
             let fileURL = url

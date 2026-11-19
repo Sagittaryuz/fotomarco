@@ -66,8 +66,8 @@ final class CloudArchiveOAuth {
                 clientID = clientUUID.uuidString.lowercased()
                 callbackScheme = "msauth.br.com.momentra.camera"
                 callback = URL(string: callbackScheme + "://auth")!
-                authorizeURL = URL(string: "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize")!
-                tokenURL = URL(string: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token")!
+                authorizeURL = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize")!
+                tokenURL = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/token")!
                 identityURL = URL(string: "https://graph.microsoft.com/oidc/userinfo")!
                 requiredScope = "Files.ReadWrite.AppFolder"
                 scopes = "openid email profile offline_access https://graph.microsoft.com/" + requiredScope

@@ -9,6 +9,7 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "br.com.momentra.locked-camera")
     private let output = AVCapturePhotoOutput()
+    private let processing = DispatchQueue(label: "br.com.momentra.locked-camera.photos", qos: .utility)
     private var device: AVCaptureDevice?
     private var scale: ZoomScale?
     private var destination: URL?
@@ -102,19 +103,41 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
                 connection.videoRotationAngle = self.captureRotation
             }
             let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+            settings.photoQualityPrioritization = .speed
             self.output.capturePhoto(with: settings, delegate: self)
         }
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        defer { DispatchQueue.main.async { self.capturing = false } }
-        guard error == nil, let jpeg = photo.fileDataRepresentation(), let directory = destination else {
-            DispatchQueue.main.async { self.error = "Não foi possível capturar a foto." }; return
+        queue.async {
+            guard error == nil, let directory = self.destination else {
+                DispatchQueue.main.async {
+                    self.capturing = false
+                    self.error = "Não foi possível capturar a foto."
+                }
+                return
+            }
+            let context = self.stampContext
+            let location = self.capturedLocation
+            let heading = self.capturedHeading
+            let date = self.capturedAt
+            DispatchQueue.main.async { self.capturing = false }
+            self.processing.async {
+                guard let jpeg = photo.fileDataRepresentation() else {
+                    DispatchQueue.main.async { self.error = "Não foi possível ler a foto capturada." }
+                    return
+                }
+                self.processPhoto(jpeg, in: directory, context: context, location: location,
+                                  heading: heading, capturedAt: date)
+            }
         }
+    }
+
+    private func processPhoto(_ jpeg: Data, in directory: URL, context: MomentraCaptureContext?,
+                              location: CLLocation?, heading: CLHeading?, capturedAt: Date) {
         let id = UUID().uuidString
         do { try jpeg.write(to: directory.appendingPathComponent(id).appendingPathExtension("jpg"), options: .atomic) }
         catch { DispatchQueue.main.async { self.error = "Não foi possível guardar a foto." }; return }
-        let context = stampContext
         var canScheduleCloud = false
         if let context, let captureID = UUID(uuidString: id) {
             do {
@@ -139,7 +162,7 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
             } ?? StampLayout()
             snapshot = StampSnapshot(capturedAt: capturedAt, gpsEnabled: context.gpsEnabled, title: "",
                 note: context.note, compact: context.compact, position: context.position, horizontal: context.horizontal,
-                longDate: context.longDate, fontStyle: context.fontStyle, location: capturedLocation, heading: capturedHeading,
+                longDate: context.longDate, fontStyle: context.fontStyle, location: location, heading: heading,
                 layout: layout)
         } else { snapshot = nil }
         let aspect = PhotoAspect(rawValue: context?.aspect ?? "4:3") ?? .standard

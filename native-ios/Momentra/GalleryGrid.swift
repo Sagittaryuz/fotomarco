@@ -12,7 +12,7 @@ enum GallerySelectionRange {
     }
 }
 
-/// A collection view provides iOS's native two-finger multiple-selection gesture.
+/// A collection view supports pinch-to-resize and selection after entering Select mode.
 struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where Item.ID: Hashable {
     let groups: [GalleryGroup<Item>]
     @Binding var selecting: Bool
@@ -129,12 +129,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             parent.selected.remove(parent.groups[indexPath.section].items[indexPath.item].id)
             (collectionView.cellForItem(at: indexPath) as? GallerySelectionCell)?.showSelected(false)
         }
-        func collectionView(_ collectionView: UICollectionView, shouldBeginMultipleSelectionInteractionAt indexPath: IndexPath) -> Bool { true }
-        func collectionView(_ collectionView: UICollectionView, didBeginMultipleSelectionInteractionAt indexPath: IndexPath) {
-            parent.selecting = true
-            collectionView.isEditing = true
-            synchronizeSelection()
-        }
+        func collectionView(_ collectionView: UICollectionView, shouldBeginMultipleSelectionInteractionAt indexPath: IndexPath) -> Bool { false }
         func synchronizeSelection() {
             guard let collection else { return }
             let paths = Set(parent.selecting ? parent.selected.compactMap { positions[$0] } : [])

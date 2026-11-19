@@ -5,8 +5,8 @@ import Darwin
 
 enum UpdateCloseReadiness {
     static func allowsClose(capturing: Bool, switching: Bool, recording: Bool, finishing: Bool,
-                            processingVideos: Int, cloudBusy: Bool) -> Bool {
-        !capturing && !switching && !recording && !finishing && processingVideos == 0 && !cloudBusy
+                            processingVideos: Int, processingPhotos: Int = 0, cloudBusy: Bool) -> Bool {
+        !capturing && !switching && !recording && !finishing && processingVideos == 0 && processingPhotos == 0 && !cloudBusy
     }
 }
 

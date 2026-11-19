@@ -18,13 +18,34 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private var wantsSession = false
     private var startingRecording = false
     private var stopRequested = false
-    private var pendingStamp: StampSnapshot?
-    private var pendingPhotoDate: Date?
-    private var pendingAspect: PhotoAspect = .standard
-    private var pendingPhotoSaveToPhotos = true
-    private var pendingProfileTag: CaptureProfileTag?
-    private var pendingArchivePlan: CloudDeliveryPlan?
-    private var pendingStyle: MomentraPhotoStyle = .natural
+    private struct PhotoRequest {
+        let settingsID: Int64
+        let id: UUID
+        let capturedAt: Date
+        let snapshot: StampSnapshot?
+        let aspect: PhotoAspect
+        let style: MomentraPhotoStyle
+        let saveToPhotos: Bool
+        let profile: CaptureProfileTag?
+        let archivePlan: CloudDeliveryPlan?
+    }
+
+    private struct StagedPhoto {
+        let request: PhotoRequest
+        let original: URL
+        let root: URL
+        let archiveQueued: Bool
+    }
+
+    private var pendingPhoto: PhotoRequest?
+    private var pendingImage: AVCapturePhoto?
+    private let photoStagingQueue = DispatchQueue(label: "br.com.momentra.photo.staging", qos: .userInitiated)
+    private let photoRenderQueue = DispatchQueue(label: "br.com.momentra.photo.render", qos: .utility)
+    private var stagedPhotos: [StagedPhoto] = []
+    private var renderingPhoto = false
+    private var photoBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @Published private(set) var processingPhotos = 0
+    let capturedPhoto = PassthroughSubject<Void, Never>()
     private var pendingVideoSaveToPhotos = true
     private var pendingVideoSnapshot: StampSnapshot?
     @Published private(set) var processingVideos = 0
@@ -119,13 +140,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 return
             }
             let settings = AVCapturePhotoSettings()
-            self.pendingStamp = snapshot
-            self.pendingPhotoDate = capturedAt
-            self.pendingAspect = aspect
-            self.pendingStyle = style
-            self.pendingPhotoSaveToPhotos = saveToPhotos
-            self.pendingProfileTag = profile
-            self.pendingArchivePlan = archivePlan
+            settings.photoQualityPrioritization = .speed
+            self.pendingPhoto = PhotoRequest(settingsID: settings.uniqueID, id: UUID(), capturedAt: capturedAt,
+                                             snapshot: snapshot, aspect: aspect, style: style, saveToPhotos: saveToPhotos,
+                                             profile: profile, archivePlan: archivePlan)
             self.applyCaptureRotation(to: self.photoOutput.connection(with: .video))
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
@@ -379,90 +397,157 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        guard error == nil, let data = photo.fileDataRepresentation() else {
-            queue.async { self.pendingStamp = nil; self.pendingPhotoDate = nil }
-            report("Não foi possível capturar a foto.")
-            DispatchQueue.main.async { self.isCapturing = false }
-            return
-        }
         queue.async {
-            let snapshot = self.pendingStamp
-            let capturedAt = self.pendingPhotoDate ?? Date()
-            let aspect = self.pendingAspect
-            let style = self.pendingStyle
-            let saveToPhotos = self.pendingPhotoSaveToPhotos
-            let profileTag = self.pendingProfileTag
-            let archivePlan = self.pendingArchivePlan
-            self.pendingProfileTag = nil
-            self.pendingArchivePlan = nil
-            let captureID = UUID()
-            self.pendingStamp = nil
-            self.pendingPhotoDate = nil
-            var archiveQueued = false
-            do {
-                let base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                let originals = base.appendingPathComponent("Originals", isDirectory: true)
-                try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-                let source = CGImageSourceCreateWithData(data as CFData, nil)
-                let type = source.flatMap { CGImageSourceGetType($0) }.map { $0 as String }.flatMap { UTType($0) }
-                let suffix = (type?.preferredFilenameExtension ?? "image").lowercased()
-                try data.write(to: originals.appendingPathComponent(captureID.uuidString + "." + suffix), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-                if let archivePlan, !archivePlan.deliveries.isEmpty {
-                    do {
-                        try CloudArchiveJournal(root: base).enqueue(id: captureID, date: capturedAt,
-                                                                   originalExtension: suffix, plan: archivePlan,
-                                                                   profile: profileTag)
-                        archiveQueued = true
-                    } catch {
-                        self.report("Não foi possível registrar o envio. A captura será mantida no iPhone. Confira o espaço disponível.")
-                    }
-                }
-            } catch {
-                self.report("Não foi possível preservar a foto original. Libere espaço e tente novamente.")
-                DispatchQueue.main.async { self.isCapturing = false }
-                return
-            }
-            let shouldNotifyArchive = archiveQueued
-            if let profileTag {
-                do { try PhotoProfileIndex.register(captureID: captureID, profile: profileTag, captureDate: capturedAt) }
-                catch { self.report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
-            }
-            guard let snapshot else {
-                guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: nil, style: style) else {
-                    self.report("Não foi possível ajustar a proporção. O original está disponível em Capturas.")
-                    DispatchQueue.main.async { self.isCapturing = false }
-                    return
-                }
-                self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos, archiveQueued: shouldNotifyArchive)
-                return
-            }
-            StampMap.load(snapshot: snapshot, queue: self.queue) { map in
-                if snapshot.mapEnabled && snapshot.location != nil && map == nil {
-                    self.report("Mapa indisponível. A foto será salva com as demais informações.")
-                }
-                StampAddress.load(snapshot: snapshot, queue: self.queue) { address in
-                    if snapshot.addressEnabled && snapshot.location != nil && address == nil {
-                        self.report("Endereço indisponível. A foto será salva com as demais informações.")
-                    }
-                    guard let rendered = StampRenderer.render(data, aspect: aspect, snapshot: snapshot, map: map, address: address, style: style) else {
-                        self.report("Não foi possível compor a foto. O original está disponível em Capturas.")
-                        DispatchQueue.main.async { self.isCapturing = false }
-                        return
-                    }
-                    self.savePhoto(rendered, captureID: captureID, saveToPhotos: saveToPhotos, archiveQueued: shouldNotifyArchive)
-                }
-            }
+            guard self.pendingPhoto?.settingsID == photo.resolvedSettings.uniqueID else { return }
+            self.pendingImage = error == nil ? photo : nil
         }
     }
 
-    private func savePhoto(_ data: Data, captureID: UUID, saveToPhotos: Bool, archiveQueued: Bool) {
-        do { _ = try ProcessedFileStore.save(data, captureID: captureID) }
-        catch {
-            report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
-            DispatchQueue.main.async { self.isCapturing = false }
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor settings: AVCaptureResolvedPhotoSettings, error: Error?) {
+        queue.async {
+            guard let request = self.pendingPhoto, request.settingsID == settings.uniqueID else { return }
+            let photo = self.pendingImage
+            self.pendingPhoto = nil
+            self.pendingImage = nil
+            guard error == nil, let photo else {
+                self.report("Não foi possível capturar a foto.")
+                DispatchQueue.main.async { self.isCapturing = false }
+                return
+            }
+            DispatchQueue.main.async {
+                self.beginPhotoWork()
+                self.isCapturing = false
+            }
+            self.photoStagingQueue.async { self.stagePhoto(photo, request: request) }
+        }
+    }
+
+    @MainActor private func beginPhotoWork() {
+        processingPhotos += 1
+        guard photoBackgroundTask == .invalid else { return }
+        photoBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Processar capturas do Momentra") { [weak self] in
+            DispatchQueue.main.async { self?.endPhotoBackgroundTask() }
+        }
+    }
+
+    @MainActor private func endPhotoBackgroundTask() {
+        guard photoBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(photoBackgroundTask)
+        photoBackgroundTask = .invalid
+    }
+
+    private func finishPhotoWork() {
+        DispatchQueue.main.async {
+            self.processingPhotos -= 1
+            if self.processingPhotos == 0 { self.endPhotoBackgroundTask() }
+        }
+    }
+
+    private func stagePhoto(_ photo: AVCapturePhoto, request: PhotoRequest) {
+        guard let data = photo.fileDataRepresentation() else {
+            report("Não foi possível ler a foto capturada.")
+            finishPhotoWork()
             return
         }
-        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+        let base: URL
+        let original: URL
+        let suffix: String
+        do {
+            base = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            let originals = base.appendingPathComponent("Originals", isDirectory: true)
+            try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            let source = CGImageSourceCreateWithData(data as CFData, nil)
+            let type = source.flatMap { CGImageSourceGetType($0) }.map { $0 as String }.flatMap { UTType($0) }
+            suffix = (type?.preferredFilenameExtension ?? "image").lowercased()
+            original = originals.appendingPathComponent(request.id.uuidString + "." + suffix)
+            try data.write(to: original, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        } catch {
+            report("Não foi possível preservar a foto original. Libere espaço e tente novamente.")
+            finishPhotoWork()
+            return
+        }
+        DispatchQueue.main.async { self.capturedPhoto.send(()) }
+        var archiveQueued = false
+        if let plan = request.archivePlan, !plan.deliveries.isEmpty {
+            do {
+                try CloudArchiveJournal(root: base).enqueue(id: request.id, date: request.capturedAt,
+                    originalExtension: suffix, plan: plan, profile: request.profile)
+                archiveQueued = true
+            } catch {
+                report("Não foi possível registrar o envio. A captura será mantida no iPhone. Confira o espaço disponível.")
+            }
+        }
+        if let profile = request.profile {
+            do { try PhotoProfileIndex.register(captureID: request.id, profile: profile, captureDate: request.capturedAt) }
+            catch { report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
+        }
+        let staged = StagedPhoto(request: request, original: original, root: base, archiveQueued: archiveQueued)
+        photoRenderQueue.async {
+            self.stagedPhotos.append(staged)
+            self.renderNextPhoto()
+        }
+    }
+
+    private func renderNextPhoto() {
+        guard !renderingPhoto, !stagedPhotos.isEmpty else { return }
+        renderingPhoto = true
+        let staged = stagedPhotos.removeFirst()
+        let snapshot = staged.request.snapshot
+        let render: (UIImage?, String?) -> Void = { map, address in
+            autoreleasepool { self.renderPhoto(staged, map: map, address: address) }
+            self.renderingPhoto = false
+            self.photoRenderQueue.async { self.renderNextPhoto() }
+        }
+        guard let snapshot else { render(nil, nil); return }
+        var map: UIImage?
+        var address: String?
+        let enrichment = DispatchGroup()
+        enrichment.enter()
+        StampMap.load(snapshot: snapshot, queue: photoRenderQueue) { map = $0; enrichment.leave() }
+        enrichment.enter()
+        StampAddress.load(snapshot: snapshot, queue: photoRenderQueue) { address = $0; enrichment.leave() }
+        enrichment.notify(queue: photoRenderQueue) { render(map, address) }
+    }
+
+    private func renderPhoto(_ staged: StagedPhoto, map: UIImage?, address: String?) {
+        let request = staged.request
+        let snapshot = request.snapshot
+        if let snapshot, snapshot.location != nil {
+            if snapshot.mapEnabled && map == nil { report("Mapa indisponível. A foto será salva com as demais informações.") }
+            if snapshot.addressEnabled && address == nil { report("Endereço indisponível. A foto será salva com as demais informações.") }
+        }
+        guard let data = try? Data(contentsOf: staged.original, options: .mappedIfSafe),
+              let rendered = StampRenderer.render(data, aspect: request.aspect, snapshot: snapshot,
+                                                   map: map, address: address, style: request.style) else {
+            report("Não foi possível compor a foto. O original está disponível em Capturas.")
+            finishPhotoWork()
+            return
+        }
+        let processed: URL
+        do { processed = try ProcessedFileStore.save(rendered, captureID: request.id, root: staged.root) }
+        catch {
+            report("Não foi possível preservar a foto processada. O original está disponível em Capturas.")
+            finishPhotoWork()
+            return
+        }
+        var archiveReady = false
+        if staged.archiveQueued {
+            do {
+                try CloudArchiveJournal(root: staged.root).markReady(id: request.id)
+                archiveReady = true
+            } catch { report("O envio ainda não foi preparado. As cópias locais foram preservadas.") }
+        }
+        if let plan = request.archivePlan, !plan.keepsOriginal, plan.deliveries.isEmpty || archiveReady {
+            do {
+                try CloudArchiveJournal(root: staged.root).serializeCleanup {
+                    if FileManager.default.fileExists(atPath: staged.original.path) {
+                        try FileManager.default.removeItem(at: staged.original)
+                    }
+                }
+            } catch { report("A cópia sem carimbo ficou em Capturas porque não foi possível removê-la.") }
+        }
+        if let source = CGImageSourceCreateWithData(rendered as CFData, nil),
            let preview = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                kCGImageSourceCreateThumbnailFromImageAlways: true,
                kCGImageSourceCreateThumbnailWithTransform: true,
@@ -471,31 +556,28 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let image = UIImage(cgImage: preview)
             DispatchQueue.main.async { self.completedPhoto.send(image) }
         }
-        if archiveQueued {
+        if archiveReady {
             CloudBackgroundScheduler.scheduleIfNeeded()
             NotificationCenter.default.post(name: .momentraCloudCaptureStaged, object: nil)
         }
-        guard saveToPhotos else {
-            DispatchQueue.main.async { self.isCapturing = false }
-            return
-        }
+        guard request.saveToPhotos else { finishPhotoWork(); return }
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
-                self.report("Permita salvar fotos nos Ajustes do iPhone. A foto processada e o original estão em Capturas.")
-                DispatchQueue.main.async { self.isCapturing = false }
+                self.report("Permita salvar fotos nos Ajustes do iPhone. A foto está disponível em Capturas.")
+                self.finishPhotoWork()
                 return
             }
             var createdAssetID: String?
             PHPhotoLibrary.shared().performChanges({
                 let creation = PHAssetCreationRequest.forAsset()
-                creation.addResource(with: .photo, data: data, options: nil)
+                creation.addResource(with: .photo, fileURL: processed, options: nil)
                 createdAssetID = creation.placeholderForCreatedAsset?.localIdentifier
             }) { success, _ in
                 if success, let assetID = createdAssetID {
-                    try? PhotoProfileIndex.bindLocal(captureID: captureID, assetID: assetID)
+                    try? PhotoProfileIndex.bindLocal(captureID: request.id, assetID: assetID)
                 }
-                if !success { self.report("Não foi possível salvar no Fotos. A foto processada e o original estão em Capturas.") }
-                DispatchQueue.main.async { self.isCapturing = false }
+                if !success { self.report("Não foi possível salvar no Fotos. A foto está disponível em Capturas.") }
+                self.finishPhotoWork()
             }
         }
     }

@@ -19,7 +19,7 @@ struct CloudArchiveJournal {
         struct Reservation: Codable {
             let destination: CloudDeliveryPlan.Destination
             let folder: String
-            let original: String
+            let original: String?
             let stamped: String
         }
 
@@ -49,6 +49,7 @@ struct CloudArchiveJournal {
             let existing = try read(id)
             guard existing.originalExtension == originalExtension, existing.createdAt == date,
                   existing.plan.keepLocal == plan.keepLocal,
+                  existing.plan.keepsOriginal == plan.keepsOriginal,
                   existing.plan.deliveries.map(\.destination) == plan.deliveries.map(\.destination) else {
                 throw CocoaError(.fileWriteFileExists)
             }
@@ -78,6 +79,8 @@ struct CloudArchiveJournal {
     }
 
     func markReady(id: UUID) throws {
+        Self.fileLock.lock()
+        defer { Self.fileLock.unlock() }
         var item = try read(id)
         guard item.original == nil, item.stamped == nil else { return }
         item.original = try CloudFileFingerprint.read(file(item, stamped: false))
