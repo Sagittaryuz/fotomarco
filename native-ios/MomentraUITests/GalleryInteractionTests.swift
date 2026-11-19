@@ -187,6 +187,30 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(square.waitForNonExistence(timeout: 5))
     }
 
+    func testPhotoStylesAndStampOptionsAreReachable() {
+        let app = launch()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Configurações")).firstMatch.tap()
+        let styles = app.buttons["Estilos fotográficos"]
+        if !styles.isHittable { app.swipeUp() }
+        XCTAssertTrue(styles.waitForExistence(timeout: 5))
+        styles.tap()
+        let applyStyle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Usar ")).firstMatch
+        XCTAssertTrue(applyStyle.waitForExistence(timeout: 5))
+        snapshot("Estilos fotográficos", app: app)
+        applyStyle.tap()
+
+        let stamp = app.buttons["Layout e perfis"]
+        for _ in 0..<3 where !stamp.isHittable { app.swipeUp() }
+        XCTAssertTrue(stamp.isHittable)
+        stamp.tap()
+        XCTAssertTrue(app.buttons["Criar perfil"].waitForExistence(timeout: 5))
+        let information = app.buttons["Informações"]
+        XCTAssertTrue(information.isHittable)
+        information.tap()
+        XCTAssertTrue(information.isSelected)
+        snapshot("Opções do carimbo", app: app)
+    }
+
     func testSettingsUsesADraggableNativeSwitch() {
         let app = launch()
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Configurações")).firstMatch.tap()
