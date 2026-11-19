@@ -13,6 +13,16 @@ final class GalleryInteractionTests: XCTestCase {
         if permission.waitForExistence(timeout: 3) { permission.tap() }
         let error = app.alerts.buttons["OK"].firstMatch
         if error.waitForExistence(timeout: 3) { error.tap() }
+        if seedBenchmark {
+            let fullAccess = NSPredicate(format: "label IN %@", ["Allow Full Access", "Permitir Acesso Total"])
+            let appButton = app.buttons.matching(fullAccess).firstMatch
+            let systemButton = springboard.buttons.matching(fullAccess).firstMatch
+            if appButton.waitForExistence(timeout: 3) {
+                appButton.tap()
+            } else if systemButton.waitForExistence(timeout: 3) {
+                systemButton.tap()
+            }
+        }
         return app
     }
 
@@ -152,6 +162,29 @@ final class GalleryInteractionTests: XCTestCase {
         save.tap()
         XCTAssertTrue(app.staticTexts["Editor Momentra"].waitForNonExistence(timeout: 14))
         XCTAssertTrue(app.buttons["Editar foto"].waitForExistence(timeout: 12))
+    }
+
+    func testCameraPanelsShowCurrentChoices() {
+        let app = launch()
+        let profile = app.buttons["Escolher perfil do carimbo"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 8))
+        XCTAssertEqual(profile.value as? String, "Padrão")
+        profile.tap()
+        let currentProfile = app.buttons["Padrão"].firstMatch
+        XCTAssertTrue(currentProfile.waitForExistence(timeout: 5))
+        snapshot("Perfil ativo na câmera", app: app)
+        currentProfile.tap()
+
+        let aspect = app.buttons["Proporção da foto"]
+        aspect.tap()
+        let square = app.buttons["Proporção 1:1"]
+        XCTAssertTrue(square.waitForExistence(timeout: 5))
+        square.tap()
+        XCTAssertTrue(square.isSelected)
+        snapshot("Painel de proporções", app: app)
+        app.buttons["Proporção 4:3"].tap()
+        app.buttons["Fechar proporções"].tap()
+        XCTAssertTrue(square.waitForNonExistence(timeout: 5))
     }
 
     func testSettingsUsesADraggableNativeSwitch() {

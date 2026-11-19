@@ -9,7 +9,6 @@ struct GalleryBenchmarkFixture: ViewModifier {
             .overlay(alignment: .topLeading) {
                 if let result {
                     Text(result).font(.caption2).padding(2)
-                        .allowsHitTesting(false)
                         .accessibilityIdentifier("gallery-benchmark-fixtures")
                 }
             }

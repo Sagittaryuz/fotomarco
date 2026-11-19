@@ -13,6 +13,10 @@ on:
         description: Measure the published 0.1.18 under the same simulator fixtures
         type: boolean
         default: false
+      candidate_sha:
+        description: Revision of app code under test
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -27,6 +31,23 @@ jobs:
           BASELINE=ec95ea616568437c6494edb49dfbdc21cb340743
           git fetch --depth=1 origin "$BASELINE"
           git restore --source="$BASELINE" --worktree -- native-ios/Momentra native-ios/MomentraCaptureExtension native-ios/MomentraTests
+      - name: Use the exact app candidate
+        if: inputs.candidate_sha != '' && !inputs.baseline_gallery
+        env:
+          CANDIDATE: ${{ inputs.candidate_sha }}
+        run: |
+          [[ "$CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --depth=1 origin "$CANDIDATE"
+          git restore --source="$CANDIDATE" --worktree -- native-ios/Momentra native-ios/MomentraCaptureExtension native-ios/MomentraTests native-ios/MomentraCameraControl
+          python3 - <<'PYTHON'
+          import re, subprocess
+          from pathlib import Path
+          project = Path("native-ios/project.yml")
+          candidate = subprocess.check_output(["git", "show", "FETCH_HEAD:native-ios/project.yml"], text=True)
+          pattern = r"^    (?:MARKETING_VERSION|CURRENT_PROJECT_VERSION): .*$"
+          replacements = iter(re.findall(pattern, candidate, re.M))
+          project.write_text(re.sub(pattern, lambda _: next(replacements), project.read_text(), flags=re.M))
+          PYTHON
       - name: Add simulator-only PhotoKit fixtures for the comparison
         if: inputs.test_method == 'testGalleryCatalogMeasurement'
         shell: bash
