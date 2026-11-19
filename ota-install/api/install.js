@@ -31,7 +31,8 @@ module.exports = async function handler(req, res) {
     return deadline > now && deadline <= now + ttl && matches(signature, sign(expires + '.' + nonce));
   };
   const ticket = validTicket(req.query.ticket);
-  if (req.method !== 'GET' ||
+  const supportsHead = stage === 'manifest' || stage === 'package';
+  if ((req.method !== 'GET' && !(req.method === 'HEAD' && supportsHead)) ||
       !(bootstrap || (stage === 'issue' && authorizedDevice) ||
         (ticket && (stage === 'manifest' || stage === 'package')))) {
     return res.status(404).send('Link indisponível.');
@@ -45,7 +46,6 @@ module.exports = async function handler(req, res) {
   if (!/^[a-z0-9.-]+\.vercel\.app$/i.test(host)) return res.status(400).send('Endereço inválido.');
   const endpoint = `https://${host}/api/install`;
   const token = encodeURIComponent(req.query.token || '');
-  const authorizationQuery = ticket ? 'ticket=' + encodeURIComponent(req.query.ticket) : 'token=' + token;
   const version = process.env.RELEASE_VERSION || '0.1.5';
   if (!/^\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(version)) return res.status(503).send('Versão indisponível.');
   if (stage === 'issue') {
@@ -63,15 +63,20 @@ module.exports = async function handler(req, res) {
     return res.send(JSON.stringify({version}));
   }
   if (req.query.stage === 'manifest') {
-    const ipa = escapeXml(`${endpoint}?stage=package&${authorizationQuery}`);
+    const remote = process.env.SIGNED_IPA_URL;
+    const build = process.env.RELEASE_BUILD;
+    if (!remote || !/^https:\/\/cdn\d+\.signulous\.com\/downloads\//.test(remote) ||
+        !build || !/^\d+(?:\.\d+){0,2}$/.test(build)) {
+      return res.status(503).send('Arquivo indisponível.');
+    }
+    const ipa = escapeXml(remote);
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    return res.send(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>br.com.momentra.camera</string><key>bundle-version</key><string>${version}</string><key>kind</key><string>software</string><key>title</key><string>Momentra</string></dict></dict></array></dict></plist>`);
+    return res.send(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>br.com.momentra.camera</string><key>bundle-version</key><string>${build}</string><key>kind</key><string>software</string><key>title</key><string>Momentra</string></dict></dict></array></dict></plist>`);
   }
   if (req.query.stage === 'package') {
     const remote = process.env.SIGNED_IPA_URL;
     if (!remote || !/^https:\/\/cdn\d+\.signulous\.com\/downloads\//.test(remote)) return res.status(503).send('Arquivo indisponível.');
-    // Vercel limits function response bodies; let iOS download the signed IPA
-    // directly from the signing service after validating this private link.
+    // Honor package URLs already issued to devices by earlier manifests.
     res.setHeader('Location', remote);
     return res.status(302).send('');
   }
