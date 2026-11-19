@@ -64,6 +64,13 @@ jobs:
       - name: Generate project and start simulator
         working-directory: native-ios
         run: |
+          python3 - <<'PYTHON'
+          import re
+          from pathlib import Path
+          version = re.search(r"^    MARKETING_VERSION: '([^']+)'", Path("project.yml").read_text(), re.M).group(1)
+          suite = Path("MomentraUITests/GalleryInteractionTests.swift")
+          suite.write_text(re.sub(r'("-lastPresentedVersion", ")[^"]+(")', rf'\g<1>{version}\g<2>', suite.read_text()))
+          PYTHON
           command -v xcodegen || brew install xcodegen
           xcodegen generate
           DEVICE=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
