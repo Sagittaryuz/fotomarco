@@ -87,8 +87,9 @@ struct OriginalsView: View {
                 }
             }
             .sheet(isPresented: $showCaptureSelection) {
-                CaptureSelectionSheet(items: files, selected: $selectedCaptureIDs)
-                    .presentationDragIndicator(.hidden)
+                GallerySelectionSheet(items: files, selected: $selectedCaptureIDs) { item in
+                    Thumbnail(url: item.url, isVideo: item.isVideo)
+                }
             }
             .confirmationDialog("Excluir as capturas selecionadas?", isPresented: $confirmBatchDelete,
                                 titleVisibility: .visible) {
@@ -173,31 +174,10 @@ struct OriginalsView: View {
 
     private var selectionBar: some View {
         let urls = files.filter { selectedCaptureIDs.contains($0.id) }.map(\.url)
-        return HStack(spacing: 12) {
-            ShareLink(items: urls) {
-                Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
-                    .modifier(GalleryControlSurface())
-            }
-            .accessibilityLabel("Compartilhar seleção")
-            Spacer(minLength: 0)
-            Button { showCaptureSelection = true } label: {
-                Text("Mostrar seleção (\(urls.count))").font(.subheadline.weight(.semibold))
-                    .lineLimit(1).minimumScaleFactor(0.72)
-                    .frame(minHeight: 44).padding(.horizontal, 12)
-                    .modifier(GalleryControlSurface(tint: .yellow))
-            }
-            Spacer(minLength: 0)
-            Button(role: .destructive) { confirmBatchDelete = true } label: {
-                Image(systemName: "trash").frame(width: 44, height: 44)
-                    .modifier(GalleryControlSurface(tint: .red))
-            }
-            .accessibilityLabel("Excluir seleção")
+        return GallerySelectionBar(count: urls.count, busy: deletingSelection,
+                                   review: { showCaptureSelection = true }, delete: { confirmBatchDelete = true }) {
+            ShareLink(items: urls) { GalleryShareIcon() }
         }
-        .buttonStyle(.plain)
-        .disabled(urls.isEmpty || deletingSelection)
-        .opacity(urls.isEmpty ? 0.52 : 1)
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(.background)
     }
 
     private func deleteSelection() {
@@ -257,57 +237,6 @@ struct OriginalsView: View {
                 }
             }
         }
-    }
-}
-
-private struct CaptureSelectionSheet: View {
-    let items: [OriginalFile]
-    @Binding var selected: Set<URL>
-    @State private var columns = 3
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        let selection = items.filter { selected.contains($0.id) }
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button { columns = columns == 3 ? 2 : 3 } label: {
-                    Image(systemName: "square.grid.2x2").frame(width: 44, height: 44)
-                        .modifier(GalleryControlSurface())
-                }.accessibilityLabel("Alterar tamanho das miniaturas")
-                Spacer(minLength: 0)
-                VStack(spacing: 3) {
-                    Text("Seleção").font(.caption).foregroundStyle(.yellow)
-                    Text(selection.count == 1 ? "1 item selecionado" : "\(selection.count) itens selecionados")
-                        .font(.headline).lineLimit(1).minimumScaleFactor(0.72)
-                }
-                Spacer(minLength: 0)
-                Button { dismiss() } label: {
-                    Image(systemName: "checkmark").font(.body.weight(.bold))
-                        .frame(width: 44, height: 44).modifier(GalleryControlSurface(tint: .yellow))
-                }.accessibilityLabel("Concluir revisão")
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            if selection.isEmpty {
-                ContentUnavailableView("Nenhum item selecionado", systemImage: "checkmark.circle")
-                    .frame(maxHeight: .infinity)
-            } else {
-                GalleryGrid(groups: [GalleryGroup(date: nil, profile: nil, items: selection)], selecting: .constant(true),
-                            selected: $selected, columns: $columns, showsSectionHeaders: false) { item in
-                    Thumbnail(url: item.url, isVideo: item.isVideo)
-                } open: { _ in }
-            }
-            Button { selected.removeAll() } label: {
-                Text("Desmarcar tudo").font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 18).frame(minHeight: 44)
-                    .modifier(GalleryControlSurface())
-            }
-            .buttonStyle(.plain).disabled(selection.isEmpty)
-            .opacity(selection.isEmpty ? 0.52 : 1)
-            .padding(.vertical, 12)
-        }
-        .background(.background)
-        .preferredColorScheme(.dark)
     }
 }
 

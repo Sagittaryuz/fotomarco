@@ -149,6 +149,22 @@ final class GoogleDriveArchive {
         return try Data(contentsOf: location)
     }
 
+    func trashPhoto(id: String, name: String, accessToken: String) async throws {
+        guard Self.validID(id), CloudArchiveFilename(name) != nil else { throw ArchiveError.invalidRequest }
+        let path = "/drive/v3/files/\(id)"
+        let query = ["fields": Self.fields]
+        let check = try request(path: path, query: query, accessToken: accessToken)
+        let existing: Item = try await decode(check)
+        guard existing.id == id, existing.name == name, existing.mimeType.hasPrefix("image/"),
+              existing.appProperties?["momentraArchivePhoto"] == "1" else { throw ArchiveError.integrity }
+        if existing.trashed == true { return }
+        var update = try request(path: path, query: query, method: "PATCH", accessToken: accessToken)
+        update.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        update.httpBody = Data(#"{"trashed":true}"#.utf8)
+        let result: Item = try await decode(update)
+        guard result.id == id, result.trashed == true else { throw ArchiveError.invalidResponse }
+    }
+
     private func find(_ filter: String, pageToken: String?, accessToken: String) async throws -> Page {
         var query = ["q": filter, "pageSize": "100", "spaces": "drive", "orderBy": "createdTime desc",
                      "fields": "nextPageToken,files(\(Self.fields))"]

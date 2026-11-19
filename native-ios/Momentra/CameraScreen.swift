@@ -26,7 +26,6 @@ struct CameraScreen: View {
     @AppStorage("native.address.enabled") private var addressEnabled = true
     @AppStorage("native.address.autoPreviewMigrated") private var addressPreviewMigrated = false
     @AppStorage("native.pressure.enabled") private var pressureEnabled = false
-    @AppStorage("native.photos.enabled") private var saveToPhotos = true
     @StateObject private var archiveAccounts = CloudArchiveAccounts.shared
     @AppStorage("native.archive.keepLocal") private var keepArchiveLocal = true
     @AppStorage("native.archive.keepOriginal") private var keepArchiveOriginal = true
@@ -691,33 +690,6 @@ struct CameraScreen: View {
             NavigationStack {
                 Form {
                     archiveSettingsSection
-                    Section("Atualizações") {
-                        if let version = updates.availableVersion {
-                            Text("Nova versão disponível: \(version)").font(.headline)
-                            if directUpdate.ready {
-                                Button("Atualizar agora") {
-                                    Task {
-                                        await directUpdate.install(expectedVersion: version) {
-                                            UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
-                                                recording: camera.isRecording, finishing: camera.isFinishingRecording,
-                                                processingVideos: camera.processingVideos, processingPhotos: camera.processingPhotos,
-                                                cloudBusy: connectingArchive)
-                                        }
-                                    }
-                                }
-                                    .disabled(directUpdate.busy)
-                            } else {
-                                Text("Para atualizar diretamente, ative uma vez pelo link pessoal de instalação.")
-                                    .font(.footnote).foregroundStyle(.secondary)
-                                Link("Ver instruções", destination: UpdateService.releasesURL)
-                            }
-                        }
-                        Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
-                            Task { await updates.check(force: true) }
-                        }.disabled(updates.checking)
-                        if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
-                        if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                    }
                     Section("Ajustes da câmera") {
                         NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
                         Toggle("Escanear QR Codes", isOn: $scanQR)
@@ -754,17 +726,34 @@ struct CameraScreen: View {
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
                     Toggle("Carimbo", isOn: $stampEnabled)
-                    Toggle("Copiar para o app Fotos", isOn: $saveToPhotos)
-                        .disabled(!effectiveLocalStorage)
-                    Text(effectiveLocalStorage
-                         ? "Adiciona uma cópia à biblioteca Fotos do iPhone. A opção Armazenamento local define onde o Momentra guarda as capturas."
-                         : "No modo somente nuvem, novas fotos não são copiadas para o app Fotos do iPhone.")
-                        .font(.footnote).foregroundStyle(.secondary)
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
-                        Link("Dados meteorológicos: MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
-                        Link("Mapas de exemplo: USGS · National Geospatial Program", destination: URL(string: "https://www.usgs.gov/programs/national-geospatial-program/national-map")!)
-                        Text("A previsão usa a localização aproximada quando permitida e o app está aberto.").font(.footnote).foregroundStyle(.secondary)
+                        if let version = updates.availableVersion {
+                            Text("Nova versão disponível: \(version)").font(.headline)
+                            if directUpdate.ready {
+                                Button("Atualizar agora") {
+                                    Task {
+                                        await directUpdate.install(expectedVersion: version) {
+                                            UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
+                                                recording: camera.isRecording, finishing: camera.isFinishingRecording,
+                                                processingVideos: camera.processingVideos, processingPhotos: camera.processingPhotos,
+                                                cloudBusy: connectingArchive)
+                                        }
+                                    }
+                                }
+                                    .disabled(directUpdate.busy)
+                            } else {
+                                Text("Para atualizar diretamente, ative uma vez pelo link pessoal de instalação.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                                Link("Ver instruções", destination: UpdateService.releasesURL)
+                            }
+                        }
+                        Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
+                            Task { await updates.check(force: true) }
+                        }.disabled(updates.checking)
+                        if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
+                        if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                        Link("Privacidade e créditos", destination: URL(string: "https://momentra-camera.vercel.app/privacidade.html")!)
                     } header: {
                         Text("Sobre")
                     } footer: {
@@ -929,13 +918,13 @@ struct CameraScreen: View {
     private func startVideoRecording() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
         let profile = CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name)
-        camera.startRecording(saveToPhotos: saveToPhotos, snapshot: snapshot, profile: profile)
+        camera.startRecording(saveToPhotos: effectiveLocalStorage, snapshot: snapshot, profile: profile)
     }
 
     private func capturePhoto() {
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard,
-                       saveToPhotos: effectiveLocalStorage && saveToPhotos,
+                       saveToPhotos: effectiveLocalStorage,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
                        profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
                        archivePlan: currentArchivePlan)
@@ -1103,7 +1092,7 @@ struct CameraScreen: View {
             compact: stampProfiles.selected.layout.compact, position: stampProfiles.selected.layout.position,
             horizontal: stampProfiles.selected.layout.horizontal, longDate: stampProfiles.selected.layout.dateFormat == "long",
             fontStyle: stampProfiles.selected.layout.fontStyle, aspect: photoAspect,
-            saveToPhotos: (plan?.keepLocal ?? true) && saveToPhotos,
+            saveToPhotos: plan?.keepLocal ?? effectiveLocalStorage,
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
             cloudOwnerHash: nil,
             layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout)).flatMap { $0.count <= 2000 ? $0 : nil },
@@ -1156,7 +1145,6 @@ struct CameraScreen: View {
         let selectedImport = s.profiles[s.profile] ?? h
         stampProfiles.setNote(selectedImport.note)
         stampEnabled = s.stamp; gpsEnabled = s.gps; mapEnabled = s.map
-        saveToPhotos = s.allowGallery
         if let size = s.size { stampSize = size }
         if let position = s.position { stampPosition = position }
         if let corner = s.timestampCorner {

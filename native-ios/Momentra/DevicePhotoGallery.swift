@@ -2,6 +2,7 @@ import SwiftUI
 import Photos
 import CoreLocation
 import ImageIO
+import UniformTypeIdentifiers
 
 private struct DeviceAsset: Identifiable {
     let asset: PHAsset
@@ -19,6 +20,11 @@ struct DevicePhotoGallery: View {
     @State private var columnCount = 3
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
+    @State private var showingSelection = false
+    @State private var confirmingDelete = false
+    @State private var actionInProgress = false
+    @State private var share: GalleryShareBatch?
+    @State private var actionError: String?
 
     private var groups: [GalleryGroup<DeviceAsset>] {
         GalleryGrouping.groups(assets, date: { $0.asset.creationDate }, profile: { item in
@@ -43,7 +49,12 @@ struct DevicePhotoGallery: View {
                                     tile: { DeviceThumbnail(asset: $0.asset).accessibilityLabel("Foto") },
                                     open: { selected = $0 })
                     }
-                    if selecting { selectionSummary }
+                    if selecting {
+                        GallerySelectionBar(count: selectedIDs.count, busy: actionInProgress,
+                                            review: { showingSelection = true }, delete: { confirmingDelete = true }) {
+                            Button(action: shareSelection) { GalleryShareIcon() }
+                        }
+                    }
                 }
             } else if authorization == .notDetermined {
                 ContentUnavailableView {
@@ -70,7 +81,16 @@ struct DevicePhotoGallery: View {
                 if authorization == .authorized || authorization == .limited {
                     Button(selecting ? "Cancelar" : "Selecionar") {
                         selecting.toggle(); if !selecting { selectedIDs.removeAll() }
-                    }
+                    }.disabled(actionInProgress)
+                }
+            }
+            if selecting {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Selecionar todas") { selectedIDs = Set(assets.map(\.id)) }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Opções da seleção")
+                    .disabled(actionInProgress)
                 }
             }
         }
@@ -78,14 +98,62 @@ struct DevicePhotoGallery: View {
             DevicePhotoPager(items: groups.flatMap(\.items), initialID: item.id,
                              profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name))
         }
+        .sheet(isPresented: $showingSelection) {
+            GallerySelectionSheet(items: assets, selected: $selectedIDs) { DeviceThumbnail(asset: $0.asset) }
+        }
+        .sheet(item: $share) { GalleryShareBatch.Sheet(batch: $0) }
+        .confirmationDialog("Excluir as fotos selecionadas?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Excluir \(selectedIDs.count) itens", role: .destructive, action: deleteSelection)
+            Button("Cancelar", role: .cancel) {}
+        } message: { Text("Os itens serão removidos da biblioteca Fotos do iPhone.") }
+        .alert("Momentra", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+            Button("OK") { actionError = nil }
+        } message: { Text(actionError ?? "") }
     }
 
-    private var selectionSummary: some View {
-        HStack {
-            Text("\(selectedIDs.count) selecionada(s)")
-            Spacer()
-            Button("Selecionar todas") { selectedIDs = Set(assets.map(\.id)) }
-        }.font(.footnote).padding()
+    private func shareSelection() {
+        let items = assets.filter { selectedIDs.contains($0.id) }
+        guard !items.isEmpty, !actionInProgress else { return }
+        actionInProgress = true
+        Task {
+            defer { actionInProgress = false }
+            do {
+                share = try await GalleryShareBatch.prepare(items) { item, directory in
+                    let resources = PHAssetResource.assetResources(for: item.asset)
+                    guard let resource = resources.first(where: { $0.type == .fullSizePhoto }) ??
+                            resources.first(where: { $0.type == .photo }) else { throw CocoaError(.fileReadUnknown) }
+                    let file = directory.appendingPathComponent("Foto").appendingPathExtension(
+                        UTType(resource.uniformTypeIdentifier)?.preferredFilenameExtension ?? "jpg")
+                    let options = PHAssetResourceRequestOptions()
+                    options.isNetworkAccessAllowed = true
+                    try await PHAssetResourceManager.default().writeData(for: resource, toFile: file, options: options)
+                    return file
+                }
+            } catch { actionError = "Não foi possível preparar as fotos selecionadas para compartilhar." }
+        }
+    }
+
+    private func deleteSelection() {
+        let items = assets.filter { selectedIDs.contains($0.id) }.map(\.asset)
+        guard !items.isEmpty, !actionInProgress else { return }
+        guard items.allSatisfy({ $0.canPerform(.delete) }) else {
+            actionError = "A biblioteca Fotos não permite excluir um ou mais dos itens selecionados."
+            return
+        }
+        actionInProgress = true
+        Task {
+            defer { actionInProgress = false }
+            do {
+                try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(items as NSArray) }
+                selecting = false
+                selectedIDs.removeAll()
+                refresh()
+            } catch {
+                if (error as NSError).code != PHPhotosError.Code.userCancelled.rawValue {
+                    actionError = "Não foi possível excluir as fotos selecionadas da biblioteca do iPhone."
+                }
+            }
+        }
     }
 
     private func requestAccess() {
