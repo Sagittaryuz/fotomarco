@@ -74,13 +74,12 @@ struct OriginalsView: View {
     }
 
     private func updateProjection() {
-        let photos = tab == .favorites ? favoritePhotos : trackedPhotos
-        let source = tab == .trash ? localTrash + remoteTrash : local + remote + photos
+        let photos = tab == .favorites ? trackedPhotos + favoritePhotos : trackedPhotos
+        let source = tab == .trash ? localTrash + remoteTrash : local + photos + remote
         let captures = tab == .favorites ? Self.decode(captureFavorites) : []
         let cloud = tab == .favorites ? Self.decode(cloudFavorites) : []
-        let items = source.filter {
-            (origin == nil || $0.origin == origin) && (profile == nil || $0.profile?.id == profile) &&
-            (tab != .favorites || $0.isFavorite(in: captures, cloud: cloud, device: deviceFavorites))
+        let items = GalleryItem.grouped(source, origin: origin, profile: profile).filter {
+            tab != .favorites || $0.isFavorite(in: captures, cloud: cloud, device: deviceFavorites)
         }.sorted {
             if $0.date == $1.date { return $0.id < $1.id }
             return ($0.date ?? .distantPast) < ($1.date ?? .distantPast)
@@ -202,10 +201,10 @@ struct OriginalsView: View {
                                   profiles: stampProfiles.profiles,
                                   isFavorite: isFavorite, favorite: toggleFavorite,
                                   onTrash: { item in
-                                      local.removeAll { $0.id == item.id }
-                                      trackedPhotos.removeAll { $0.id == item.id }
-                                      favoritePhotos.removeAll { $0.id == item.id }
-                                      remote.removeAll { $0.id == item.id }
+                                      local.removeAll { $0.storageID == item.storageID }
+                                      trackedPhotos.removeAll { $0.storageID == item.storageID }
+                                      favoritePhotos.removeAll { $0.storageID == item.storageID }
+                                      remote.removeAll { $0.storageID == item.storageID }
                                       updateProjection()
                                       if item.origin != .local { cloudRefresh += 1 }
                                   },
@@ -234,7 +233,7 @@ struct OriginalsView: View {
             Button("Mover para a lixeira", role: .destructive) { trashSelection(items) }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Cada item vai para a lixeira da sua origem.")
+            Text("A cópia exibida de cada foto vai para a lixeira da sua origem. As demais cópias continuam disponíveis.")
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { message = nil }
@@ -390,15 +389,7 @@ struct OriginalsView: View {
     private func tile(_ item: GalleryItem) -> some View {
         item.thumbnail()
             .overlay(alignment: .topTrailing) {
-                let origin = item.origin
-                GalleryOriginMark(origin: origin, size: origin == .local ? 14 : 11)
-                    .frame(width: 16, height: 16)
-                    .background(.white.opacity(0.88), in: Circle())
-                    .overlay { Circle().strokeBorder(.black.opacity(0.26), lineWidth: 0.5) }
-                    .padding(4)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(origin == .local ? "No iPhone" : origin.title)
-                    .allowsHitTesting(false)
+                GalleryStorageBadges(badges: item.storageBadges)
             }
             .overlay(alignment: .bottomTrailing) {
                 if tab == .trash {
@@ -507,32 +498,33 @@ struct OriginalsView: View {
         loading = true
         defer { if !Task.isCancelled { loading = false } }
         let activeTab = tab
-        let source = await Task.detached(priority: .utility) { () -> (files: [GalleryItem], photos: [GalleryItem])? in
+        let source = await Task.detached(priority: .utility) { () -> (files: [GalleryItem], tracked: [GalleryItem], favorites: [GalleryItem])? in
             let lookup = PhotoProfileIndex.load()
             guard let files = try? OriginalStore.files(inTrash: activeTab == .trash) else { return nil }
             let items = files.map { Self.capture($0, lookup: lookup) }
-            if activeTab == .trash { return (items, []) }
+            if activeTab == .trash { return (items, [], []) }
             let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            guard status == .authorized || status == .limited else { return (items, []) }
-            let options = PHFetchOptions()
+            guard status == .authorized || status == .limited else { return (items, [], []) }
             let imageTypes = [PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue]
-            let assets: PHFetchResult<PHAsset>
-            if activeTab == .favorites {
-                options.predicate = NSPredicate(format: "favorite == YES AND mediaType IN %@", imageTypes)
-                assets = PHAsset.fetchAssets(with: options)
-            } else {
-                let ids = Array(lookup.assets.keys)
-                guard !ids.isEmpty else { return (items, []) }
-                options.predicate = NSPredicate(format: "mediaType IN %@", imageTypes)
-                assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: options)
+            func galleryItems(_ assets: PHFetchResult<PHAsset>) -> [GalleryItem] {
+                var photos: [GalleryItem] = []
+                photos.reserveCapacity(assets.count)
+                assets.enumerateObjects { asset, _, _ in
+                    let captureID = lookup.assetCaptures[asset.localIdentifier]
+                    photos.append(GalleryItem(source: .device(asset),
+                        date: captureID.flatMap { lookup.dates[$0] } ?? asset.creationDate,
+                        profile: lookup.assets[asset.localIdentifier], deviceCaptureID: captureID))
+                }
+                return photos
             }
-            var photos: [GalleryItem] = []
-            photos.reserveCapacity(assets.count)
-            assets.enumerateObjects { asset, _, _ in
-                photos.append(GalleryItem(source: .device(asset), date: asset.creationDate,
-                                         profile: lookup.assets[asset.localIdentifier]))
-            }
-            return (items, photos)
+            let options = PHFetchOptions()
+            options.predicate = NSPredicate(format: "mediaType IN %@", imageTypes)
+            let ids = Array(lookup.assets.keys)
+            let tracked = ids.isEmpty ? [] : galleryItems(PHAsset.fetchAssets(withLocalIdentifiers: ids, options: options))
+            guard activeTab == .favorites else { return (items, tracked, []) }
+            options.predicate = NSPredicate(format: "favorite == YES AND mediaType IN %@", imageTypes)
+            let favorites = galleryItems(PHAsset.fetchAssets(with: options))
+            return (items, tracked, favorites)
         }.value
         guard !Task.isCancelled, activeTab == tab, let source else { return }
         authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -541,8 +533,8 @@ struct OriginalsView: View {
             localTrash = source.files
         } else {
             local = source.files
-            if activeTab == .favorites { favoritePhotos = source.photos }
-            else { trackedPhotos = source.photos }
+            trackedPhotos = source.tracked
+            if activeTab == .favorites { favoritePhotos = source.favorites }
         }
         updateProjection()
         if wasEmpty { scrollRequest += 1 }
@@ -648,7 +640,7 @@ struct OriginalsView: View {
 
     private func applyCloud(_ results: [GalleryItem], trash: Bool) {
         var ids = Set<String>()
-        let unique = results.filter { ids.insert($0.id).inserted }
+        let unique = results.filter { ids.insert($0.storageID).inserted }
         let wasEmpty = projection.items.isEmpty
         if trash {
             remoteTrash = unique
@@ -677,6 +669,19 @@ struct OriginalsView: View {
     }
 
     private func toggleFavorite(_ item: GalleryItem) async throws {
+        if let identity = item.photoIdentity {
+            let excluded = "unfavorite/" + identity
+            var keys = Self.decode(captureFavorites)
+            if isFavorite(item) {
+                keys.remove(identity)
+                keys.insert(excluded)
+            } else {
+                keys.remove(excluded)
+                keys.insert(identity)
+            }
+            captureFavorites = try JSONEncoder().encode(keys)
+            return
+        }
         switch item.source {
         case .capture(let capture):
             captureFavorites = try toggled(captureFavorites, key: GalleryItem.captureFavoriteKey(capture))
@@ -719,7 +724,7 @@ struct OriginalsView: View {
             var deleted = Set<String>()
             for item in chosen {
                 if case .device = item.source { continue }
-                do { try await item.moveToTrash(); deleted.insert(item.id) } catch { failed = true }
+                do { try await item.moveToTrash(); deleted.insert(item.storageID) } catch { failed = true }
             }
             let assets = chosen.compactMap { item -> PHAsset? in
                 if case .device(let asset) = item.source { return asset }
@@ -736,13 +741,13 @@ struct OriginalsView: View {
                 } else { failed = true }
             }
             if !deleted.isEmpty {
-                local.removeAll { deleted.contains($0.id) }
-                trackedPhotos.removeAll { deleted.contains($0.id) }
-                favoritePhotos.removeAll { deleted.contains($0.id) }
-                remote.removeAll { deleted.contains($0.id) }
+                local.removeAll { deleted.contains($0.storageID) }
+                trackedPhotos.removeAll { deleted.contains($0.storageID) }
+                favoritePhotos.removeAll { deleted.contains($0.storageID) }
+                remote.removeAll { deleted.contains($0.storageID) }
                 resetSelection()
                 updateProjection()
-                if chosen.contains(where: { $0.origin != .local && deleted.contains($0.id) }) { cloudRefresh += 1 }
+                if chosen.contains(where: { $0.origin != .local && deleted.contains($0.storageID) }) { cloudRefresh += 1 }
             }
             if failed { message = "Alguns itens não puderam ser movidos. Verifique as permissões e os envios pendentes." }
             reloadVersion += 1
@@ -756,8 +761,8 @@ struct OriginalsView: View {
             defer { busy = false }
             do {
                 try await item.restore()
-                localTrash.removeAll { $0.id == item.id }
-                remoteTrash.removeAll { $0.id == item.id }
+                localTrash.removeAll { $0.storageID == item.storageID }
+                remoteTrash.removeAll { $0.storageID == item.storageID }
                 trashItem = nil
                 updateProjection()
                 if item.origin != .local { catalogLoaded = false; cloudRefresh += 1 }

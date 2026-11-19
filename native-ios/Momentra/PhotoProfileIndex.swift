@@ -18,6 +18,7 @@ struct PhotoProfileLookup {
     var captures: [UUID: CaptureProfileTag] = [:]
     var dates: [UUID: Date] = [:]
     var assets: [String: CaptureProfileTag] = [:]
+    var assetCaptures: [String: UUID] = [:]
     var cloud: [String: CaptureProfileTag] = [:]
 }
 
@@ -68,7 +69,10 @@ enum PhotoProfileIndex {
                   file.deletingPathExtension().lastPathComponent == record.captureID.uuidString else { continue }
             lookup.captures[record.captureID] = record.profile
             if let date = record.captureDate { lookup.dates[record.captureID] = date }
-            if let id = record.localAssetID { lookup.assets[id] = record.profile }
+            if let id = record.localAssetID {
+                lookup.assets[id] = record.profile
+                lookup.assetCaptures[id] = record.captureID
+            }
             for id in record.cloudMediaIDs { lookup.cloud[id] = record.profile }
         }
         return lookup

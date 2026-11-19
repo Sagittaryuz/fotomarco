@@ -13,6 +13,7 @@ final class PhotoProfileIndexTests: XCTestCase {
         let index = PhotoProfileIndex.load(root: root)
         XCTAssertEqual(index.captures[id], profile)
         XCTAssertEqual(index.assets["asset-1"], profile)
+        XCTAssertEqual(index.assetCaptures["asset-1"], id)
         XCTAssertEqual(index.cloud[PhotoProfileIndex.cloudKey(owner: "account-a", mediaID: "media-1")], profile)
         XCTAssertNil(index.cloud[PhotoProfileIndex.cloudKey(owner: "account-b", mediaID: "media-1")])
     }
@@ -56,3 +57,4 @@ final class PhotoProfileIndexTests: XCTestCase {
         XCTAssertEqual(GalleryZoom.next(columns: 2, magnification: 1.5), 2)
     }
 }
+
