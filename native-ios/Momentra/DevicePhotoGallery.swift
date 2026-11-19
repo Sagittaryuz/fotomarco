@@ -229,7 +229,6 @@ private struct DevicePhotoPager: View {
     @State private var updating = false
     @State private var favorites: [String: Bool] = [:]
     @State private var message: String?
-    @State private var shareSucceeded = false
     @Environment(\.dismiss) private var dismiss
 
     init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag, stampProfiles: [StampProfile],
@@ -276,9 +275,7 @@ private struct DevicePhotoPager: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .modifier(GalleryCameraSwipe(action: { if !updating { returnToCamera() } }))
-        .sheet(item: $panel, onDismiss: {
-            if shareSucceeded { dismiss() }
-        }) { route in
+        .sheet(item: $panel) { route in
             if let current { sheet(route, current: current) }
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
@@ -333,10 +330,7 @@ private struct DevicePhotoPager: View {
         case .share:
             GalleryShareComposer(items: items, current: current, copy: { item, directory in
                 try await DevicePhotoFile.copy(item.asset, to: directory.appendingPathComponent("Foto"))
-            }, onSuccess: {
-                shareSucceeded = true
-                panel = nil
-            }) { DeviceThumbnail(asset: $0.asset) }
+            }, onSuccess: { panel = nil }) { DeviceThumbnail(asset: $0.asset) }
         case .information:
             NavigationStack {
                 DevicePhotoDetail(asset: current.asset, profile: profile)

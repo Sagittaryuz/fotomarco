@@ -711,7 +711,6 @@ private struct ArchiveGalleryPager: View {
     @State private var panel: Panel?
     @State private var updating = false
     @State private var message: String?
-    @State private var shareSucceeded = false
     @Environment(\.dismiss) private var dismiss
 
     init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages, stampProfiles: [StampProfile],
@@ -762,9 +761,7 @@ private struct ArchiveGalleryPager: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .modifier(GalleryCameraSwipe(action: { if !updating { returnToCamera() } }))
-        .sheet(item: $panel, onDismiss: {
-            if shareSucceeded { dismiss() }
-        }) { route in
+        .sheet(item: $panel) { route in
             if let current { sheet(route, current: current) }
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
@@ -818,10 +815,7 @@ private struct ArchiveGalleryPager: View {
             GalleryShareComposer(items: items, current: current, copy: { photo, directory in
                 let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
                 return try await images.copy(photo, to: directory, accessToken: token)
-            }, onSuccess: {
-                shareSucceeded = true
-                panel = nil
-            }) { ArchiveGalleryImage(photo: $0, images: images) }
+            }, onSuccess: { panel = nil }) { ArchiveGalleryImage(photo: $0, images: images) }
         case .information:
             NavigationStack {
                 Form {
