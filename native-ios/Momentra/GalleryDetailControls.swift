@@ -5,43 +5,119 @@ struct GalleryDetailHeader<Actions: View>: View {
     let position: Int
     let count: Int
     let close: () -> Void
+    var overview: (() -> Void)? = nil
     @ViewBuilder let actions: () -> Actions
 
     var body: some View {
-        VStack(spacing: 8) {
-            Capsule().fill(.white.opacity(0.38)).frame(width: 32, height: 3)
-                .accessibilityHidden(true)
-            HStack(spacing: 12) {
-                Button(action: close) {
-                    Image(systemName: "chevron.left").font(.body.weight(.semibold))
-                        .frame(width: 44, height: 44)
-                        .modifier(GalleryControlSurface(tint: .yellow))
-                }
-                .accessibilityLabel("Voltar à galeria")
-                Spacer(minLength: 0)
-                VStack(spacing: 3) {
-                    if let date {
-                        Text(date, format: .dateTime.day().month(.abbreviated).year()).font(.subheadline.weight(.semibold))
-                        Text(date, format: .dateTime.hour().minute()).font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text("Visualização").font(.subheadline.weight(.semibold))
-                    }
-                    Text("\(position) de \(count)").font(.caption2.monospacedDigit()).foregroundStyle(.yellow)
-                }
-                .accessibilityElement(children: .combine)
-                Spacer(minLength: 0)
-                actions().frame(width: 44, height: 44)
+        HStack(spacing: 8) {
+            Button(action: close) {
+                Image(systemName: "chevron.left").font(.body.weight(.semibold))
+                    .frame(width: 44, height: 44)
+                    .modifier(GalleryControlSurface(tint: .yellow))
             }
+            .accessibilityLabel("Voltar à galeria")
+            Spacer(minLength: 0)
+            VStack(spacing: 2) {
+                if let date {
+                    Text(dayLabel(date)).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(date, format: .dateTime.hour().minute()).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Visualização").font(.subheadline.weight(.semibold))
+                }
+            }
+            .padding(.horizontal, 20).frame(minHeight: 44)
+            .modifier(GalleryControlSurface())
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("\(position) de \(count)")
+            Spacer(minLength: 0)
+            if let overview {
+                Button(action: overview) {
+                    Image(systemName: "square.grid.3x3").frame(width: 44, height: 44)
+                        .modifier(GalleryControlSurface())
+                }
+                .accessibilityLabel("Mostrar grade")
+            }
+            actions()
         }
-        .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 8)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14).padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(.black.opacity(0.94))
+        .background(.black)
         .foregroundStyle(.white)
-        .contentShape(Rectangle())
-        .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { gesture in
-            let y = gesture.translation.height
-            if y > 42, y > abs(gesture.translation.width) * 1.25 { close() }
-        })
+    }
+
+    private func dayLabel(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) { return "Hoje" }
+        if Calendar.current.isDateInYesterday(date) { return "Ontem" }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+struct GalleryCameraSwipe: ViewModifier {
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        content.contentShape(Rectangle())
+            .simultaneousGesture(DragGesture(minimumDistance: 16, coordinateSpace: .global).onEnded { gesture in
+                let distance = gesture.translation
+                if distance.height > 55, distance.height > abs(distance.width) * 1.4 { action() }
+            })
+    }
+}
+
+struct GalleryTrashButton: View {
+    let label: String
+    let message: String
+    let confirm: () -> Void
+    @State private var showingConfirmation = false
+
+    var body: some View {
+        Button { showingConfirmation = true } label: {
+            Image(systemName: "trash").frame(width: 44, height: 44)
+                .modifier(GalleryControlSurface())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .popover(isPresented: $showingConfirmation, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Mover para a lixeira?", systemImage: "trash")
+                    .font(.headline)
+                Text(message).font(.subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(role: .destructive) {
+                    showingConfirmation = false
+                    confirm()
+                } label: {
+                    Text("Mover para a lixeira").fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(18).frame(idealWidth: 275, maxWidth: 290)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+struct GalleryDetailGrid<Item: Identifiable, Tile: View>: View {
+    let items: [Item]
+    let choose: (Item) -> Void
+    @ViewBuilder let tile: (Item) -> Tile
+    @Environment(\.dismiss) private var dismiss
+    @State private var columns = 3
+
+    var body: some View {
+        NavigationStack {
+            GalleryGrid(groups: [GalleryGroup(date: nil, profile: nil, items: items)],
+                        selecting: .constant(false), selected: .constant([]), columns: $columns,
+                        showsSectionHeaders: false, tile: tile, open: { item in
+                choose(item)
+                dismiss()
+            })
+            .navigationTitle("Nesta galeria")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Concluído") { dismiss() } }
+        }
     }
 }
 

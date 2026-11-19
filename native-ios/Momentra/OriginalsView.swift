@@ -12,18 +12,32 @@ private struct OriginalFile: Identifiable {
 }
 
 private enum OriginalStore {
-    static func delete(_ item: OriginalFile) throws {
+    static func moveToTrash(_ item: OriginalFile) throws {
         let root = item.url.deletingLastPathComponent().deletingLastPathComponent()
         let archive = CloudArchiveJournal(root: root)
         try archive.serializeCleanup {
             if let id = UUID(uuidString: item.url.deletingPathExtension().lastPathComponent),
                archive.hasPendingDelivery(id: id) { throw CocoaError(.fileWriteFileExists) }
-            try FileManager.default.removeItem(at: item.url)
+            let destination = root.appendingPathComponent("CaptureTrash", isDirectory: true)
+                .appendingPathComponent(item.url.deletingLastPathComponent().lastPathComponent, isDirectory: true)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: item.url, to: destination.appendingPathComponent(item.url.lastPathComponent))
         }
     }
 
-    static func files() throws -> [OriginalFile] {
-        let root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+    static func restore(_ item: OriginalFile) throws {
+        let folder = item.url.deletingLastPathComponent()
+        let root = folder.deletingLastPathComponent().deletingLastPathComponent()
+        try CloudArchiveJournal(root: root).serializeCleanup {
+            let destination = root.appendingPathComponent(folder.lastPathComponent, isDirectory: true)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: item.url, to: destination.appendingPathComponent(item.url.lastPathComponent))
+        }
+    }
+
+    static func files(inTrash: Bool = false) throws -> [OriginalFile] {
+        var root = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        if inTrash { root.appendPathComponent("CaptureTrash", isDirectory: true) }
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
         return try [("Originals", false, false), ("Processed", false, true), ("Videos", true, false), ("ProcessedVideos", true, true)].flatMap { folder, isVideo, isProcessed -> [OriginalFile] in
             let directory = root.appendingPathComponent(folder, isDirectory: true)
@@ -39,6 +53,7 @@ private enum OriginalStore {
 
 struct OriginalsView: View {
     @ObservedObject var stampProfiles: StampProfilesStore
+    let returnToCamera: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var files: [OriginalFile] = []
     @State private var message: String?
@@ -48,6 +63,8 @@ struct OriginalsView: View {
     @State private var reloadToken = UUID()
     @State private var captureColumns = 3
     @State private var selectedCapture: URL?
+    @State private var exitingToCamera = false
+    @State private var showingTrash = false
     @State private var quickShare: OriginalFile?
     @State private var selectingCaptures = false
     @State private var selectedCaptureIDs: Set<URL> = []
@@ -70,10 +87,10 @@ struct OriginalsView: View {
                 if gallerySection == 0 {
                     captures
                 } else if gallerySection == 1 {
-                    DevicePhotoGallery(profileLookup: profileLookup, stampProfiles: stampProfiles)
+                    DevicePhotoGallery(profileLookup: profileLookup, stampProfiles: stampProfiles, returnToCamera: returnToCamera)
                 } else {
                     CloudArchiveGallery(accounts: archiveAccounts,
-                                        profileLookup: profileLookup, stampProfiles: stampProfiles)
+                                        profileLookup: profileLookup, stampProfiles: stampProfiles, returnToCamera: returnToCamera)
                 }
             }
             .navigationTitle("Galeria")
@@ -83,24 +100,28 @@ struct OriginalsView: View {
             .fullScreenCover(item: $quickShare) { item in
                 GalleryQuickShare(load: { PhotoEditorInput(url: item.url) }, isVideo: item.isVideo)
             }
-            .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } }), onDismiss: reload) {
+            .fullScreenCover(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } }),
+                             onDismiss: detailDismissed) {
                 if let selectedCapture {
                     CapturePager(items: captureGroups.flatMap(\.items), initialURL: selectedCapture,
-                                 message: $message, profiles: stampProfiles, save: save)
-                        .presentationDragIndicator(.hidden)
+                                 message: $message, profiles: stampProfiles, save: save,
+                                 returnToCamera: { exitingToCamera = true; self.selectedCapture = nil })
                 }
+            }
+            .sheet(isPresented: $showingTrash, onDismiss: reload) {
+                CaptureTrashView()
             }
             .sheet(isPresented: $showCaptureSelection) {
                 GallerySelectionSheet(items: files, selected: $selectedCaptureIDs) { item in
                     Thumbnail(url: item.url, isVideo: item.isVideo)
                 }
             }
-            .confirmationDialog("Excluir as capturas selecionadas?", isPresented: $confirmBatchDelete,
+            .confirmationDialog("Mover as capturas selecionadas para a lixeira?", isPresented: $confirmBatchDelete,
                                 titleVisibility: .visible) {
-                Button("Excluir \(selectedCaptureIDs.count) itens", role: .destructive) { deleteSelection() }
+                Button("Mover \(selectedCaptureIDs.count) itens para a lixeira", role: .destructive) { deleteSelection() }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("A exclusão se aplica aos arquivos locais selecionados.")
+                Text("Você pode restaurar os arquivos na Lixeira de Capturas do Momentra.")
             }
             .onChange(of: gallerySection) { _, _ in
                 selectingCaptures = false; selectedCaptureIDs.removeAll()
@@ -157,6 +178,12 @@ struct OriginalsView: View {
                     selectingCaptures.toggle(); if !selectingCaptures { selectedCaptureIDs.removeAll() }
                 }.disabled(deletingSelection)
             }
+            if !selectingCaptures {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingTrash = true } label: { Image(systemName: "trash") }
+                        .accessibilityLabel("Lixeira de Capturas")
+                }
+            }
             if selectingCaptures {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -184,7 +211,7 @@ struct OriginalsView: View {
         Task {
             let removed = await Task.detached(priority: .utility) {
                 items.compactMap { item -> URL? in
-                    do { try OriginalStore.delete(item); return item.id }
+                    do { try OriginalStore.moveToTrash(item); return item.id }
                     catch { return nil }
                 }
             }.value
@@ -194,8 +221,17 @@ struct OriginalsView: View {
             }
             deletingSelection = false
             if removed.count != items.count {
-                message = "Alguns itens não puderam ser excluídos. Confira se há envios pendentes."
+                message = "Alguns itens não puderam ser movidos para a lixeira. Confira se há envios pendentes."
             }
+            reload()
+        }
+    }
+
+    private func detailDismissed() {
+        if exitingToCamera {
+            exitingToCamera = false
+            returnToCamera()
+        } else {
             reload()
         }
     }
@@ -237,6 +273,67 @@ struct OriginalsView: View {
     }
 }
 
+private struct CaptureTrashView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var files: [OriginalFile] = []
+    @State private var busy = false
+    @State private var message: String?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if files.isEmpty, !busy {
+                    ContentUnavailableView("Lixeira vazia", systemImage: "trash")
+                } else {
+                    List(files) { item in
+                        HStack(spacing: 12) {
+                            Thumbnail(url: item.url, isVideo: item.isVideo)
+                                .frame(width: 60, height: 60).clipped()
+                                .clipShape(.rect(cornerRadius: 8))
+                            VStack(alignment: .leading) {
+                                Text(item.isVideo ? "Vídeo" : "Foto")
+                                if let date = item.date {
+                                    Text(date.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Button("Restaurar") { restore(item) }.disabled(busy)
+                        }
+                    }
+                }
+            }
+            .overlay { if busy { ProgressView().padding().background(.regularMaterial, in: Capsule()) } }
+            .navigationTitle("Lixeira de Capturas")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Concluído") { dismiss() }.disabled(busy) }
+            .task {
+                busy = true
+                do {
+                    files = try await Task.detached(priority: .utility) { try OriginalStore.files(inTrash: true) }.value
+                } catch { message = "Não foi possível abrir a lixeira." }
+                busy = false
+            }
+            .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+                Button("OK") { message = nil }
+            } message: { Text(message ?? "") }
+        }
+        .interactiveDismissDisabled(busy)
+    }
+
+    private func restore(_ item: OriginalFile) {
+        guard !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                try await Task.detached(priority: .utility) { try OriginalStore.restore(item) }.value
+                files.removeAll { $0.id == item.id }
+            } catch { message = "Não foi possível restaurar este item. Ele continua na lixeira." }
+        }
+    }
+}
+
 private struct CapturePager: View {
     private enum Panel: String, Identifiable {
         case information, editor, stamp, text
@@ -244,13 +341,16 @@ private struct CapturePager: View {
     }
 
     let save: (OriginalFile) -> Void
+    let returnToCamera: () -> Void
     @ObservedObject var profiles: StampProfilesStore
     @Binding var message: String?
     @AppStorage("native.gallery.favoriteCaptureKeys") private var storedFavorites = Data()
     @State private var items: [OriginalFile]
     @State private var selection: URL
     @State private var panel: Panel?
-    @State private var removing: OriginalFile?
+    @State private var removing = false
+    @State private var showGrid = false
+    @State private var shareItem: OriginalFile?
     @State private var fullscreen = false
     @State private var stamping = false
     @State private var selectedProfile: UUID?
@@ -258,8 +358,9 @@ private struct CapturePager: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(items: [OriginalFile], initialURL: URL, message: Binding<String?>, profiles: StampProfilesStore,
-         save: @escaping (OriginalFile) -> Void) {
+         save: @escaping (OriginalFile) -> Void, returnToCamera: @escaping () -> Void) {
         self.save = save
+        self.returnToCamera = returnToCamera
         self.profiles = profiles
         _message = message
         _items = State(initialValue: items)
@@ -272,7 +373,7 @@ private struct CapturePager: View {
         VStack(spacing: 0) {
             if !fullscreen {
                 GalleryDetailHeader(date: current?.date, position: (index ?? 0) + 1,
-                                    count: items.count, close: { dismiss() }) {
+                                    count: items.count, close: { dismiss() }, overview: { showGrid = true }) {
                     if let current { captureMenu(current) }
                 }
             }
@@ -302,6 +403,25 @@ private struct CapturePager: View {
         }
         .background(.black)
         .preferredColorScheme(.dark)
+        .modifier(GalleryCameraSwipe(action: {
+            if !removing { returnToCamera() }
+        }))
+        .sheet(isPresented: $showGrid) {
+            GalleryDetailGrid(items: items, choose: { selection = $0.id }) { item in
+                Thumbnail(url: item.url, isVideo: item.isVideo)
+            }
+        }
+        .sheet(item: $shareItem) { item in
+            GalleryShareComposer(items: items, current: item, copy: { item, directory in
+                try await Task.detached(priority: .utility) {
+                    let url = directory.appendingPathComponent(item.url.lastPathComponent)
+                    try FileManager.default.copyItem(at: item.url, to: url)
+                    return url
+                }.value
+            }) { item in
+                Thumbnail(url: item.url, isVideo: item.isVideo)
+            }
+        }
         .sheet(item: $panel) { route in
             if let current {
                 if route == .editor {
@@ -315,14 +435,6 @@ private struct CapturePager: View {
                     detailSheet(route, item: current)
                 }
             }
-        }
-        .confirmationDialog("Excluir esta captura do Momentra?", isPresented: Binding(
-            get: { removing != nil }, set: { if !$0 { removing = nil } }
-        ), titleVisibility: .visible, presenting: removing) { item in
-            Button("Excluir captura", role: .destructive) { delete(item) }
-            Button("Cancelar", role: .cancel) { removing = nil }
-        } message: { _ in
-            Text("A exclusão se aplica a este arquivo local.")
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil }, set: { if !$0, panel == nil { message = nil } })) {
             Button("OK") { message = nil }
@@ -345,22 +457,38 @@ private struct CapturePager: View {
 
     private func controls(_ item: OriginalFile) -> some View {
         HStack(spacing: 8) {
-            ShareLink(item: item.url) { controlIcon("square.and.arrow.up") }
-                .accessibilityLabel("Compartilhar")
+            galleryButton("square.and.arrow.up", label: "Compartilhar") { shareItem = item }
             Spacer(minLength: 2)
-            let favorite = favorites.contains(favoriteKey(item))
-            galleryButton(favorite ? "heart.fill" : "heart",
-                          label: favorite ? "Remover dos favoritos" : "Favoritar",
-                          tint: favorite ? .yellow : .primary) { toggleFavorite(item) }
-            galleryButton("info.circle", label: "Informações") { panel = .information }
-            galleryButton("slider.horizontal.3", label: "Editar foto") { panel = .editor }
-                .disabled(item.isVideo)
+            HStack(spacing: 4) {
+                let favorite = favorites.contains(favoriteKey(item))
+                groupedButton(favorite ? "heart.fill" : "heart",
+                              label: favorite ? "Remover dos favoritos" : "Favoritar",
+                              tint: favorite ? .yellow : .primary) { toggleFavorite(item) }
+                groupedButton("info.circle", label: "Informações") { panel = .information }
+                groupedButton("slider.horizontal.3", label: "Editar foto") { panel = .editor }
+                    .disabled(item.isVideo)
+            }
+            .padding(.horizontal, 4).modifier(GalleryControlSurface())
             Spacer(minLength: 2)
-            galleryButton("trash", label: "Excluir captura", tint: .red) { removing = item }
+            GalleryTrashButton(label: "Excluir captura",
+                               message: "Você poderá restaurar esta captura na Lixeira de Capturas do Momentra.") {
+                delete(item)
+            }
+            .disabled(removing)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 14).padding(.vertical, 7)
         .background(.black)
+    }
+
+    private func groupedButton(_ icon: String, label: String, tint: Color = .primary,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.body.weight(.semibold)).foregroundStyle(tint)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(label)
     }
 
     private func galleryButton(_ icon: String, label: String, tint: Color = .primary,
@@ -452,18 +580,22 @@ private struct CapturePager: View {
     }
 
     private func delete(_ item: OriginalFile) {
-        removing = nil
+        guard !removing else { return }
+        removing = true
         Task {
+            defer { removing = false }
             do {
                 try await Task.detached(priority: .utility) {
-                    try OriginalStore.delete(item)
+                    try OriginalStore.moveToTrash(item)
                 }.value
-                if favorites.contains(favoriteKey(item)) { toggleFavorite(item) }
-                if let index = items.firstIndex(where: { $0.id == item.id }) { items.remove(at: index) }
-                if let next = items.first { selection = next.id } else { dismiss() }
+                if let index = items.firstIndex(where: { $0.id == item.id }) {
+                    items.remove(at: index)
+                    if items.isEmpty { dismiss() }
+                    else if selection == item.id { selection = items[min(index, items.count - 1)].id }
+                }
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
-                message = "A foto tem um envio pendente. Aguarde a conclusão antes de excluir."
-            } catch { message = "Não foi possível excluir a captura." }
+                message = "A captura tem um envio pendente. Aguarde a conclusão para movê-la à lixeira."
+            } catch { message = "Não foi possível mover a captura para a lixeira." }
         }
     }
 }

@@ -13,10 +13,12 @@ private struct DeviceAsset: Identifiable {
 struct DevicePhotoGallery: View {
     let profileLookup: PhotoProfileLookup
     @ObservedObject var stampProfiles: StampProfilesStore
+    let returnToCamera: () -> Void
     @Environment(\.scenePhase) private var scenePhase
     @State private var authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     @State private var assets: [DeviceAsset] = []
     @State private var selected: DeviceAsset?
+    @State private var leavingForCamera = false
     @State private var quickShare: DeviceAsset?
     @State private var columnCount = 3
     @State private var selecting = false
@@ -95,10 +97,18 @@ struct DevicePhotoGallery: View {
                 }
             }
         }
-        .sheet(item: $selected, onDismiss: refresh) { item in
+        .fullScreenCover(item: $selected, onDismiss: {
+            if leavingForCamera {
+                leavingForCamera = false
+                returnToCamera()
+            } else {
+                refresh()
+            }
+        }) { item in
             DevicePhotoPager(items: groups.flatMap(\.items), initialID: item.id,
                              profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
-                             stampProfiles: stampProfiles.profiles)
+                             stampProfiles: stampProfiles.profiles,
+                             returnToCamera: { leavingForCamera = true; selected = nil })
         }
         .fullScreenCover(item: $quickShare) { item in
             GalleryQuickShare(load: { try await DevicePhotoFile.editorInput(item.asset) })
@@ -108,9 +118,9 @@ struct DevicePhotoGallery: View {
         }
         .sheet(item: $share) { GalleryShareBatch.Sheet(batch: $0) }
         .confirmationDialog("Excluir as fotos selecionadas?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Excluir \(selectedIDs.count) itens", role: .destructive, action: deleteSelection)
+            Button("Mover \(selectedIDs.count) itens para Apagados", role: .destructive, action: deleteSelection)
             Button("Cancelar", role: .cancel) {}
-        } message: { Text("Os itens serão removidos da biblioteca Fotos do iPhone.") }
+        } message: { Text("Você pode recuperar os itens no álbum Apagados do app Fotos.") }
         .alert("Momentra", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
             Button("OK") { actionError = nil }
         } message: { Text(actionError ?? "") }
@@ -196,72 +206,203 @@ private enum DevicePhotoFile {
 }
 
 private struct DevicePhotoPager: View {
-    let items: [DeviceAsset]
+    private enum Panel: String, Identifiable {
+        case overview, share, information, editing
+        var id: Self { self }
+    }
+
     let profile: CaptureProfileTag
     let stampProfiles: [StampProfile]
+    let returnToCamera: () -> Void
+    @State private var items: [DeviceAsset]
     @State private var selection: String
-    @State private var editing: DeviceAsset?
-    @State private var savedCopy = false
+    @State private var panel: Panel?
+    @State private var updating = false
+    @State private var favorites: [String: Bool] = [:]
+    @State private var message: String?
+    @Environment(\.dismiss) private var dismiss
 
-    init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag, stampProfiles: [StampProfile]) {
-        self.items = items; self.profile = profile; self.stampProfiles = stampProfiles
+    init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag, stampProfiles: [StampProfile],
+         returnToCamera: @escaping () -> Void) {
+        self.profile = profile
+        self.stampProfiles = stampProfiles
+        self.returnToCamera = returnToCamera
+        _items = State(initialValue: items)
         _selection = State(initialValue: initialID)
     }
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let index = items.firstIndex { $0.id == selection }
+        let current = index.map { items[$0] }
         VStack(spacing: 0) {
-            GalleryDetailHeader(date: index.flatMap { items[$0].asset.creationDate },
+            GalleryDetailHeader(date: current?.asset.creationDate,
                                 position: (index ?? 0) + 1, count: items.count,
-                                close: { dismiss() }) {
-                if let index {
-                    Button { editing = items[index] } label: {
-                        Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44).modifier(GalleryControlSurface())
-                    }.accessibilityLabel("Editar foto")
+                                close: { dismiss() }, overview: { panel = .overview }) {
+                if current != nil {
+                    Menu {
+                        Button("Informações da foto", systemImage: "info.circle") { panel = .information }
+                        Button("Editar ou adicionar carimbo", systemImage: "slider.horizontal.3") { panel = .editing }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 44, height: 44).modifier(GalleryControlSurface())
+                    }.accessibilityLabel("Mais opções")
                 }
             }
             TabView(selection: $selection) {
                 ForEach(items) { item in
-                    DevicePhotoDetail(asset: item.asset, profile: profile).tag(item.id)
+                    Group {
+                        if item.id == selection {
+                            DeviceThumbnail(asset: item.asset, fullView: true)
+                        } else {
+                            Color.clear
+                        }
+                    }.tag(item.id)
                 }
             }.tabViewStyle(.page(indexDisplayMode: .never))
             GalleryFilmstrip(items: items, selection: $selection) { item in
                 DeviceThumbnail(asset: item.asset)
             }
+            if let current { controls(current) }
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .presentationDragIndicator(.hidden)
-        .sheet(item: $editing, onDismiss: { if savedCopy { showSavedCopy = true } }) { item in
-            MomentraPhotoEditor(load: { try await DevicePhotoFile.editorInput(item.asset) }, date: item.asset.creationDate,
-                                profile: profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
+        .modifier(GalleryCameraSwipe(action: { if !updating { returnToCamera() } }))
+        .sheet(item: $panel) { route in
+            if let current { sheet(route, current: current) }
         }
-        .alert("Cópia salva em Capturas", isPresented: $showSavedCopy) { Button("OK") { savedCopy = false } }
+        .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
+                                                set: { if !$0 && panel == nil { message = nil } })) {
+            Button("OK") { message = nil }
+        } message: { Text(message ?? "") }
     }
-    @State private var showSavedCopy = false
+
+    private func controls(_ item: DeviceAsset) -> some View {
+        let favorite = favorites[item.id] ?? item.asset.isFavorite
+        return HStack(spacing: 10) {
+            Button { panel = .share } label: { GalleryShareIcon() }
+                .accessibilityLabel("Compartilhar")
+            Spacer(minLength: 4)
+            HStack(spacing: 2) {
+                button(favorite ? "heart.fill" : "heart",
+                       label: favorite ? "Remover dos favoritos" : "Favoritar",
+                       tint: favorite ? .yellow : .primary) { favoritePhoto(item, makeFavorite: !favorite) }
+                    .disabled(!item.asset.canPerform(.properties))
+                button("info.circle", label: "Informações") { panel = .information }
+                button("slider.horizontal.3", label: "Editar foto") { panel = .editing }
+            }
+            .padding(.horizontal, 3)
+            .modifier(GalleryControlSurface())
+            Spacer(minLength: 4)
+            GalleryTrashButton(label: "Excluir foto",
+                               message: "A foto vai para Apagados no app Fotos. Você pode recuperá-la por lá.") {
+                trash(item)
+            }
+            .disabled(!item.asset.canPerform(.delete))
+        }
+        .disabled(updating)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14).padding(.vertical, 7)
+    }
+
+    private func button(_ icon: String, label: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.body.weight(.semibold)).foregroundStyle(tint)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }.accessibilityLabel(label)
+    }
+
+    @ViewBuilder
+    private func sheet(_ route: Panel, current: DeviceAsset) -> some View {
+        switch route {
+        case .overview:
+            GalleryDetailGrid(items: items, choose: {
+                selection = $0.id
+                panel = nil
+            }) { DeviceThumbnail(asset: $0.asset) }
+        case .share:
+            GalleryShareComposer(items: items, current: current, copy: { item, directory in
+                try await DevicePhotoFile.copy(item.asset, to: directory.appendingPathComponent("Foto"))
+            }) { DeviceThumbnail(asset: $0.asset) }
+        case .information:
+            NavigationStack {
+                DevicePhotoDetail(asset: current.asset, profile: profile)
+                    .navigationTitle("Informações")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { Button("Concluído") { panel = nil } }
+            }
+        case .editing:
+            MomentraPhotoEditor(load: { try await DevicePhotoFile.editorInput(current.asset) }, date: current.asset.creationDate,
+                                profile: profile, stampProfiles: stampProfiles) { _ in message = "Cópia salva em Capturas." }
+        }
+    }
+
+    private func favoritePhoto(_ item: DeviceAsset, makeFavorite: Bool) {
+        guard !updating, item.asset.canPerform(.properties) else { return }
+        updating = true
+        Task {
+            defer { updating = false }
+            do {
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest(for: item.asset).isFavorite = makeFavorite
+                }
+                favorites[item.id] = makeFavorite
+            } catch { message = "Não foi possível atualizar os favoritos do Fotos." }
+        }
+    }
+
+    private func trash(_ item: DeviceAsset) {
+        guard !updating, item.asset.canPerform(.delete) else { return }
+        updating = true
+        Task {
+            defer { updating = false }
+            do {
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.deleteAssets([item.asset] as NSArray)
+                }
+                if let index = items.firstIndex(where: { $0.id == item.id }) {
+                    items.remove(at: index)
+                    if items.isEmpty { dismiss() }
+                    else if selection == item.id { selection = items[min(index, items.count - 1)].id }
+                }
+            } catch {
+                if (error as NSError).code != PHPhotosError.Code.userCancelled.rawValue {
+                    message = "Não foi possível mover a foto para Apagados."
+                }
+            }
+        }
+    }
 }
 
 private struct DeviceThumbnail: View {
     let asset: PHAsset
+    var fullView = false
     @State private var thumbnail: UIImage?
     @State private var requestID: PHImageRequestID?
+    @State private var loading = true
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Color.gray.opacity(0.2)
-                if let thumbnail { Image(uiImage: thumbnail).resizable().scaledToFill() }
+                fullView ? Color.black : Color.gray.opacity(0.2)
+                if let thumbnail {
+                    Image(uiImage: thumbnail).resizable().aspectRatio(contentMode: fullView ? .fit : .fill)
+                }
+                else if fullView && loading { ProgressView("Abrindo foto…") }
                 else { Image(systemName: "photo").foregroundStyle(.secondary) }
-            }.frame(width: proxy.size.width, height: proxy.size.width).clipped()
+            }.frame(width: proxy.size.width, height: fullView ? proxy.size.height : proxy.size.width).clipped()
         }
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(fullView ? nil : 1, contentMode: .fit)
         .onAppear {
             let options = PHImageRequestOptions()
             options.deliveryMode = .opportunistic
-            options.isNetworkAccessAllowed = false
-            requestID = PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 330, height: 330), contentMode: .aspectFill, options: options) { image, _ in
-                DispatchQueue.main.async { if let image { thumbnail = image } }
+            options.isNetworkAccessAllowed = fullView
+            let pixels: CGFloat = fullView ? 1800 : 330
+            requestID = PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: pixels, height: pixels),
+                contentMode: fullView ? .aspectFit : .aspectFill, options: options) { image, info in
+                let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) == true
+                DispatchQueue.main.async {
+                    if let image { thumbnail = image }
+                    if !degraded { loading = false }
+                }
             }
         }
         .onDisappear { if let requestID { PHImageManager.default().cancelImageRequest(requestID) }; requestID = nil }
