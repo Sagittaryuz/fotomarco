@@ -5,7 +5,6 @@ import MapKit
 import UniformTypeIdentifiers
 import PhotosUI
 import ImageIO
-import GoogleSignIn
 
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
@@ -32,6 +31,7 @@ struct CameraScreen: View {
     @AppStorage("native.archive.keepLocal") private var keepArchiveLocal = true
     @State private var archiveStatus = CloudArchiveDelivery.Summary()
     @State private var archiveNotice: String?
+    @State private var archiveConnectionError: String?
     @State private var connectingArchive = false
     @State private var pendingArchivePolicy: CloudDeliveryPlan?
     @State private var captureContextTask: Task<Bool, Never>?
@@ -270,7 +270,7 @@ struct CameraScreen: View {
                                         .background(selected ? Color.black.opacity(0.58) : Color.clear, in: Circle())
                                 }.accessibilityLabel("Zoom \(factor == 0.5 ? "meio" : String(Int(factor))) vezes")
                             }
-                        }.padding(.bottom, 8)
+                        }.padding(.bottom, 16)
                     }
                     }
                     .simultaneousGesture(
@@ -595,9 +595,59 @@ struct CameraScreen: View {
         } message: { Text(camera.errorMessage ?? "") }
     }
 
+    private var archiveSettingsSection: some View {
+        Section("Armazenamento e contas") {
+            Button { connectArchive(.googleDrive) } label: {
+                Label {
+                    Text("Adicionar conta Google Drive")
+                } icon: {
+                    Image("GoogleDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
+                }
+            }.disabled(connectingArchive)
+            Button { connectArchive(.oneDrive) } label: {
+                Label {
+                    Text("Adicionar conta OneDrive")
+                } icon: {
+                    Image("OneDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
+                }
+            }.disabled(connectingArchive)
+            if connectingArchive { ProgressView("Confirmando a conta…").font(.footnote) }
+            if let archiveNotice { Text(archiveNotice).font(.footnote) }
+            ForEach(archiveAccounts.accounts, id: \.id) { account in
+                Toggle(isOn: Binding(get: { account.enabled }, set: { enabled in
+                    applyArchivePolicy(keepLocal: keepArchiveLocal, destination: account.id, enabled: enabled)
+                })) {
+                    VStack(alignment: .leading) {
+                        Text(account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
+                        Text(account.label).font(.caption).foregroundStyle(.secondary)
+                        Text(account.enabled ? "Conectada · envio ativo" : "Conectada · envio desativado")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }.disabled(pendingArchivePolicy != nil)
+            }
+            Toggle("Armazenamento local", isOn: Binding(get: { effectiveLocalStorage }, set: {
+                applyArchivePolicy(keepLocal: $0)
+            }))
+                .disabled(pendingArchivePolicy != nil || (keepArchiveLocal && archiveDestinations.isEmpty))
+            Text("Cada captura usa os destinos ativos no disparo. Sem conexão, o original e a versão processada ficam no iPhone. Os envios são retomados ao abrir o app ou quando o iOS permitir.")
+                .font(.footnote).foregroundStyle(.secondary)
+            if archiveStatus.pending > 0 {
+                Text("\(archiveStatus.pending) captura(s) aguardando envio").font(.footnote)
+            }
+            if archiveStatus.needsAttention {
+                Text("Há envios que precisam de atenção. Confira as contas, a conexão e o espaço disponível. Os arquivos pendentes ficam no iPhone.")
+                    .font(.footnote).foregroundStyle(.orange)
+            }
+            ForEach(archiveStatus.issues, id: \.self) { issue in
+                Text(issue).font(.footnote).foregroundStyle(.orange)
+            }
+        }
+    }
+
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
+                    archiveSettingsSection
                     Section("Atualizações") {
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
@@ -623,13 +673,6 @@ struct CameraScreen: View {
                         }.disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
                         if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                    }
-                    Section("Conta Google") {
-                        HStack(spacing: 12) {
-                            GoogleAccountMark().frame(width: 48, height: 48)
-                                .clipShape(Circle()).accessibilityHidden(true)
-                            LabeledContent("Conta", value: GIDSignIn.sharedInstance.currentUser?.profile?.email ?? "Não conectada")
-                        }
                     }
                     Section("Ajustes da câmera") {
                         NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
@@ -670,7 +713,7 @@ struct CameraScreen: View {
                     Toggle("Copiar para o app Fotos", isOn: $saveToPhotos)
                         .disabled(!effectiveLocalStorage)
                     Text(effectiveLocalStorage
-                         ? "Adiciona uma cópia à biblioteca Fotos do iPhone. A opção de armazenamento abaixo define onde o Momentra guarda as capturas."
+                         ? "Adiciona uma cópia à biblioteca Fotos do iPhone. A opção Armazenamento local define onde o Momentra guarda as capturas."
                          : "No modo somente nuvem, novas fotos não são copiadas para o app Fotos do iPhone.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Section("Previsão meteorológica") {
@@ -681,39 +724,6 @@ struct CameraScreen: View {
                             .font(.footnote).foregroundStyle(.secondary)
                         if let status = weather.status { Text(status).font(.footnote) }
                         Link("MET Norway · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
-                    }
-                    Section("Armazenamento e contas") {
-                        Toggle("Armazenamento local", isOn: Binding(get: { effectiveLocalStorage }, set: {
-                            applyArchivePolicy(keepLocal: $0)
-                        }))
-                            .disabled(pendingArchivePolicy != nil || (keepArchiveLocal && archiveDestinations.isEmpty))
-                        ForEach(archiveAccounts.accounts, id: \.id) { account in
-                            Toggle(isOn: Binding(get: { account.enabled }, set: { enabled in
-                                applyArchivePolicy(keepLocal: keepArchiveLocal, destination: account.id, enabled: enabled)
-                            })) {
-                                VStack(alignment: .leading) {
-                                    Text(account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
-                                    Text(account.label).font(.caption).foregroundStyle(.secondary)
-                                    Text(account.enabled ? "Conectada · envio ativo" : "Conectada · envio desativado")
-                                        .font(.caption2).foregroundStyle(.secondary)
-                                }
-                            }.disabled(pendingArchivePolicy != nil)
-                        }
-                        Button("Adicionar conta Google Drive") { connectArchive(.googleDrive) }.disabled(connectingArchive)
-                        Button("Adicionar conta OneDrive") { connectArchive(.oneDrive) }.disabled(connectingArchive)
-                        Text("Cada captura usa os destinos ativos no disparo. Sem conexão, o original e a versão processada ficam no iPhone. Os envios são retomados ao abrir o app ou quando o iOS permitir.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        if archiveStatus.pending > 0 {
-                            Text("\(archiveStatus.pending) captura(s) aguardando envio").font(.footnote)
-                        }
-                        if archiveStatus.needsAttention {
-                            Text("Há envios que precisam de atenção. Confira as contas, a conexão e o espaço disponível. Os arquivos pendentes ficam no iPhone.")
-                                .font(.footnote).foregroundStyle(.orange)
-                        }
-                        ForEach(archiveStatus.issues, id: \.self) { issue in
-                            Text(issue).font(.footnote).foregroundStyle(.orange)
-                        }
-                        if let archiveNotice { Text(archiveNotice).font(.footnote) }
                     }
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
@@ -726,6 +736,12 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Configurações")
                 .toolbar { Button("Concluído") { showSettings = false } }
+                .alert("Conexão de armazenamento", isPresented: Binding(
+                    get: { archiveConnectionError != nil },
+                    set: { if !$0 { archiveConnectionError = nil } }
+                )) {
+                    Button("OK", role: .cancel) { archiveConnectionError = nil }
+                } message: { Text(archiveConnectionError ?? "") }
                 .confirmationDialog("Leia os termos da MET Norway antes de aceitar. A consulta envia localização aproximada e IP.", isPresented: $showForecastTerms, titleVisibility: .visible) {
                     Button("Li e aceito os termos; consultar") { weather.consult(location: location.location, consent: true) }
                     Button("Cancelar", role: .cancel) {}
@@ -934,6 +950,7 @@ struct CameraScreen: View {
     private func connectArchive(_ provider: CloudDeliveryPlan.Provider) {
         guard let window = Self.presentingController()?.view.window else {
             archiveNotice = "Não foi possível abrir a autenticação."
+            archiveConnectionError = archiveNotice
             return
         }
         connectingArchive = true
@@ -944,7 +961,11 @@ struct CameraScreen: View {
                 try await archiveAccounts.connect(provider, presenting: window)
                 archiveNotice = provider == .oneDrive ? "Conta OneDrive conectada." : "Conta Google Drive conectada."
             }
-            catch { archiveNotice = error.localizedDescription }
+            catch {
+                archiveNotice = error.localizedDescription
+                if let failure = error as? CloudArchiveOAuth.Failure, case .cancelled = failure { return }
+                archiveConnectionError = archiveNotice
+            }
         }
     }
 

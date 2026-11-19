@@ -9,6 +9,8 @@ final class CloudArchiveOAuth {
     enum Failure: LocalizedError {
         case notConfigured, busy, cancelled, invalidResponse, denied, disconnected, expired, wrongAccount, keychain, random
         case oneDriveFolderUnavailable
+        case microsoftToken(Int, Int?)
+        case microsoftIdentity
 
         var errorDescription: String? {
             switch self {
@@ -22,6 +24,10 @@ final class CloudArchiveOAuth {
             case .keychain: return "Não foi possível acessar as credenciais. Desbloqueie o iPhone e tente novamente."
             case .random: return "Não foi possível iniciar uma conexão segura."
             case .oneDriveFolderUnavailable: return "A Microsoft autenticou a conta, mas a pasta do Momentra não está acessível no OneDrive. Confira se o OneDrive está ativo nessa conta e tente de novo."
+            case .microsoftToken(let status, let code):
+                let reference = code.map { " Código Microsoft AADSTS\($0)." } ?? ""
+                return "A Microsoft recusou a confirmação do login (HTTP \(status))." + reference
+            case .microsoftIdentity: return "A Microsoft confirmou o login, mas não retornou a identidade da conta."
             }
         }
     }
@@ -102,6 +108,10 @@ final class CloudArchiveOAuth {
         let scope: String?
     }
 
+    private struct MicrosoftTokenError: Decodable {
+        let error_codes: [Int]?
+    }
+
     private struct Identity: Decodable {
         let sub: String
         let name: String?
@@ -179,8 +189,14 @@ final class CloudArchiveOAuth {
         guard let received = URLComponents(url: callback, resolvingAgainstBaseURL: false),
               let target = URLComponents(url: expected, resolvingAgainstBaseURL: false),
               received.scheme == target.scheme, received.host == target.host,
-              received.path == target.path, received.port == target.port,
+              received.port == target.port,
               received.user == nil, received.password == nil, received.fragment == nil else {
+            throw Failure.invalidResponse
+        }
+        // Microsoft's consumer sign-in can serialize the empty callback path as a slash.
+        let microsoftRoot = target.scheme == "msauth.br.com.momentra.camera" &&
+            target.host == "auth" && target.percentEncodedPath.isEmpty && received.percentEncodedPath == "/"
+        guard received.percentEncodedPath == target.percentEncodedPath || microsoftRoot else {
             throw Failure.invalidResponse
         }
         let parameters = Dictionary(grouping: received.queryItems ?? [], by: \.name)
@@ -204,6 +220,10 @@ final class CloudArchiveOAuth {
         let (data, response) = try await network.data(for: request)
         guard let status = (response as? HTTPURLResponse)?.statusCode else { throw Failure.invalidResponse }
         guard status == 200 else {
+            if configuration.provider == .oneDrive, previous == nil {
+                let code = (try? JSONDecoder().decode(MicrosoftTokenError.self, from: data))?.error_codes?.first
+                throw Failure.microsoftToken(status, code)
+            }
             if status == 400 || status == 401 || status == 403 {
                 throw previous == nil ? Failure.denied : Failure.expired
             }
@@ -222,7 +242,13 @@ final class CloudArchiveOAuth {
 
     private func resolve(_ credential: Credential, configuration: Configuration,
                          knownDestinations: Set<CloudDeliveryPlan.Destination>) async throws -> AuthorizedAccount {
-        let identity: Identity = try await get(configuration.identityURL, token: credential.accessToken)
+        let identity: Identity
+        do {
+            identity = try await get(configuration.identityURL, token: credential.accessToken)
+        } catch let error where configuration.provider == .oneDrive && !Task.isCancelled {
+            if error is URLError { throw error }
+            throw Failure.microsoftIdentity
+        }
         guard !identity.sub.isEmpty, identity.sub.utf8.count <= 512 else { throw Failure.invalidResponse }
         let bindings: [String]
         switch configuration.provider {

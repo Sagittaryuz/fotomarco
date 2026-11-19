@@ -44,6 +44,21 @@ final class CloudArchiveOAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testMicrosoftCallbackAcceptsTheRootSlashReturnedByConsumerSignIn() throws {
+        let redirect = "msauth.br.com.momentra.camera://auth"
+        let expected = try XCTUnwrap(URL(string: redirect))
+        func code(_ url: String) throws -> String {
+            try CloudArchiveOAuth.authorizationCode(from: XCTUnwrap(URL(string: url)), expected: expected, state: "valid")
+        }
+        XCTAssertEqual(try code(redirect + "?code=example&state=valid"), "example")
+        XCTAssertEqual(try code(redirect + "/?code=example&state=valid"), "example")
+        XCTAssertThrowsError(try code(redirect + "/other?code=example&state=valid"))
+        XCTAssertThrowsError(try code(redirect + "/?code=example&state=wrong"))
+        XCTAssertThrowsError(try code("msauth.br.com.momentra.camera://another/?code=example&state=valid"))
+        XCTAssertThrowsError(try code(redirect + "/?code=example&code=another&state=valid"))
+    }
+
+    @MainActor
     func testCallbackRejectsWrongPathStateAndRepeatedAuthorizationCode() throws {
         let scheme = "com.googleusercontent.apps.123-abc"
         let callback = URL(string: scheme + ":/oauth2callback")!
