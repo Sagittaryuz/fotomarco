@@ -17,6 +17,7 @@ struct DevicePhotoGallery: View {
     @State private var authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     @State private var assets: [DeviceAsset] = []
     @State private var selected: DeviceAsset?
+    @State private var quickShare: DeviceAsset?
     @State private var columnCount = 3
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
@@ -47,7 +48,7 @@ struct DevicePhotoGallery: View {
                     } else {
                         GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columnCount,
                                     tile: { DeviceThumbnail(asset: $0.asset).accessibilityLabel("Foto") },
-                                    open: { selected = $0 })
+                                    open: { selected = $0 }, longPress: { quickShare = $0 })
                     }
                     if selecting {
                         GallerySelectionBar(count: selectedIDs.count, busy: actionInProgress,
@@ -98,6 +99,9 @@ struct DevicePhotoGallery: View {
             DevicePhotoPager(items: groups.flatMap(\.items), initialID: item.id,
                              profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
                              stampProfiles: stampProfiles.profiles)
+        }
+        .fullScreenCover(item: $quickShare) { item in
+            GalleryQuickShare(load: { try await DevicePhotoFile.editorInput(item.asset) })
         }
         .sheet(isPresented: $showingSelection) {
             GallerySelectionSheet(items: assets, selected: $selectedIDs) { DeviceThumbnail(asset: $0.asset) }
@@ -169,6 +173,11 @@ struct DevicePhotoGallery: View {
 }
 
 private enum DevicePhotoFile {
+    static func editorInput(_ asset: PHAsset) async throws -> PhotoEditorInput {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        return PhotoEditorInput(url: try await copy(asset, to: temporary), temporary: true)
+    }
+
     static func copy(_ asset: PHAsset, to target: URL) async throws -> URL {
         let resources = PHAssetResource.assetResources(for: asset)
         guard let resource = resources.first(where: { $0.type == .fullSizePhoto }) ??
@@ -225,11 +234,8 @@ private struct DevicePhotoPager: View {
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.hidden)
         .sheet(item: $editing, onDismiss: { if savedCopy { showSavedCopy = true } }) { item in
-            MomentraPhotoEditor(load: {
-                let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-                let url = try await DevicePhotoFile.copy(item.asset, to: temporary)
-                return PhotoEditorInput(url: url, temporary: true)
-            }, date: item.asset.creationDate, profile: profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
+            MomentraPhotoEditor(load: { try await DevicePhotoFile.editorInput(item.asset) }, date: item.asset.creationDate,
+                                profile: profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
         }
         .alert("Cópia salva em Capturas", isPresented: $showSavedCopy) { Button("OK") { savedCopy = false } }
     }

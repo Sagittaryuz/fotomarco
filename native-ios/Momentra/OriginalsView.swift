@@ -48,6 +48,7 @@ struct OriginalsView: View {
     @State private var reloadToken = UUID()
     @State private var captureColumns = 3
     @State private var selectedCapture: URL?
+    @State private var quickShare: OriginalFile?
     @State private var selectingCaptures = false
     @State private var selectedCaptureIDs: Set<URL> = []
     @State private var showCaptureSelection = false
@@ -79,6 +80,9 @@ struct OriginalsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Concluído") { dismiss() } }
             .onAppear { reload() }
+            .fullScreenCover(item: $quickShare) { item in
+                GalleryQuickShare(load: { PhotoEditorInput(url: item.url) }, isVideo: item.isVideo)
+            }
             .sheet(isPresented: Binding(get: { selectedCapture != nil }, set: { if !$0 { selectedCapture = nil } }), onDismiss: reload) {
                 if let selectedCapture {
                     CapturePager(items: captureGroups.flatMap(\.items), initialURL: selectedCapture,
@@ -132,24 +136,17 @@ struct OriginalsView: View {
                 if files.isEmpty {
                     ContentUnavailableView("Nenhuma captura disponível", systemImage: "photo")
                 } else {
-                    GalleryGrid(groups: captureGroups, selecting: $selectingCaptures, selected: $selectedCaptureIDs, columns: $captureColumns) { item in
-                        ZStack(alignment: .bottomTrailing) {
-                            Thumbnail(url: item.url, isVideo: item.isVideo)
-                                .overlay(alignment: .topLeading) {
-                                    if item.isVideo {
-                                        Text(item.isProcessed ? "Com carimbo" : "Original")
-                                            .font(.caption2.bold()).foregroundStyle(.white).padding(4)
-                                            .background(.black.opacity(0.7), in: Capsule()).padding(4)
-                                    }
+                    GalleryGrid(groups: captureGroups, selecting: $selectingCaptures, selected: $selectedCaptureIDs,
+                                columns: $captureColumns, tile: { item in
+                        Thumbnail(url: item.url, isVideo: item.isVideo)
+                            .overlay(alignment: .topLeading) {
+                                if item.isVideo {
+                                    Text(item.isProcessed ? "Com carimbo" : "Original")
+                                        .font(.caption2.bold()).foregroundStyle(.white).padding(4)
+                                        .background(.black.opacity(0.7), in: Capsule()).padding(4)
                                 }
-                            Menu {
-                                ShareLink(item: item.url) { Label("Compartilhar", systemImage: "square.and.arrow.up") }
-                                Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }.disabled(isSaving)
-                            } label: {
-                                Image(systemName: "ellipsis.circle.fill").font(.title3).foregroundStyle(.white).shadow(radius: 2).padding(6)
-                            }.accessibilityLabel("Opções da captura")
-                        }
-                    } open: { item in selectedCapture = item.url }
+                            }
+                    }, open: { selectedCapture = $0.url }, longPress: { quickShare = $0 })
                 }
                 if selectingCaptures { selectionBar }
 

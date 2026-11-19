@@ -22,6 +22,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     var showsSectionHeaders = true
     let tile: (Item) -> Tile
     let open: (Item) -> Void
+    var longPress: ((Item) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -48,6 +49,11 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
         pinch.delegate = context.coordinator
         view.addGestureRecognizer(pinch)
+        let hold = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.preview(_:)))
+        hold.minimumPressDuration = 0.46
+        hold.numberOfTouchesRequired = 1
+        hold.delegate = context.coordinator
+        view.addGestureRecognizer(hold)
         context.coordinator.collection = view
         return view
     }
@@ -101,6 +107,13 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             cell.contentConfiguration = UIHostingConfiguration { parent.tile(item) }.margins(.all, 0)
             cell.selectionMode = parent.selecting
             cell.showSelected(parent.selected.contains(item.id))
+            if !parent.selecting, let longPress = parent.longPress {
+                cell.accessibilityCustomActions = [
+                    UIAccessibilityCustomAction(name: "Ampliar e compartilhar") { _ in longPress(item); return true }
+                ]
+            } else {
+                cell.accessibilityCustomActions = nil
+            }
             return cell
         }
         func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView {
@@ -144,13 +157,24 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             for path in paths.subtracting(current) { collection.selectItem(at: path, animated: false, scrollPosition: []) }
             for case let cell as GallerySelectionCell in collection.visibleCells {
                 cell.selectionMode = parent.selecting
-                if let path = collection.indexPath(for: cell) { cell.showSelected(parent.selected.contains(parent.groups[path.section].items[path.item].id)) }
+                if let path = collection.indexPath(for: cell) {
+                    let item = parent.groups[path.section].items[path.item]
+                    cell.showSelected(parent.selected.contains(item.id))
+                    if parent.selecting { cell.accessibilityCustomActions = nil }
+                    else if let longPress = parent.longPress {
+                        cell.accessibilityCustomActions = [
+                            UIAccessibilityCustomAction(name: "Ampliar e compartilhar") { _ in longPress(item); return true }
+                        ]
+                    }
+                }
             }
         }
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let collection else { return false }
             if gestureRecognizer is UIPinchGestureRecognizer { return !parent.selecting }
-            return parent.selecting && collection.indexPathForItem(at: gestureRecognizer.location(in: collection)) != nil
+            guard collection.indexPathForItem(at: gestureRecognizer.location(in: collection)) != nil else { return false }
+            if gestureRecognizer is UILongPressGestureRecognizer { return !parent.selecting && parent.longPress != nil }
+            return parent.selecting
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
             gestureRecognizer is UIPinchGestureRecognizer
@@ -158,6 +182,11 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
             guard gesture.state == .ended else { return }
             parent.columns = GalleryZoom.next(columns: parent.columns, magnification: gesture.scale)
+        }
+        @objc func preview(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, !parent.selecting, let collection,
+                  let path = collection.indexPathForItem(at: gesture.location(in: collection)) else { return }
+            parent.longPress?(parent.groups[path.section].items[path.item])
         }
         @objc func dragSelection(_ gesture: UIPanGestureRecognizer) {
             guard let collection else { return }

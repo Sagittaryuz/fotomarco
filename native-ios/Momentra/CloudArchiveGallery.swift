@@ -85,6 +85,7 @@ private struct ArchiveAccountGallery: View {
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
     @State private var openPhoto: ArchiveGalleryPhoto?
+    @State private var quickShare: ArchiveGalleryPhoto?
     @State private var showingSelection = false
     @State private var confirmingDelete = false
     @State private var actionInProgress = false
@@ -120,7 +121,7 @@ private struct ArchiveAccountGallery: View {
                 ContentUnavailableView("Nenhuma foto do Momentra", systemImage: "photo.on.rectangle")
             } else if !photos.isEmpty {
                 GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columns,
-                            refreshKey: images.revision.hashValue) { photo in
+                            refreshKey: images.revision.hashValue, tile: { photo in
                     ArchiveGalleryImage(photo: photo, images: images)
                         .overlay(alignment: .bottomLeading) {
                             if photo.isOriginal {
@@ -129,7 +130,7 @@ private struct ArchiveAccountGallery: View {
                             }
                         }
                         .accessibilityLabel(photo.versionLabel)
-                } open: { openPhoto = $0 }
+                }, open: { openPhoto = $0 }, longPress: { quickShare = $0 })
             } else {
                 Spacer(minLength: 0)
             }
@@ -179,6 +180,9 @@ private struct ArchiveAccountGallery: View {
         .sheet(item: $openPhoto) { photo in
             ArchiveGalleryPager(items: groups.flatMap(\.items), initialID: photo.id, images: images,
                                 stampProfiles: stampProfiles.profiles)
+        }
+        .fullScreenCover(item: $quickShare) { photo in
+            GalleryQuickShare(load: { try await images.editorInput(photo) })
         }
         .sheet(isPresented: $showingSelection) {
             GallerySelectionSheet(items: photos, selected: $selectedIDs) { ArchiveGalleryImage(photo: $0, images: images) }
@@ -323,7 +327,13 @@ private final class ArchiveGalleryImages: ObservableObject {
 
     func editorInput(_ photo: ArchiveGalleryPhoto) async throws -> PhotoEditorInput {
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-        return PhotoEditorInput(url: try await download(photo, accessToken: token), temporary: true)
+        let downloaded = try await download(photo, accessToken: token)
+        defer { try? FileManager.default.removeItem(at: downloaded) }
+        let suffix = (photo.name as NSString).pathExtension
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+            .appendingPathExtension(suffix)
+        try FileManager.default.moveItem(at: downloaded, to: file)
+        return PhotoEditorInput(url: file, temporary: true)
     }
 
     func image(_ photo: ArchiveGalleryPhoto, maximumPixels: Int) async throws -> UIImage {
