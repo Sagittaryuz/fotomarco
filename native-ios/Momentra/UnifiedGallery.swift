@@ -133,7 +133,7 @@ struct OriginalsView: View {
             if tab == .trash {
                 trashSources
             }
-            Group {
+            ZStack(alignment: .bottom) {
                 if items.isEmpty {
                     emptyState
                         .contentShape(Rectangle())
@@ -147,10 +147,10 @@ struct OriginalsView: View {
                                 dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) })
                         .accessibilityIdentifier("momentra-gallery-grid")
                 }
-            }
-            .overlay(alignment: .bottom) {
                 if !selecting {
-                    footer.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { galleryFooterHeight = $0 }
+                    footer
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { galleryFooterHeight = $0 }
+                        .zIndex(1)
                 }
             }
             if selecting {
@@ -342,6 +342,7 @@ struct OriginalsView: View {
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .foregroundStyle(tab == choice ? .yellow : .white)
                         .background(tab == choice ? Color.white.opacity(0.08) : .clear, in: Capsule())
+                        .contentShape(Rectangle())
                     }
                     .accessibilityLabel(choice.rawValue)
                     .accessibilityAddTraits(tab == choice ? .isSelected : [])
@@ -352,6 +353,7 @@ struct OriginalsView: View {
                 Image(systemName: "magnifyingglass").font(.title3.weight(.medium))
                     .frame(width: 54, height: 54)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
+                    .contentShape(Circle())
             }.accessibilityLabel("Buscar")
         }
         .buttonStyle(.plain)
