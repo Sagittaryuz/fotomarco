@@ -38,7 +38,11 @@ jobs:
           for number in 1 2 3; do
             sips -s format jpeg "Momentra/Assets.xcassets/AppIcon.appiconset/Light.png" --out "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-00000000000$number.jpg" >/dev/null
           done
-          xcrun simctl addmedia "$DEVICE" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg"
+          mkdir -p "$RUNNER_TEMP/camera-roll"
+          for number in $(seq 1 24); do
+            cp "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" "$RUNNER_TEMP/camera-roll/$number.jpg"
+          done
+          xcrun simctl addmedia "$DEVICE" "$RUNNER_TEMP"/camera-roll/*.jpg
       - name: Exercise gallery and support panel
         working-directory: native-ios
         env:

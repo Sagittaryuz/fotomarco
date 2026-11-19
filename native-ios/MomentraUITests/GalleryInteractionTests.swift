@@ -4,7 +4,7 @@ final class GalleryInteractionTests: XCTestCase {
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.18",
+        app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.19",
                                "-native.gps.enabled", "NO"]
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -13,6 +13,20 @@ final class GalleryInteractionTests: XCTestCase {
         let error = app.alerts.buttons["OK"].firstMatch
         if error.waitForExistence(timeout: 3) { error.tap() }
         return app
+    }
+
+    func testCapturesExcludeUntrackedPhotosEvenAfterVisitingFavorites() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let count = app.staticTexts["3 itens"]
+        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        XCTAssertEqual(app.collectionViews.cells.count, 3)
+        app.buttons["Favoritos"].tap()
+        XCTAssertTrue(app.staticTexts["Nenhum favorito"].waitForExistence(timeout: 8))
+        app.buttons["Capturas"].tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        XCTAssertEqual(app.collectionViews.cells.count, 3)
+        snapshot("Capturas e armazenamento", app: app)
     }
 
     func testGalleryMarksAndReviewsSelection() {
