@@ -154,21 +154,27 @@ struct CapturePage: View {
             }.frame(width: proxy.size.width, height: proxy.size.height).clipped()
         }
         .task(id: active) {
-            guard active else { player?.pause(); return }
+            guard active else { player?.pause(); preview = nil; return }
             if item.isVideo {
                 if player == nil { player = AVPlayer(url: item.url) }
             } else if preview == nil {
                 let url = item.url
-                let image = await Task.detached(priority: .userInitiated) {
-                    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                          let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                            kCGImageSourceCreateThumbnailFromImageAlways: true,
-                            kCGImageSourceCreateThumbnailWithTransform: true,
-                            kCGImageSourceThumbnailMaxPixelSize: 2600
-                          ] as CFDictionary) else { return nil as UIImage? }
-                    return UIImage(cgImage: image)
-                }.value
-                if !Task.isCancelled { preview = image; failed = image == nil }
+                if let thumbnail = await GalleryThumbnailCache.shared.cachedImage(forFile: url,
+                    isVideo: false, maximumPixels: 320), !Task.isCancelled {
+                    preview = UIImage(cgImage: thumbnail)
+                }
+                let image = try? await GalleryThumbnailCache.viewer.image(forFile: url, isVideo: false, maximumPixels: 2600) {
+                    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                    return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 2600
+                    ] as CFDictionary)
+                }
+                if !Task.isCancelled {
+                    if let image { preview = UIImage(cgImage: image) }
+                    failed = preview == nil
+                }
             }
         }.onDisappear { player?.pause() }
     }

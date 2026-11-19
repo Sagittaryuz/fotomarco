@@ -549,11 +549,33 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
             return image
         }
 
-        await acquireDownload()
+        if let key = persistentThumbnailKey(photo) {
+            let bitmap = try await GalleryThumbnailCache.viewer.image(for: key, maximumPixels: maximumPixels) {
+                try await self.acquireFullPreview(photo, pixels: maximumPixels)
+            }
+            guard let bitmap else { throw CocoaError(.fileReadCorruptFile) }
+            return UIImage(cgImage: bitmap)
+        }
+        return UIImage(cgImage: try await acquireFullPreview(photo, pixels: maximumPixels))
+    }
+
+    func cachedGridImage(_ photo: ArchiveGalleryPhoto) async -> UIImage? {
+        if let key = persistentThumbnailKey(photo),
+           let bitmap = await GalleryThumbnailCache.shared.cachedImage(for: key, maximumPixels: Self.gridPixels) {
+            return UIImage(cgImage: bitmap)
+        }
+        if let cached = cache.object(forKey: thumbnailMemoryKey(photo, pixels: Self.gridPixels, version: revision)) {
+            return cached
+        }
+        return await offlineGridPreview(photo, pixels: 640).map { UIImage(cgImage: $0) }
+    }
+
+    private func acquireFullPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async throws -> CGImage {
+        await acquireDownload(priority: true)
         defer { releaseDownload() }
         try Task.checkCancellation()
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-        return UIImage(cgImage: try await originalPreview(photo, pixels: maximumPixels, token: token))
+        return try await originalPreview(photo, pixels: pixels, token: token)
     }
 
     private func persistentThumbnailKey(_ photo: ArchiveGalleryPhoto) -> String? {
@@ -572,25 +594,26 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         return try await gridPreview(photo, pixels: pixels)
     }
 
-    private func gridPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async throws -> CGImage {
-        if !photo.isOriginal {
-            // Successful deliveries already leave a stamped thumbnail on this iPhone.
-            let captureID = photo.captureID
-            let offline = await Task.detached(priority: .utility) {
-                guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                    appropriateFor: nil, create: false) else { return nil as CGImage? }
-                let file = root.appendingPathComponent("CloudThumbnails", isDirectory: true)
-                    .appendingPathComponent(captureID.uuidString).appendingPathExtension("jpg")
-                let attributes = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-                guard attributes?.isRegularFile == true, attributes?.isSymbolicLink != true,
-                      let size = attributes?.fileSize, (1...2_000_000).contains(size) else { return nil }
-                let source = CGImageSourceCreateWithURL(file as CFURL, nil)
-                return Self.downsample(source, pixels: pixels)
-            }.value
-            try Task.checkCancellation()
-            if let offline { return offline }
-        }
+    private func offlineGridPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async -> CGImage? {
+        guard !photo.isOriginal else { return nil }
+        // Successful deliveries already leave a stamped thumbnail on this iPhone.
+        let captureID = photo.captureID
+        return await Task.detached(priority: .utility) {
+            guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
+                appropriateFor: nil, create: false) else { return nil as CGImage? }
+            let file = root.appendingPathComponent("CloudThumbnails", isDirectory: true)
+                .appendingPathComponent(captureID.uuidString).appendingPathExtension("jpg")
+            let attributes = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard attributes?.isRegularFile == true, attributes?.isSymbolicLink != true,
+                  let size = attributes?.fileSize, (1...2_000_000).contains(size) else { return nil }
+            let source = CGImageSourceCreateWithURL(file as CFURL, nil)
+            return Self.downsample(source, pixels: pixels)
+        }.value
+    }
 
+    private func gridPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async throws -> CGImage {
+        if let offline = await offlineGridPreview(photo, pixels: pixels) { return offline }
+        try Task.checkCancellation()
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
         if destination.provider == .googleDrive,
            let thumbnail = try await googleThumbnail(photo, token: token) {
@@ -634,9 +657,15 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         ] as CFDictionary)
     }
 
-    private func acquireDownload() async {
-        if activeDownloads < 3 { activeDownloads += 1 }
-        else { await withCheckedContinuation { waiting.append($0) } }
+    private func acquireDownload(priority: Bool = false) async {
+        if activeDownloads < 3 {
+            activeDownloads += 1
+        } else {
+            await withCheckedContinuation { continuation in
+                if priority { waiting.insert(continuation, at: 0) }
+                else { waiting.append(continuation) }
+            }
+        }
     }
 
     private func releaseDownload() {
@@ -683,6 +712,9 @@ private struct ArchiveGalleryImage: View {
             failed = false
             if fullView || loaded?.key != key { loaded = nil }
             guard !fullView || active else { return }
+            if fullView, let thumbnail = await images.cachedGridImage(photo), !Task.isCancelled {
+                loaded = (key, thumbnail)
+            }
             do {
                 let preview = try await images.image(photo, maximumPixels: fullView ? 1800 : 320)
                 guard !Task.isCancelled else { return }

@@ -23,6 +23,19 @@ final class ZoomScaleTests: XCTestCase {
         XCTAssertNil(ZoomScale(wideFactor: 0, minimum: 1, maximum: 4).deviceFactor(for: 1))
     }
 
+    func testIntermediateZoomUsesTheLowerPresetSlotAndLocalizedLabel() {
+        let presets: [CGFloat] = [0.5, 1, 2, 4, 8]
+        XCTAssertEqual(CameraZoomSelection.index(for: 0.5, presets: presets), 0)
+        XCTAssertEqual(CameraZoomSelection.index(for: 1.8, presets: presets), 1)
+        XCTAssertEqual(CameraZoomSelection.index(for: 3.6, presets: presets), 2)
+        XCTAssertEqual(CameraZoomSelection.index(for: 7.6, presets: presets), 3)
+        XCTAssertEqual(CameraZoomSelection.index(for: 8, presets: presets), 4)
+        XCTAssertEqual(CameraZoomSelection.index(for: 3.999, presets: presets), 3)
+        XCTAssertNil(CameraZoomSelection.index(for: 2, presets: []))
+        XCTAssertEqual(CameraZoomSelection.label(3.6), "3,6")
+        XCTAssertEqual(CameraZoomSelection.label(8), "8")
+    }
+
     func testPinchZoomAccumulatesAndReversesAtEitherLimit() {
         let range: ClosedRange<CGFloat> = 0.5...4
         var pinch = PreviewPinchZoom(value: 2)

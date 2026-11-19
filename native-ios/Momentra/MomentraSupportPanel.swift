@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct MomentraSupportPanel: View {
+    private static let phone = "(64) 99921-9172"
     let dismiss: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
@@ -32,7 +33,7 @@ struct MomentraSupportPanel: View {
                     .rotationEffect(.degrees(reduceMotion ? 0 : -2))
                     .padding(.horizontal, 15)
                 Button {
-                    UIPasteboard.general.string = "+5564992219172"
+                    UIPasteboard.general.string = "+55" + Self.phone.filter(\.isNumber)
                     copied = true
                 } label: {
                     HStack(spacing: 10) {
@@ -40,7 +41,7 @@ struct MomentraSupportPanel: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(copied ? "Chave Pix copiada" : "Copiar chave Pix")
                                 .font(.caption).foregroundStyle(.white.opacity(0.8))
-                            Text("649-9221-9172").font(.body.monospacedDigit().weight(.semibold))
+                            Text(Self.phone).font(.body.monospacedDigit().weight(.semibold))
                                 .foregroundStyle(.white)
                         }
                         Spacer(minLength: 0)

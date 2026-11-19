@@ -49,6 +49,19 @@ struct ContinuousCameraZoom {
     }
 }
 
+enum CameraZoomSelection {
+    private static func displayed(_ zoom: CGFloat) -> CGFloat { (zoom * 10).rounded() / 10 }
+
+    static func index(for zoom: CGFloat, presets: [CGFloat]) -> Int? {
+        presets.lastIndex { $0 <= displayed(zoom) } ?? presets.indices.first
+    }
+
+    static func label(_ zoom: CGFloat) -> String {
+        Double(displayed(zoom)).formatted(.number.precision(.fractionLength(0...1))
+            .locale(Locale(identifier: "pt_BR")))
+    }
+}
+
 /// Each pinch scales the current zoom and can reverse immediately at either limit.
 struct PreviewPinchZoom {
     private(set) var value: CGFloat

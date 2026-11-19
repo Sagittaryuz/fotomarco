@@ -60,6 +60,7 @@ struct CameraScreen: View {
     @State private var flashNoticeTask: Task<Void, Never>?
     @State private var selectedRecognizedText: RecognizedTextSelection?
     @State private var showSettings = false
+    @State private var showUpdateMessage = false
     @State private var showSupportPanel = false
     @State private var showOriginals = false
     @State private var showMap = false
@@ -198,10 +199,13 @@ struct CameraScreen: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
             if let version = updates.availableVersion {
-                Button("Atualização \(version) disponível") { showSettings = true }
+                Button(directUpdate.busy ? "Preparando atualização…" : "Atualização \(version) disponível") {
+                    if directUpdate.ready { requestUpdate(version, fromBanner: true) }
+                    else { showSettings = true }
+                }
                     .font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6)
                     .background(.black.opacity(0.75), in: Capsule())
-                    .disabled(camera.isRecording || camera.isFinishingRecording || countdown > 0)
+                    .disabled(directUpdate.busy || camera.isRecording || camera.isFinishingRecording || countdown > 0)
             }
         }
     }
@@ -291,26 +295,8 @@ struct CameraScreen: View {
                         ZoomDialView(value: camera.zoomFactor, range: camera.zoomRange, presets: camera.zoomOptions, setZoom: camera.setZoom, editingChanged: zoomEditingChanged)
                             .frame(height: 132).transition(.move(edge: .bottom))
                     } else if !camera.zoomOptions.isEmpty {
-                        HStack(spacing: 0) {
-                            if !camera.zoomOptions.contains(where: { abs($0 - camera.zoomFactor) < 0.01 }) {
-                                Text(String(format: "%.1f×", Double(camera.zoomFactor)).replacingOccurrences(of: ".", with: ","))
-                                    .font(.subheadline.weight(.medium)).foregroundStyle(.yellow)
-                                    .frame(width: 48, height: 44)
-                                    .background(Color.black.opacity(0.58), in: Circle())
-                            }
-                            ForEach(camera.zoomOptions, id: \.self) { factor in
-                                Button {
-                                    guard !suppressZoomPresetTap else { return }
-                                    camera.setZoom(factor)
-                                } label: {
-                                    let selected = abs(camera.zoomFactor - factor) < 0.01
-                                    Text(factor == 0.5 ? "0,5" : "\(Int(factor))\(selected ? "×" : "")")
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(selected ? Color.yellow : Color.white)
-                                        .frame(width: 48, height: 44)
-                                        .background(selected ? Color.black.opacity(0.58) : Color.clear, in: Circle())
-                                }.accessibilityLabel("Zoom \(factor == 0.5 ? "meio" : String(Int(factor))) vezes")
-                            }
+                        CameraZoomStrip(presets: camera.zoomOptions, zoom: camera.zoomFactor) { factor in
+                            if !suppressZoomPresetTap { camera.setZoom(factor) }
                         }.padding(.bottom, 16)
                     }
                     }
@@ -527,7 +513,12 @@ struct CameraScreen: View {
             }
         }
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
-        .task { await updates.check() }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active { Task { await updates.check() } }
+        }
+        .onChange(of: directUpdate.ready) { _, ready in
+            if ready { Task { await updates.check() } }
+        }
         .onAppear {
             if !addressPreviewMigrated {
                 var layout = stampProfiles.selected.layout
@@ -547,7 +538,7 @@ struct CameraScreen: View {
         }
         .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures(); Task { await updates.check() } }
+            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures() }
             else { finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         }
     }
@@ -654,6 +645,11 @@ struct CameraScreen: View {
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(item: $cameraShare) { $0.sheet {} }
+        .alert("Atualização do Momentra", isPresented: $showUpdateMessage) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(directUpdate.message ?? "")
+        }
         .alert("Não foi possível preparar a foto", isPresented: $cameraShareFailed) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -727,6 +723,19 @@ struct CameraScreen: View {
             catch { lastError = error }
         }
         throw lastError
+    }
+
+    private func requestUpdate(_ version: String, fromBanner: Bool = false) {
+        guard !directUpdate.busy else { return }
+        Task {
+            await directUpdate.install(expectedVersion: version) {
+                UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
+                    recording: camera.isRecording, finishing: camera.isFinishingRecording,
+                    processingVideos: camera.processingVideos, processingPhotos: camera.processingPhotos,
+                    cloudBusy: connectingArchive || cameraShareTask != nil || cameraShare != nil)
+            }
+            if fromBanner, directUpdate.message != nil { showUpdateMessage = true }
+        }
     }
 
     private func openGallery() {
@@ -831,16 +840,7 @@ struct CameraScreen: View {
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
                             if directUpdate.ready {
-                                Button("Atualizar agora") {
-                                    Task {
-                                        await directUpdate.install(expectedVersion: version) {
-                                            UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
-                                                recording: camera.isRecording, finishing: camera.isFinishingRecording,
-                                                processingVideos: camera.processingVideos, processingPhotos: camera.processingPhotos,
-                                                cloudBusy: connectingArchive)
-                                        }
-                                    }
-                                }
+                                Button("Atualizar agora") { requestUpdate(version) }
                                     .disabled(directUpdate.busy)
                             } else {
                                 Text("Para atualizar diretamente, ative uma vez pelo link pessoal de instalação.")
@@ -849,7 +849,7 @@ struct CameraScreen: View {
                             }
                         }
                         Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
-                            Task { await updates.check(force: true) }
+                            Task { await updates.check() }
                         }.disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
                         if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }

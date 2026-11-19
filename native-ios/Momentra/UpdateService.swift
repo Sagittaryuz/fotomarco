@@ -25,13 +25,6 @@ struct UpdateRelease: Decodable {
     }
 }
 
-enum UpdateCheckPolicy {
-    static func shouldCheck(lastAttempt: Date?, now: Date, force: Bool) -> Bool {
-        guard !force, let lastAttempt else { return true }
-        return now < lastAttempt || now.timeIntervalSince(lastAttempt) >= 3600
-    }
-}
-
 @MainActor
 final class UpdateService: ObservableObject {
     static let releasesURL = URL(string: "https://github.com/Sagittaryuz/momentra/releases")!
@@ -39,12 +32,8 @@ final class UpdateService: ObservableObject {
     @Published private(set) var availableVersion: String?
     @Published private(set) var status: String?
     @Published private(set) var checking = false
-    private var lastAutomaticAttempt: Date?
-
-    func check(force: Bool = false) async {
-        let now = Date()
-        guard !checking, UpdateCheckPolicy.shouldCheck(lastAttempt: lastAutomaticAttempt, now: now, force: force) else { return }
-        if !force { lastAutomaticAttempt = now }
+    func check() async {
+        guard !checking else { return }
         checking = true
         defer { checking = false }
         guard let currentString = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
@@ -52,15 +41,13 @@ final class UpdateService: ObservableObject {
             status = "Não foi possível identificar a versão instalada."
             return
         }
-        var request = URLRequest(url: Self.apiURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200, data.count <= 1_000_000 else {
-                throw URLError(.badServerResponse)
+            let newest: UpdateVersion?
+            if let published = try await DirectUpdateAccess.shared.publishedVersion() {
+                newest = UpdateVersion(published)
+            } else {
+                newest = try await newestGitHubVersion()
             }
-            let releases = try JSONDecoder().decode([UpdateRelease].self, from: data)
-            let newest = releases.compactMap(\.version).max()
             if let newest, newest > current {
                 availableVersion = newest.components.map(String.init).joined(separator: ".")
                 status = "Uma versão mais recente está disponível."
@@ -71,5 +58,15 @@ final class UpdateService: ObservableObject {
         } catch {
             status = "Não foi possível verificar atualizações agora."
         }
+    }
+
+    private func newestGitHubVersion() async throws -> UpdateVersion? {
+        var request = URLRequest(url: Self.apiURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_000_000 else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode([UpdateRelease].self, from: data).compactMap(\.version).max()
     }
 }

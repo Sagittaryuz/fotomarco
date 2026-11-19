@@ -40,6 +40,24 @@ final class GalleryThumbnailCacheTests: XCTestCase {
         XCTAssertEqual(files.count, 1)
     }
 
+    func testViewerCanReadAStoredPreviewOfflineAfterRelaunch() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try XCTUnwrap(bitmap())
+        let remoteKey = "cloud/account-a/item/r1"
+        let cache = GalleryThumbnailCache(directory: directory, diskEntryLimit: 4 * 1024 * 1024)
+        _ = try await cache.image(for: remoteKey, maximumPixels: 1800) { image }
+        let reopened = GalleryThumbnailCache(directory: directory, diskEntryLimit: 4 * 1024 * 1024)
+        let cached = try await reopened.image(for: remoteKey, maximumPixels: 1800) {
+            throw URLError(.notConnectedToInternet)
+        }
+        XCTAssertEqual(cached?.width, image.width)
+        let wrongAccount = await reopened.cachedImage(for: "cloud/account-b/item/r1", maximumPixels: 1800)
+        let wrongRevision = await reopened.cachedImage(for: "cloud/account-a/item/r2", maximumPixels: 1800)
+        XCTAssertNil(wrongAccount)
+        XCTAssertNil(wrongRevision)
+    }
+
     func testConcurrentRequestsShareOneRender() async throws {
         let image = try XCTUnwrap(bitmap())
         let recorder = Renders()

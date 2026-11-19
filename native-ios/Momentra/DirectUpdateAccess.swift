@@ -68,21 +68,38 @@ final class DirectUpdateAccess: ObservableObject {
         } catch { message = "Não foi possível ativar as atualizações diretas. Abra o link de instalação mais recente e tente novamente." }
     }
 
+    func publishedVersion() async throws -> String? {
+        guard let token = Self.readToken() else { return nil }
+        return try await publishedRelease(token: token).version
+    }
+
+    private func publishedRelease(token: String) async throws -> (version: String, manifest: URL) {
+        let issueURL = URL(string: "https://momentra-instalacao.vercel.app/api/install?stage=issue")!
+        var request = URLRequest(url: issueURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 4096,
+              let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let version = object["version"] as? String, UpdateVersion(version) != nil,
+              let raw = object["manifest"] as? String,
+              let manifest = Self.manifestURL(raw) else { throw URLError(.badServerResponse) }
+        return (version, manifest)
+    }
+
     func install(expectedVersion: String, canClose: @escaping @MainActor () -> Bool) async {
-        guard !busy, let token = Self.readToken(),
-              let issueURL = URL(string: "https://momentra-instalacao.vercel.app/api/install?stage=issue") else {
+        guard !busy else { return }
+        guard let token = Self.readToken() else {
             message = "Ative as atualizações diretas pelo link pessoal de instalação."; return
         }
+        guard canClose() else {
+            message = "Aguarde a conclusão da captura ou do envio antes de atualizar."; return
+        }
+        message = nil
         busy = true; defer { busy = false }
         do {
-            var request = URLRequest(url: issueURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
-            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 4096,
-                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  object["version"] as? String == expectedVersion,
-                  let raw = object["manifest"] as? String,
-                  let manifest = Self.manifestURL(raw) else { throw URLError(.badServerResponse) }
+            let release = try await publishedRelease(token: token)
+            guard release.version == expectedVersion else { throw URLError(.badServerResponse) }
+            let manifest = release.manifest
             guard let encoded = manifest.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
                   let url = URL(string: "itms-services://?action=download-manifest&url=" + encoded) else { throw URLError(.badURL) }
             guard canClose() else {
