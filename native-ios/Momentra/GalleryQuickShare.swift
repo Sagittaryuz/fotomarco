@@ -79,7 +79,11 @@ struct GalleryQuickShare: View {
 
         func makeUIViewController(context: Context) -> UIActivityViewController {
             let controller = UIActivityViewController(activityItems: [source.url], applicationActivities: nil)
-            controller.completionWithItemsHandler = { [source] _, _, _, _ in withExtendedLifetime(source) {} }
+            controller.completionWithItemsHandler = { [source] activity, completed, _, error in
+                withExtendedLifetime(source) {
+                    GalleryShareHandoff.openDestination(for: activity, completed: completed, error: error)
+                }
+            }
             return controller
         }
 

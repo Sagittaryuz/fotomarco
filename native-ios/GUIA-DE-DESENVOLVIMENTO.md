@@ -37,6 +37,7 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 - Reuse `GalleryControlSurface(rounded: true)` nas ações da galeria. Ícones ficam em superfícies redondas de pelo menos 44 pt. Ações de texto e grupos de botões usam cápsulas. Use Liquid Glass nativo onde estiver disponível e material padrão nas versões anteriores.
 - Preserve miniaturas quadradas e a foto inteira no visualizador inicial. Toque simples alterna os controles. Dois toques alternam a aproximação com controles ocultos. Pinça ajusta o zoom. O X da busca retorna à aba e aos filtros de origem.
 - Deslizar para baixo no visualizador fecha a mídia e volta à grade na mesma aba. Para voltar à câmera, feche a galeria pela própria grade.
+- O compartilhamento usa o painel do iOS. Só abra o app de destino após a confirmação de conclusão sem erro e quando houver um link de abertura conhecido. O WhatsApp usa `whatsapp://app` e recebe apenas o link de abertura nesse passo.
 - Em Capturas, mostre arquivos do Momentra e cópias do Fotos com vínculo confirmado pelo índice do aplicativo. Os filtros mudam a projeção da galeria. Itens com envio pendente mantêm as proteções do arquivo e da fila.
 - Reúna o armazenamento em uma faixa compacta acima da grade. Mostre cada origem em uma cápsula com ícone, trilho e percentual real. Para várias contas, use rolagem horizontal de altura fixa. A lixeira local conserva o item por 30 dias. Use os dados reais do provedor para indicar a expiração de itens remotos.
 

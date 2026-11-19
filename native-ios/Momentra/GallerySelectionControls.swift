@@ -128,8 +128,9 @@ final class GalleryShareBatch: Identifiable {
 
         func makeUIViewController(context: Context) -> UIActivityViewController {
             let controller = UIActivityViewController(activityItems: batch.files, applicationActivities: nil)
-            controller.completionWithItemsHandler = { [batch] _, _, _, _ in
+            controller.completionWithItemsHandler = { [batch] activity, completed, _, error in
                 try? FileManager.default.removeItem(at: batch.directory)
+                GalleryShareHandoff.openDestination(for: activity, completed: completed, error: error)
             }
             return controller
         }
