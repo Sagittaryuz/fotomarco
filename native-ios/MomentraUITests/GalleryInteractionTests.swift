@@ -207,6 +207,31 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.collectionViews.cells.firstMatch.waitForExistence(timeout: 8))
     }
 
+    func testPhotoFitsAndTapAndPinchControlFullscreen() {
+        let app = launch()
+        openCapture(app)
+        let image = app.descendants(matching: .any)["gallery-photo-viewport"].firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 8))
+        let controls = app.buttons["Compartilhar"]
+        XCTAssertLessThan(image.frame.maxY, controls.frame.minY)
+        XCTAssertEqual(image.value as? String, "Tamanho normal")
+        image.tap()
+        XCTAssertTrue(controls.waitForNonExistence(timeout: 5))
+        image.tap()
+        XCTAssertTrue(controls.waitForExistence(timeout: 5))
+        image.doubleTap()
+        XCTAssertTrue(controls.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(image.value as? String, "Ampliada")
+        image.doubleTap()
+        XCTAssertEqual(image.value as? String, "Tamanho normal")
+        XCTAssertFalse(controls.exists)
+        image.tap()
+        XCTAssertTrue(controls.waitForExistence(timeout: 5))
+        image.pinch(withScale: 1.7, velocity: 1)
+        XCTAssertEqual(image.value as? String, "Ampliada")
+        snapshot("Visualizador com aproximação", app: app)
+    }
+
     private func openCapture(_ app: XCUIApplication) {
         app.buttons["Abrir capturas"].tap()
         let cell = app.collectionViews.cells.firstMatch
