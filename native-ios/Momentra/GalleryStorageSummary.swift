@@ -23,8 +23,8 @@ struct GalleryCapacitySummary: View {
                     Image(systemName: "photo.on.rectangle.fill")
                         .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
                         .frame(width: 25, height: 25)
-                        .background(.angularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
-                                                     center: .center), in: Circle())
+                        .background(AngularGradient(colors: [.purple, .blue, .mint, .orange, .pink, .purple],
+                                                    center: .center, startAngle: .zero, endAngle: .degrees(360)), in: Circle())
                 }
             }
             if section != 1 {
