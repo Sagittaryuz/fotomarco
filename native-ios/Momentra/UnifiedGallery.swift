@@ -140,6 +140,7 @@ struct OriginalsView: View {
             if phase == .active { reloadVersion += 1; cloudActivation += 1 }
         }
         .onReceive(NotificationCenter.default.publisher(for: CloudGalleryCatalog.deliveryChanged)) { _ in
+            reloadVersion += 1
             cloudActivation += 1
         }
         .onChange(of: tab) { _, _ in
