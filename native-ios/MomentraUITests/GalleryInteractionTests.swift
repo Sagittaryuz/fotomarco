@@ -15,6 +15,28 @@ final class GalleryInteractionTests: XCTestCase {
         return app
     }
 
+    func testGalleryCatalogMeasurement() {
+        let app = launch()
+        var milliseconds: [Double] = []
+        var counts: [Int] = []
+        for _ in 0..<3 {
+            let entry = app.buttons["Abrir capturas"]
+            XCTAssertTrue(entry.waitForExistence(timeout: 8))
+            let start = ProcessInfo.processInfo.systemUptime
+            entry.tap()
+            let grid = app.collectionViews["momentra-gallery-grid"]
+            XCTAssertTrue(grid.waitForExistence(timeout: 8))
+            milliseconds.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+            counts.append(grid.cells.count)
+            app.buttons["Fechar galeria"].tap()
+        }
+        let measurements = "Itens: \(counts)\nAbrir até grade pronta (ms): \(milliseconds.map { Int($0.rounded()) })"
+        let attachment = XCTAttachment(string: measurements)
+        attachment.name = "Medição da galeria"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testAppCapturesExcludeUntrackedPhotosEvenAfterVisitingFavorites() {
         let app = launch()
         app.buttons["Abrir capturas"].tap()

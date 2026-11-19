@@ -9,6 +9,10 @@ on:
         description: Optional single GalleryInteractionTests method
         type: string
         default: ''
+      baseline_gallery:
+        description: Measure the published 0.1.18 under the same simulator fixtures
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -17,6 +21,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Use Momentra 0.1.18 app code for the baseline
+        if: inputs.baseline_gallery
+        run: |
+          BASELINE=ec95ea616568437c6494edb49dfbdc21cb340743
+          git fetch --depth=1 origin "$BASELINE"
+          git restore --source="$BASELINE" --worktree -- native-ios/Momentra native-ios/MomentraCaptureExtension native-ios/MomentraTests
       - name: Generate project and start simulator
         working-directory: native-ios
         run: |
