@@ -165,6 +165,14 @@ final class GoogleDriveArchive {
         return url
     }
 
+    func thumbnailLink(id: String, accessToken: String) async throws -> String? {
+        guard Self.validID(id) else { throw ArchiveError.invalidRequest }
+        struct Metadata: Decodable { let thumbnailLink: String? }
+        let lookup = try request(path: "/drive/v3/files/\(id)", query: ["fields": "thumbnailLink"], accessToken: accessToken)
+        let metadata: Metadata = try await decode(lookup)
+        return metadata.thumbnailLink
+    }
+
     /// The URL came from Drive's read-only thumbnailLink field. Keep the bearer on Google's
     /// image hosts and use the same no-redirect session used for Drive requests.
     func thumbnail(link: String, accessToken: String) async throws -> Data? {

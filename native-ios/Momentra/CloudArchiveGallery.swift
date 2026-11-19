@@ -99,6 +99,10 @@ struct GalleryCloudItem: Identifiable {
     var name: String { photo.name }
     var isOriginal: Bool { photo.isOriginal }
 
+    var catalogEntry: CloudGalleryCatalog.Entry {
+        .init(id: photo.id, name: photo.name, date: photo.date, revision: photo.revision)
+    }
+
     func profileTag(lookup: PhotoProfileLookup) -> CaptureProfileTag? {
         lookup.captures[captureID] ?? photo.profile
     }
@@ -134,6 +138,7 @@ struct GalleryCloudItem: Identifiable {
         guard !journal.hasPendingDelivery(id: captureID) else { throw GalleryError.pendingDelivery }
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
         try await images.trash(photo, accessToken: token)
+        await CloudGalleryCatalog.shared.invalidate(destination, removing: photo.id)
     }
 
     @MainActor
@@ -141,6 +146,7 @@ struct GalleryCloudItem: Identifiable {
         guard canRestore else { throw GalleryError.providerRestore }
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
         try await images.drive.restorePhoto(id: photo.id, name: photo.name, accessToken: token)
+        await CloudGalleryCatalog.shared.invalidate(destination)
     }
 
     private enum GalleryError: LocalizedError {
@@ -165,6 +171,19 @@ struct GalleryCloudItem: Identifiable {
             GalleryCloudItem(photo: $0, images: images, destination: account.id, accountLabel: account.label,
                              trashedAt: nil, canRestore: false)
         }, nextPage: page.nextPage, destination: account.id, images: images)
+    }
+
+    @MainActor
+    static func cachedPage(_ entries: [CloudGalleryCatalog.Entry], for account: CloudArchiveAccounts.Account,
+                           reusing previousPage: Page? = nil) -> Page {
+        let images = imageLoader(for: account, previousPage: previousPage)
+        let items = entries.compactMap { entry -> GalleryCloudItem? in
+            guard let photo = ArchiveGalleryPhoto(id: entry.id, name: entry.name, date: entry.date,
+                                                  revision: entry.revision) else { return nil }
+            return GalleryCloudItem(photo: photo, images: images, destination: account.id, accountLabel: account.label,
+                                    trashedAt: nil, canRestore: false)
+        }
+        return Page(items: items, nextPage: nil, destination: account.id, images: images)
     }
 
     @MainActor
@@ -568,8 +587,8 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         }
 
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-        if destination.provider == .googleDrive, let link = photo.thumbnailLink,
-           let thumbnail = try await drive.thumbnail(link: link, accessToken: token) {
+        if destination.provider == .googleDrive,
+           let thumbnail = try await googleThumbnail(photo, token: token) {
             let bitmap = await Task.detached(priority: .utility) {
                 Self.downsample(CGImageSourceCreateWithData(thumbnail as CFData, nil), pixels: pixels)
             }.value
@@ -579,6 +598,14 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         }
 
         return try await originalPreview(photo, pixels: pixels, token: token)
+    }
+
+    private func googleThumbnail(_ photo: ArchiveGalleryPhoto, token: String) async throws -> Data? {
+        if let link = photo.thumbnailLink, let thumbnail = try await drive.thumbnail(link: link, accessToken: token) {
+            return thumbnail
+        }
+        guard let link = try await drive.thumbnailLink(id: photo.id, accessToken: token) else { return nil }
+        return try await drive.thumbnail(link: link, accessToken: token)
     }
 
     private func originalPreview(_ photo: ArchiveGalleryPhoto, pixels: Int, token: String) async throws -> CGImage {

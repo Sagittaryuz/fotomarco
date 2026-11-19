@@ -93,7 +93,7 @@ struct AppWelcomeGate: View {
             VStack(spacing: 20) {
                 Image(systemName: "sparkles").font(.system(size: 48)).accessibilityHidden(true)
                 Text("Novidades do Momentra").font(.title.bold())
-                Text("Deslize a foto para baixo para voltar à galeria. Ao concluir um compartilhamento pelo WhatsApp, o Momentra abre o WhatsApp.")
+                Text("Deslize a foto para baixo para voltar à galeria. O WhatsApp abre após um compartilhamento concluído por ele. A galeria reaproveita a lista de fotos da nuvem.")
                     .multilineTextAlignment(.center).foregroundStyle(.secondary)
                 Button("Continuar") { showNews = false }.buttonStyle(.borderedProminent)
             }.padding(30)

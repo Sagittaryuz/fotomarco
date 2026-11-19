@@ -21,6 +21,7 @@ struct OriginalsView: View {
     @State private var projectionVersion = 0
     @State private var catalogLoaded = false
     @State private var cloudRefresh = 0
+    @State private var cloudActivation = 0
     @State private var tab: Tab = .captures
     @State private var origin: GalleryOrigin?
     @State private var profile: UUID?
@@ -118,7 +119,8 @@ struct OriginalsView: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .task(id: reloadVersion) { await reloadLocal() }
-        .task(id: CatalogRequest(trash: tab == .trash, destinations: archive.accounts.map(\.id), refresh: cloudRefresh)) {
+        .task(id: CatalogRequest(trash: tab == .trash, destinations: archive.accounts.map(\.id),
+                                 refresh: cloudRefresh, activation: cloudActivation)) {
             await reloadCloud(trash: tab == .trash)
         }
         .onChange(of: archive.accounts.map(\.id)) { _, destinations in
@@ -135,7 +137,10 @@ struct OriginalsView: View {
             updateProjection()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { reloadVersion += 1; cloudRefresh += 1 }
+            if phase == .active { reloadVersion += 1; cloudActivation += 1 }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: CloudGalleryCatalog.deliveryChanged)) { _ in
+            cloudActivation += 1
         }
         .onChange(of: tab) { _, _ in
             resetSelection()
@@ -380,6 +385,7 @@ struct OriginalsView: View {
         let trash: Bool
         let destinations: [CloudDeliveryPlan.Destination]
         let refresh: Int
+        let activation: Int
     }
 
     private func reloadLocal() async {
@@ -430,17 +436,51 @@ struct OriginalsView: View {
     private func reloadCloud(trash: Bool) async {
         let accounts = archive.accounts
         let refresh = cloudRefresh
-        if !trash && catalogLoaded && refresh == lastCatalogRefresh { return }
         guard !accounts.isEmpty else { remote = []; remoteTrash = []; cloudError = false; updateProjection(); return }
+        let catalog = CloudGalleryCatalog.shared
+        let force = refresh != lastCatalogRefresh
+        var snapshots: [CloudDeliveryPlan.Destination: CloudGalleryCatalog.Snapshot] = [:]
+        if !trash {
+            for account in accounts { snapshots[account.id] = await catalog.snapshot(for: account.id) }
+            guard !Task.isCancelled else { return }
+        }
+        let stale = accounts.filter { snapshots[$0.id]?.needsRefresh() != false }
+        if !trash && catalogLoaded && !force && stale.isEmpty { return }
         let lookup = await Task.detached(priority: .utility) { PhotoProfileIndex.load() }.value
         guard !Task.isCancelled else { return }
+        if !trash && !catalogLoaded && !snapshots.isEmpty {
+            let alreadyShown = Set(remote.compactMap { item -> CloudDeliveryPlan.Destination? in
+                if case .cloud(let cloud) = item.source { return cloud.destination }
+                return nil
+            })
+            let cached = accounts.flatMap { account -> [GalleryCloudItem] in
+                guard !alreadyShown.contains(account.id), let snapshot = snapshots[account.id] else { return [] }
+                let page = GalleryCloudItem.cachedPage(snapshot.entries, for: account, reusing: cloudPages[account.id])
+                cloudPages[account.id] = page
+                return page.items
+            }
+            catalogLoaded = true
+            if !cached.isEmpty { applyCloud(remote + cached.map { galleryItem($0, lookup: lookup) }, trash: false) }
+        }
+        if !trash && !force && stale.isEmpty { return }
         var results: [GalleryItem] = []
         var failed = false
+        let priorItems = Dictionary(grouping: trash ? remoteTrash : remote) { item -> CloudDeliveryPlan.Destination? in
+            if case .cloud(let cloud) = item.source { return cloud.destination }
+            return nil
+        }
         for account in accounts {
+            let previous = priorItems[account.id] ?? []
+            let snapshot = snapshots[account.id]
+            if !trash && !force && snapshot?.needsRefresh() == false {
+                results += previous
+                continue
+            }
             do {
                 var next: String?
                 var prior = cloudPages[account.id]
                 var seen: Set<String> = []
+                var accountItems: [GalleryCloudItem] = []
                 repeat {
                     try Task.checkCancellation()
                     let page: GalleryCloudItem.Page
@@ -451,22 +491,44 @@ struct OriginalsView: View {
                     }
                     try Task.checkCancellation()
                     if next == nil { cloudPages[account.id] = page }
-                    results.append(contentsOf: page.items.map {
-                        GalleryItem(source: .cloud($0), date: $0.captureDate(lookup: lookup), profile: $0.profileTag(lookup: lookup))
-                    })
+                    accountItems.append(contentsOf: page.items)
                     prior = page
-                    next = page.nextPage.flatMap { seen.insert($0).inserted ? $0 : nil }
+                    next = page.nextPage
+                    if let next, !seen.insert(next).inserted { throw URLError(.cannotParseResponse) }
                 } while next != nil
+                if !trash {
+                    let saved = await catalog.replace(accountItems.map(\.catalogEntry), for: account.id,
+                                                      replacing: snapshot?.revision)
+                    try Task.checkCancellation()
+                    if !saved {
+                        guard let current = await catalog.snapshot(for: account.id) else {
+                            results += previous
+                            continue
+                        }
+                        accountItems = GalleryCloudItem.cachedPage(current.entries, for: account, reusing: prior).items
+                    }
+                }
+                results += accountItems.map { galleryItem($0, lookup: lookup) }
             } catch {
                 if Task.isCancelled { return }
                 failed = true
-                results += (trash ? remoteTrash : remote).filter {
-                    if case .cloud(let cloud) = $0.source { return cloud.destination == account.id }
-                    return false
-                }
+                results += previous
             }
         }
         guard !Task.isCancelled else { return }
+        if !trash {
+            catalogLoaded = true
+            lastCatalogRefresh = refresh
+        }
+        cloudError = failed
+        applyCloud(results, trash: trash)
+    }
+
+    private func galleryItem(_ cloud: GalleryCloudItem, lookup: PhotoProfileLookup) -> GalleryItem {
+        GalleryItem(source: .cloud(cloud), date: cloud.captureDate(lookup: lookup), profile: cloud.profileTag(lookup: lookup))
+    }
+
+    private func applyCloud(_ results: [GalleryItem], trash: Bool) {
         var ids = Set<String>()
         let unique = results.filter { ids.insert($0.id).inserted }
         let wasEmpty = projection.items.isEmpty
@@ -474,15 +536,12 @@ struct OriginalsView: View {
             remoteTrash = unique
         } else {
             remote = unique
-            catalogLoaded = true
-            lastCatalogRefresh = refresh
         }
-        cloudError = failed
         updateProjection()
         if wasEmpty || !selecting && openedAtNewest { scrollRequest += 1; openedAtNewest = false }
     }
 
-    @State private var lastCatalogRefresh = -1
+    @State private var lastCatalogRefresh = 0
     @State private var openedAtNewest = true
 
     nonisolated private static func capture(_ item: OriginalFile, lookup: PhotoProfileLookup) -> GalleryItem {

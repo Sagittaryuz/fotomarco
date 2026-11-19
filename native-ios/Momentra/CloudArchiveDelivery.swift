@@ -18,6 +18,7 @@ actor CloudArchiveDelivery {
         running = true
         defer { running = false }
         var summary = Summary()
+        var changedDestinations = Set<CloudDeliveryPlan.Destination>()
         do {
             let journal = try CloudArchiveJournal.documents()
             for id in try journal.ids() {
@@ -29,7 +30,7 @@ actor CloudArchiveDelivery {
                         try journal.markReady(id: id)
                         item = try journal.read(id)
                     }
-                    try await send(&item, journal: journal)
+                    try await send(&item, journal: journal, changedDestinations: &changedDestinations)
                 } catch {
                     summary.pending += 1
                     if (error as? URLError)?.code != .notConnectedToInternet {
@@ -43,10 +44,15 @@ actor CloudArchiveDelivery {
                 }
             }
         } catch { summary.needsAttention = true }
+        if !changedDestinations.isEmpty {
+            for destination in changedDestinations { await CloudGalleryCatalog.shared.invalidate(destination) }
+            await MainActor.run { NotificationCenter.default.post(name: CloudGalleryCatalog.deliveryChanged, object: nil) }
+        }
         return summary
     }
 
-    private func send(_ item: inout CloudArchiveJournal.Capture, journal: CloudArchiveJournal) async throws {
+    private func send(_ item: inout CloudArchiveJournal.Capture, journal: CloudArchiveJournal,
+                      changedDestinations: inout Set<CloudDeliveryPlan.Destination>) async throws {
         guard let original = item.original, let stamped = item.stamped else { throw CocoaError(.fileReadCorruptFile) }
         let originalURL = journal.file(item, stamped: false)
         let stampedURL = journal.file(item, stamped: true)
@@ -99,6 +105,7 @@ actor CloudArchiveDelivery {
                         } else { first = nil }
                         let second = try await google.upload(file: stampedURL, id: reservation.stamped, folderID: reservation.folder, name: stampedName, mimeType: "image/jpeg", fingerprint: stamped, accessToken: token)
                         try confirm(&item, destination: destination, original: first, stamped: second, journal: journal)
+                        changedDestinations.insert(destination)
                     }
                 case .oneDrive:
                     if delivery.phase == .verified {
@@ -115,6 +122,7 @@ actor CloudArchiveDelivery {
                             ? try await microsoft.upload(originalURL, name: originalName, fingerprint: original, accessToken: token) : nil
                         let second = try await microsoft.upload(stampedURL, name: stampedName, fingerprint: stamped, accessToken: token)
                         try confirm(&item, destination: destination, original: first, stamped: second, journal: journal)
+                        changedDestinations.insert(destination)
                     }
                 }
             } catch { failures.append(error) }
