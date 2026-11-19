@@ -118,7 +118,11 @@ final class GalleryInteractionTests: XCTestCase {
         let storage = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Armazenamento do iPhone")).firstMatch
         XCTAssertTrue(storage.waitForExistence(timeout: 8))
         XCTAssertLessThanOrEqual(storage.frame.height, 50)
-        XCTAssertLessThan(storage.frame.maxY, app.collectionViews.firstMatch.frame.minY + 1)
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        XCTAssertLessThan(storage.frame.maxY, grid.frame.minY + 1)
+        let search = app.buttons["Buscar"].firstMatch
+        XCTAssertTrue(search.isHittable)
+        XCTAssertGreaterThanOrEqual(grid.frame.maxY, search.frame.maxY)
         app.buttons["Favoritos"].tap()
         XCTAssertTrue(app.staticTexts["Nenhum favorito"].waitForExistence(timeout: 8))
         app.buttons["Capturas"].tap()
