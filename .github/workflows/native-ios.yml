@@ -1,143 +1,52 @@
-name: Validate native iOS draft
+name: Validate Momentra gallery interactions
 on:
-  push:
-    branches: [feat/native-ios, feat/native-camera-control, feat/native-direct-updates, feat/native-icons, feat/native-camera-redesign, feat/native-address-zoom, feat/native-one-tap-update]
-    paths: ['native-ios/**', '.github/workflows/native-ios.yml']
   workflow_dispatch:
     inputs:
       signing_candidate:
-        description: Preserve the unsigned IPA for authorized signing and device validation
         type: boolean
         default: false
 permissions:
   contents: read
 jobs:
-  device-package-check:
+  gallery-ui:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Install XcodeGen
-        run: command -v xcodegen || brew install xcodegen
-      - name: Generate Xcode project
-        working-directory: native-ios
-        run: xcodegen generate
-      - name: Compile unsigned app for iPhone
-        working-directory: native-ios
-        run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
-      - name: Configure Google iOS sign-in
-        if: inputs.signing_candidate || github.ref_name == 'feat/native-direct-updates' || (github.ref_name == 'feat/native-icons' || (github.ref_name == 'feat/native-camera-redesign' || (github.ref_name == 'feat/native-address-zoom' || github.ref_name == 'feat/native-one-tap-update')))
-        env:
-          MOMENTRA_GOOGLE_IOS_CLIENT_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
-          MOMENTRA_GOOGLE_IOS_REVERSED_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_REVERSED_ID }}
-        run: python3 native-ios/scripts/configure-google.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
-      - name: Configure Microsoft public client when available
-        env:
-          MOMENTRA_MICROSOFT_CLIENT_ID: ${{ vars.MOMENTRA_MICROSOFT_CLIENT_ID }}
-        run: python3 native-ios/scripts/configure-microsoft.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
-      - name: Check unsigned IPA structure
-        env:
-          SIGNING_CANDIDATE: ${{ inputs.signing_candidate }}
-        run: |
-          APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
-          test -f "$APP/Info.plist"
-          test -f "$APP/Momentra"
-          if [ "$SIGNING_CANDIDATE" = "true" ] || [ "$GITHUB_REF_NAME" = "feat/native-one-tap-update" ]; then
-            python3 -c 'import plistlib,sys; p=plistlib.load(open(sys.argv[1],"rb")); assert "processing" in p.get("UIBackgroundModes",[]); assert "br.com.momentra.camera.cloud-processing" in p.get("BGTaskSchedulerPermittedIdentifiers",[])' "$APP/Info.plist"
-          fi
-          if [ "$SIGNING_CANDIDATE" = "true" ] || [ "$GITHUB_REF_NAME" = "feat/native-camera-control" ] || [ "$GITHUB_REF_NAME" = "feat/native-direct-updates" ] || [ "$GITHUB_REF_NAME" = "feat/native-icons" ] || [ "$GITHUB_REF_NAME" = "feat/native-camera-redesign" ] || [ "$GITHUB_REF_NAME" = "feat/native-address-zoom" ] || [ "$GITHUB_REF_NAME" = "feat/native-one-tap-update" ]; then
-            CAPTURE="$APP/Extensions/MomentraCaptureExtension.appex"
-            CONTROL="$APP/PlugIns/MomentraCameraControl.appex"
-            test -f "$CAPTURE/MomentraCaptureExtension"
-            test -f "$CONTROL/MomentraCameraControl"
-            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CAPTURE/Info.plist")" = 'br.com.momentra.camera.capture'
-            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CONTROL/Info.plist")" = 'br.com.momentra.camera.control'
-            test "$(/usr/libexec/PlistBuddy -c 'Print :EXAppExtensionAttributes:EXExtensionPointIdentifier' "$CAPTURE/Info.plist")" = 'com.apple.securecapture'
-            test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$CONTROL/Info.plist")" = 'com.apple.widgetkit-extension'
-          fi
-          if [ "$SIGNING_CANDIDATE" = "true" ] || [ "$GITHUB_REF_NAME" = "feat/native-icons" ] || [ "$GITHUB_REF_NAME" = "feat/native-camera-redesign" ] || [ "$GITHUB_REF_NAME" = "feat/native-address-zoom" ] || [ "$GITHUB_REF_NAME" = "feat/native-one-tap-update" ]; then
-            for n in 1 2 3 4 5 6 7 8; do
-              /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:MomentraIcon$n" "$APP/Info.plist" >/dev/null
-            done
-            /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:MomentraIconOriginal" "$APP/Info.plist" >/dev/null
-            ICONS="native-ios/Momentra/Assets.xcassets"
-            for appearance in Light Dark; do
-              cmp "$ICONS/AppIcon.appiconset/$appearance.png" "$ICONS/MomentraIconOriginal.appiconset/$appearance.png"
-            done
-          fi
-          mkdir -p "$RUNNER_TEMP/Payload"
-          ditto "$APP" "$RUNNER_TEMP/Payload/Momentra.app"
-          ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
-          unzip -t "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
-          lipo -archs "$APP/Momentra"
-          shasum -a 256 "$RUNNER_TEMP/Momentra-unsigned-draft.ipa"
-      - name: Preserve unsigned candidate for signing
-        if: inputs.signing_candidate || github.ref_name == 'feat/native-camera-control' || github.ref_name == 'feat/native-direct-updates' || (github.ref_name == 'feat/native-icons' || (github.ref_name == 'feat/native-camera-redesign' || (github.ref_name == 'feat/native-address-zoom' || github.ref_name == 'feat/native-one-tap-update')))
-        uses: actions/upload-artifact@v4
-        with:
-          name: momentra-unsigned-camera-control-candidate
-          path: ${{ runner.temp }}/Momentra-unsigned-draft.ipa
-          if-no-files-found: error
-          retention-days: 3
-      - name: Prepare temporary IPA for direct signing
-        if: (github.ref_name == 'feat/native-address-zoom' || github.ref_name == 'feat/native-one-tap-update')
-        run: touch "$RUNNER_TEMP/Momentra-signing-marker.txt"
-      - name: Preserve IPA contents for direct signing
-        if: (github.ref_name == 'feat/native-address-zoom' || github.ref_name == 'feat/native-one-tap-update')
-        uses: actions/upload-artifact@v4
-        with:
-          name: momentra-signulous-ipa
-          path: |
-            ${{ runner.temp }}/Payload/**
-            ${{ runner.temp }}/Momentra-signing-marker.txt
-          if-no-files-found: error
-          retention-days: 1
-  simulator-build:
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install XcodeGen
-        run: command -v xcodegen || brew install xcodegen
-      - name: Generate Xcode project
-        working-directory: native-ios
-        run: xcodegen generate
-      - name: Compile for iOS Simulator
-        working-directory: native-ios
-        run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/momentra-simulator" CODE_SIGNING_ALLOWED=NO -quiet build
-      - name: Run native unit tests
+      - name: Generate project and start simulator
         working-directory: native-ios
         run: |
-          DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
-          echo "MOMENTRA_SIM_ID=$DEVICE_ID" >> "$GITHUB_ENV"
-          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/momentra-simulator" -resultBundlePath "$RUNNER_TEMP/Momentra.xcresult" CODE_SIGNING_ALLOWED=NO -quiet test
-      - name: Summarize native test results
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+          DEVICE=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Install fixture captures
+        working-directory: native-ios
+        run: |
+          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" CODE_SIGNING_ALLOWED=NO -quiet build-for-testing
+          xcrun simctl install "$DEVICE" "$RUNNER_TEMP/gallery/Build/Products/Debug-iphonesimulator/Momentra.app"
+          xcrun simctl privacy "$DEVICE" grant all br.com.momentra.camera
+          CONTAINER=$(xcrun simctl get_app_container "$DEVICE" br.com.momentra.camera data)
+          mkdir -p "$CONTAINER/Documents/Originals"
+          for number in 1 2 3; do
+            sips -s format jpeg "Momentra/Assets.xcassets/AppIcon.appiconset/Light.png" --out "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-00000000000$number.jpg" >/dev/null
+          done
+      - name: Exercise gallery and support panel
+        working-directory: native-ios
+        run: |
+          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO -only-testing:MomentraUITests/GalleryInteractionTests CODE_SIGNING_ALLOWED=NO -quiet test-without-building
+      - name: Export evidence
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/Momentra.xcresult" ]; then
-            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Momentra.xcresult"
+          if [ -d "$RUNNER_TEMP/Gallery.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Gallery.xcresult"
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/Gallery.xcresult" --output-path "$RUNNER_TEMP/gallery-attachments"
           fi
-      - name: Capture camera layout on the simulator
-        if: inputs.signing_candidate
-        run: |
-          APP="$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app"
-          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
-          xcrun simctl bootstatus "$MOMENTRA_SIM_ID" -b
-          xcrun simctl install "$MOMENTRA_SIM_ID" "$APP"
-          xcrun simctl privacy "$MOMENTRA_SIM_ID" grant all br.com.momentra.camera
-          mkdir -p "$RUNNER_TEMP/Momentra-simulator-previews"
-          for aspect in 4:3 16:9 1:1; do
-            xcrun simctl terminate "$MOMENTRA_SIM_ID" br.com.momentra.camera || true
-            xcrun simctl launch "$MOMENTRA_SIM_ID" br.com.momentra.camera -welcomeCompletedV1 YES -lastPresentedVersion "$VERSION" -native.gps.enabled NO -native.camera.grid YES -native.photo.aspect "$aspect"
-            sleep 3
-            xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-simulator-previews/Camera-${aspect/:/x}.png"
-          done
       - uses: actions/upload-artifact@v4
-        if: inputs.signing_candidate
+        if: always()
         with:
-          name: momentra-camera-simulator
-          path: ${{ runner.temp }}/Momentra-simulator-previews/*.png
-          if-no-files-found: error
+          name: momentra-gallery-interactions
+          path: ${{ runner.temp }}/gallery-attachments/
           retention-days: 3
