@@ -128,6 +128,18 @@ final class GalleryInteractionTests: XCTestCase {
         snapshot("Interruptores nativos", app: app)
     }
 
+    func testHoldingGalleryPhotoAutomaticallyOpensSystemShareSheet() {
+        let app = launch()
+        app.buttons["Abrir capturas"].tap()
+        let first = app.collectionViews.cells.firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 8))
+        XCTAssertFalse(first.buttons["Opções da captura"].exists)
+        first.press(forDuration: 0.7)
+        let copy = app.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@ OR label BEGINSWITH[c] %@", "Copy", "Copiar")).firstMatch
+        XCTAssertTrue(copy.waitForExistence(timeout: 12))
+        snapshot("Compartilhamento rápido", app: app)
+    }
+
     private func snapshot(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
