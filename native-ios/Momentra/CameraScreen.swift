@@ -324,9 +324,15 @@ struct CameraScreen: View {
                     }
                     HStack {
                         Menu {
-                            ForEach(stampProfiles.profiles) { item in
-                                Button(item.name.isEmpty ? "Sem nome" : item.name) { stampProfiles.select(item.id) }
+                            Picker("Perfil", selection: Binding(
+                                get: { stampProfiles.selectedID },
+                                set: { stampProfiles.select($0) }
+                            )) {
+                                ForEach(stampProfiles.profiles) { item in
+                                    Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id)
+                                }
                             }
+                            .pickerStyle(.inline)
                         } label: {
                             Image(systemName: "square.on.square").font(.title2)
                                 .frame(width: 54, height: 54)
@@ -337,6 +343,7 @@ struct CameraScreen: View {
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Escolher perfil do carimbo")
+                        .accessibilityValue(stampProfiles.selected.name.isEmpty ? "Sem nome" : stampProfiles.selected.name)
                         .opacity(camera.isRecording ? 0 : 1)
                         Spacer(minLength: 0)
                         Button {
