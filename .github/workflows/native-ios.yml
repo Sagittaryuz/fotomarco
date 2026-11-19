@@ -6,7 +6,7 @@ on:
         type: boolean
         default: false
       test_method:
-        description: Optional single GalleryInteractionTests method
+        description: GalleryInteractionTests method or the sharing group
         type: string
         default: ''
       baseline_gallery:
@@ -22,7 +22,7 @@ permissions:
 jobs:
   gallery-ui:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Use Momentra 0.1.18 app code for the baseline
@@ -126,6 +126,7 @@ jobs:
             mkdir -p "$CONTAINER/Documents/CloudThumbnails"
             cp "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000001.jpg" "$CONTAINER/Documents/CloudThumbnails/00000000-0000-0000-0000-000000000010.jpg"
           fi
+          if [ "$TEST_METHOD" = sharing ]; then exit 0; fi
           mkdir -p "$RUNNER_TEMP/camera-roll"
           for number in $(seq 1 24); do
             sips -Z "$((256 + number * 8))" "$CONTAINER/Documents/Originals/00000000-0000-0000-0000-000000000003.jpg" --out "$RUNNER_TEMP/camera-roll/$number.jpg" >/dev/null
@@ -145,16 +146,24 @@ jobs:
         env:
           TEST_METHOD: ${{ inputs.test_method }}
         run: |
-          TEST_TARGET="MomentraUITests/GalleryInteractionTests${TEST_METHOD:+/$TEST_METHOD}"
+          TEST_SUITE="MomentraUITests/GalleryInteractionTests"
+          TEST_TARGETS=("-only-testing:$TEST_SUITE${TEST_METHOD:+/$TEST_METHOD}")
+          if [ "$TEST_METHOD" = sharing ]; then
+            TEST_TARGETS=(
+              "-only-testing:$TEST_SUITE/testHoldingGalleryPhotoAutomaticallyOpensSystemShareSheet"
+              "-only-testing:$TEST_SUITE/testViewerAddsNearbyPhotosToNativeShare"
+              "-only-testing:$TEST_SUITE/testCompletedBatchShareExitsSelectionMode"
+            )
+          fi
           SKIP_BENCHMARK=()
           if [ -z "$TEST_METHOD" ]; then
             SKIP_BENCHMARK=(-skip-testing:MomentraUITests/GalleryInteractionTests/testGalleryCatalogMeasurement -skip-testing:MomentraUITests/GalleryInteractionTests/testCloudCatalogSurvivesAppRelaunch)
           fi
-          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "-only-testing:$TEST_TARGET" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
+          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/gallery" -resultBundlePath "$RUNNER_TEMP/Gallery.xcresult" -parallel-testing-enabled NO "${TEST_TARGETS[@]}" "${SKIP_BENCHMARK[@]}" CODE_SIGNING_ALLOWED=NO -quiet test-without-building
       - name: Export evidence
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/Gallery.xcresult" ]; then
+          if [ -f "$RUNNER_TEMP/Gallery.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Gallery.xcresult"
             xcrun xcresulttool export attachments --path "$RUNNER_TEMP/Gallery.xcresult" --output-path "$RUNNER_TEMP/gallery-attachments"
           fi
