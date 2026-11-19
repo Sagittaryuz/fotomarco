@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 import Photos
 import CoreLocation
 import ImageIO
@@ -190,8 +191,11 @@ enum DevicePhotoFile {
 
     static func copy(_ asset: PHAsset, to target: URL) async throws -> URL {
         let resources = PHAssetResource.assetResources(for: asset)
-        guard let resource = resources.first(where: { $0.type == .fullSizePhoto }) ??
-                resources.first(where: { $0.type == .photo }) else { throw CocoaError(.fileReadUnknown) }
+        let video = asset.mediaType == .video
+        let full: PHAssetResourceType = video ? .fullSizeVideo : .fullSizePhoto
+        let original: PHAssetResourceType = video ? .video : .photo
+        guard let resource = resources.first(where: { $0.type == full }) ??
+                resources.first(where: { $0.type == original }) else { throw CocoaError(.fileReadUnknown) }
         let file = target.appendingPathExtension(UTType(resource.uniformTypeIdentifier)?.preferredFilenameExtension ?? "jpg")
         let options = PHAssetResourceRequestOptions()
         options.isNetworkAccessAllowed = true
@@ -577,5 +581,43 @@ enum ExistingPhotoStamp {
             text.draw(in: box.insetBy(dx: margin, dy: margin), withAttributes: attrs)
         }
         return fits ? result.jpegData(compressionQuality: 0.95) : nil
+    }
+}
+
+
+struct DeviceVideoPreview: View {
+    let asset: PHAsset
+    let active: Bool
+    @State private var player: AVPlayer?
+    @State private var request: PHImageRequestID?
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let player { VideoPlayer(player: player) }
+            else if failed { ContentUnavailableView("Vídeo indisponível", systemImage: "video.slash") }
+            else if active { ProgressView("Abrindo vídeo…") }
+        }
+        .task(id: active) {
+            guard active else { stop(); return }
+            guard player == nil else { return }
+            failed = false
+            let options = PHVideoRequestOptions()
+            options.isNetworkAccessAllowed = true
+            request = PHImageManager.default().requestPlayerItem(forVideo: asset, options: options) { item, _ in
+                DispatchQueue.main.async {
+                    guard request != nil else { return }
+                    if let item { player = AVPlayer(playerItem: item) } else { failed = true }
+                }
+            }
+        }
+        .onDisappear(perform: stop)
+    }
+
+    private func stop() {
+        player?.pause()
+        if let request { PHImageManager.default().cancelImageRequest(request) }
+        request = nil
     }
 }

@@ -190,8 +190,16 @@ struct Thumbnail: View {
             .clipped()
         }
         .task(id: url) {
-            guard !isVideo else { return }
             let fileURL = url
+            if isVideo {
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: fileURL))
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = CGSize(width: 256, height: 256)
+                if let preview = try? await generator.image(at: .zero), !Task.isCancelled {
+                    image = UIImage(cgImage: preview.image)
+                }
+                return
+            }
             let thumbnail = await Task.detached(priority: .utility) { () -> UIImage? in
                 guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil),
                       let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
