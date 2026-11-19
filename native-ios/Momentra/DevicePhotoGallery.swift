@@ -96,7 +96,8 @@ struct DevicePhotoGallery: View {
         }
         .sheet(item: $selected, onDismiss: refresh) { item in
             DevicePhotoPager(items: groups.flatMap(\.items), initialID: item.id,
-                             profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name))
+                             profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
+                             stampProfiles: stampProfiles.profiles)
         }
         .sheet(isPresented: $showingSelection) {
             GallerySelectionSheet(items: assets, selected: $selectedIDs) { DeviceThumbnail(asset: $0.asset) }
@@ -119,15 +120,7 @@ struct DevicePhotoGallery: View {
             defer { actionInProgress = false }
             do {
                 share = try await GalleryShareBatch.prepare(items) { item, directory in
-                    let resources = PHAssetResource.assetResources(for: item.asset)
-                    guard let resource = resources.first(where: { $0.type == .fullSizePhoto }) ??
-                            resources.first(where: { $0.type == .photo }) else { throw CocoaError(.fileReadUnknown) }
-                    let file = directory.appendingPathComponent("Foto").appendingPathExtension(
-                        UTType(resource.uniformTypeIdentifier)?.preferredFilenameExtension ?? "jpg")
-                    let options = PHAssetResourceRequestOptions()
-                    options.isNetworkAccessAllowed = true
-                    try await PHAssetResourceManager.default().writeData(for: resource, toFile: file, options: options)
-                    return file
+                    try await DevicePhotoFile.copy(item.asset, to: directory.appendingPathComponent("Foto"))
                 }
             } catch { actionError = "Não foi possível preparar as fotos selecionadas para compartilhar." }
         }
@@ -175,13 +168,35 @@ struct DevicePhotoGallery: View {
     }
 }
 
+private enum DevicePhotoFile {
+    static func copy(_ asset: PHAsset, to target: URL) async throws -> URL {
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let resource = resources.first(where: { $0.type == .fullSizePhoto }) ??
+                resources.first(where: { $0.type == .photo }) else { throw CocoaError(.fileReadUnknown) }
+        let file = target.appendingPathExtension(UTType(resource.uniformTypeIdentifier)?.preferredFilenameExtension ?? "jpg")
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = true
+        do {
+            try await PHAssetResourceManager.default().writeData(for: resource, toFile: file, options: options)
+            return file
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            throw error
+        }
+    }
+}
+
 private struct DevicePhotoPager: View {
     let items: [DeviceAsset]
     let profile: CaptureProfileTag
+    let stampProfiles: [StampProfile]
     @State private var selection: String
+    @State private var editing: DeviceAsset?
+    @State private var savedCopy = false
 
-    init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag) {
-        self.items = items; self.profile = profile; _selection = State(initialValue: initialID)
+    init(items: [DeviceAsset], initialID: String, profile: CaptureProfileTag, stampProfiles: [StampProfile]) {
+        self.items = items; self.profile = profile; self.stampProfiles = stampProfiles
+        _selection = State(initialValue: initialID)
     }
     @Environment(\.dismiss) private var dismiss
 
@@ -190,7 +205,13 @@ private struct DevicePhotoPager: View {
         VStack(spacing: 0) {
             GalleryDetailHeader(date: index.flatMap { items[$0].asset.creationDate },
                                 position: (index ?? 0) + 1, count: items.count,
-                                close: { dismiss() }) { EmptyView() }
+                                close: { dismiss() }) {
+                if let index {
+                    Button { editing = items[index] } label: {
+                        Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44).modifier(GalleryControlSurface())
+                    }.accessibilityLabel("Editar foto")
+                }
+            }
             TabView(selection: $selection) {
                 ForEach(items) { item in
                     DevicePhotoDetail(asset: item.asset, profile: profile).tag(item.id)
@@ -203,7 +224,16 @@ private struct DevicePhotoPager: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.hidden)
+        .sheet(item: $editing, onDismiss: { if savedCopy { showSavedCopy = true } }) { item in
+            MomentraPhotoEditor(load: {
+                let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                let url = try await DevicePhotoFile.copy(item.asset, to: temporary)
+                return PhotoEditorInput(url: url, temporary: true)
+            }, date: item.asset.creationDate, profile: profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
+        }
+        .alert("Cópia salva em Capturas", isPresented: $showSavedCopy) { Button("OK") { savedCopy = false } }
     }
+    @State private var showSavedCopy = false
 }
 
 private struct DeviceThumbnail: View {

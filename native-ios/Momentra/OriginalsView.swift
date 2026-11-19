@@ -242,7 +242,7 @@ struct OriginalsView: View {
 
 private struct CapturePager: View {
     private enum Panel: String, Identifiable {
-        case information, adjustments, text
+        case information, editor, stamp, text
         var id: String { rawValue }
     }
 
@@ -306,7 +306,18 @@ private struct CapturePager: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .sheet(item: $panel) { route in
-            if let current { detailSheet(route, item: current) }
+            if let current {
+                if route == .editor {
+                    MomentraPhotoEditor(load: { PhotoEditorInput(url: current.url) }, date: current.date,
+                                        stampProfiles: profiles.profiles) { url in
+                        let copy = OriginalFile(url: url, isVideo: false, isProcessed: true, date: current.date)
+                        items.insert(copy, at: 0)
+                        selection = copy.id
+                    }
+                } else {
+                    detailSheet(route, item: current)
+                }
+            }
         }
         .confirmationDialog("Excluir esta captura do Momentra?", isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } }
@@ -326,7 +337,8 @@ private struct CapturePager: View {
             Button { save(item) } label: { Label("Salvar no Fotos", systemImage: "square.and.arrow.down") }
             Button { panel = .information } label: { Label("Informações", systemImage: "info.circle") }
             if !item.isVideo {
-                Button { openAdjustments() } label: { Label("Adicionar carimbo", systemImage: "slider.horizontal.3") }
+                Button { panel = .editor } label: { Label("Editar foto", systemImage: "slider.horizontal.3") }
+                Button { openStamp() } label: { Label("Adicionar carimbo", systemImage: "seal") }
                 Button { panel = .text } label: { Label("Ler texto", systemImage: "text.viewfinder") }
             }
         } label: {
@@ -344,7 +356,7 @@ private struct CapturePager: View {
                           label: favorite ? "Remover dos favoritos" : "Favoritar",
                           tint: favorite ? .yellow : .primary) { toggleFavorite(item) }
             galleryButton("info.circle", label: "Informações") { panel = .information }
-            galleryButton("slider.horizontal.3", label: "Ajustes da foto") { openAdjustments() }
+            galleryButton("slider.horizontal.3", label: "Editar foto") { panel = .editor }
                 .disabled(item.isVideo)
             Spacer(minLength: 2)
             galleryButton("trash", label: "Excluir captura", tint: .red) { removing = item }
@@ -381,9 +393,9 @@ private struct CapturePager: View {
         if let data = try? JSONEncoder().encode(keys) { storedFavorites = data }
     }
 
-    private func openAdjustments() {
+    private func openStamp() {
         selectedProfile = profiles.selected.id
-        panel = .adjustments
+        panel = .stamp
     }
 
     @ViewBuilder
@@ -403,7 +415,7 @@ private struct CapturePager: View {
                             LabeledContent("Coordenadas", value: String(format: "%.6f, %.6f", point.latitude, point.longitude))
                         }
                     }
-                case .adjustments:
+                case .stamp:
                     Form {
                         Picker("Perfil do carimbo", selection: $selectedProfile) {
                             ForEach(profiles.profiles) { profile in
@@ -417,9 +429,11 @@ private struct CapturePager: View {
                     }
                 case .text:
                     CaptureTextPanel(url: item.url)
+                case .editor:
+                    EmptyView()
                 }
             }
-            .navigationTitle(route == .information ? "Informações" : route == .adjustments ? "Ajustes da foto" : "Texto da foto")
+            .navigationTitle(route == .information ? "Informações" : route == .stamp ? "Adicionar carimbo" : "Texto da foto")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Concluído") { panel = nil }.disabled(stamping) }
         }

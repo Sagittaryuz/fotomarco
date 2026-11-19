@@ -177,7 +177,8 @@ private struct ArchiveAccountGallery: View {
         }
         .task(id: currentRequest) { await load(currentRequest) }
         .sheet(item: $openPhoto) { photo in
-            ArchiveGalleryPager(items: groups.flatMap(\.items), initialID: photo.id, images: images)
+            ArchiveGalleryPager(items: groups.flatMap(\.items), initialID: photo.id, images: images,
+                                stampProfiles: stampProfiles.profiles)
         }
         .sheet(isPresented: $showingSelection) {
             GallerySelectionSheet(items: photos, selected: $selectedIDs) { ArchiveGalleryImage(photo: $0, images: images) }
@@ -320,6 +321,11 @@ private final class ArchiveGalleryImages: ObservableObject {
         }
     }
 
+    func editorInput(_ photo: ArchiveGalleryPhoto) async throws -> PhotoEditorInput {
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        return PhotoEditorInput(url: try await download(photo, accessToken: token), temporary: true)
+    }
+
     func image(_ photo: ArchiveGalleryPhoto, maximumPixels: Int) async throws -> UIImage {
         let version = revision
         let key = "\(version.uuidString):\(photo.id):\(maximumPixels)" as NSString
@@ -403,12 +409,17 @@ private struct ArchiveGalleryImage: View {
 private struct ArchiveGalleryPager: View {
     let items: [ArchiveGalleryPhoto]
     let images: ArchiveGalleryImages
+    let stampProfiles: [StampProfile]
     @State private var selection: String
+    @State private var editing: ArchiveGalleryPhoto?
+    @State private var savedCopy = false
+    @State private var showSavedCopy = false
     @Environment(\.dismiss) private var dismiss
 
-    init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages) {
+    init(items: [ArchiveGalleryPhoto], initialID: String, images: ArchiveGalleryImages, stampProfiles: [StampProfile]) {
         self.items = items
         self.images = images
+        self.stampProfiles = stampProfiles
         _selection = State(initialValue: initialID)
     }
 
@@ -418,9 +429,9 @@ private struct ArchiveGalleryPager: View {
             GalleryDetailHeader(date: index.flatMap { items[$0].date }, position: (index ?? 0) + 1,
                                 count: items.count, close: { dismiss() }) {
                 if let index {
-                    Text(items[index].isOriginal ? "Orig." : "Carimbo")
-                        .font(.caption2).lineLimit(1).minimumScaleFactor(0.7)
-                        .accessibilityLabel(items[index].versionLabel)
+                    Button { editing = items[index] } label: {
+                        Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44).modifier(GalleryControlSurface())
+                    }.accessibilityLabel("Editar foto").accessibilityHint(items[index].versionLabel)
                 }
             }
             TabView(selection: $selection) {
@@ -441,5 +452,10 @@ private struct ArchiveGalleryPager: View {
         .background(.black)
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.hidden)
+        .sheet(item: $editing, onDismiss: { if savedCopy { showSavedCopy = true } }) { photo in
+            MomentraPhotoEditor(load: { try await images.editorInput(photo) }, date: photo.date,
+                                profile: photo.profile, stampProfiles: stampProfiles) { _ in savedCopy = true }
+        }
+        .alert("Cópia salva em Capturas", isPresented: $showSavedCopy) { Button("OK") { savedCopy = false } }
     }
 }
