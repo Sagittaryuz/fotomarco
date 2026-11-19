@@ -4,7 +4,7 @@ final class GalleryInteractionTests: XCTestCase {
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.17",
+        app.launchArguments = ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.18",
                                "-native.gps.enabled", "NO"]
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -140,13 +140,29 @@ final class GalleryInteractionTests: XCTestCase {
         let grid = app.switches["Grade"]
         if !grid.isHittable { app.swipeUp() }
         XCTAssertTrue(grid.waitForExistence(timeout: 8))
+        XCTAssertLessThanOrEqual(grid.frame.width, 80, "A área do interruptor deve ter a largura da cápsula.")
         XCTAssertEqual(grid.value as? String, "0")
-        let rightEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
-            .withOffset(CGVector(dx: -12, dy: 0))
-        let leftEdge = rightEdge.withOffset(CGVector(dx: -32, dy: 0))
+        let rightEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.5))
+        let leftEdge = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.5))
+        let label = grid.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+            .withOffset(CGVector(dx: -110, dy: 0))
+        label.tap()
+        label.press(forDuration: 0.1, thenDragTo: label.withOffset(CGVector(dx: 50, dy: 0)))
+        XCTAssertEqual(grid.value as? String, "0")
+        // A swipe that starts beside the capsule must not be accepted even if it ends over the switch.
+        label.press(forDuration: 0.1, thenDragTo: rightEdge)
+        XCTAssertEqual(grid.value as? String, "0")
         leftEdge.press(forDuration: 0.15, thenDragTo: rightEdge)
         XCTAssertEqual(grid.value as? String, "1")
         rightEdge.press(forDuration: 0.15, thenDragTo: leftEdge)
+        XCTAssertEqual(grid.value as? String, "0")
+        let before = grid.frame.midY
+        label.press(forDuration: 0.07, thenDragTo: label.withOffset(CGVector(dx: -18, dy: 115)))
+        XCTAssertGreaterThan(grid.frame.midY, before + 20, "Arrastar sobre o texto deve rolar o formulário.")
+        XCTAssertEqual(grid.value as? String, "0")
+        grid.tap()
+        XCTAssertEqual(grid.value as? String, "1")
+        grid.tap()
         XCTAssertEqual(grid.value as? String, "0")
         snapshot("Interruptores nativos", app: app)
     }
