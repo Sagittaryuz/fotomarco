@@ -4,11 +4,12 @@ import SwiftUI
 import Vision
 
 struct GalleryControlSurface: ViewModifier {
+    var rounded = false
     var tint: Color = .primary
     var interactive = true
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 15)
+        let shape = RoundedRectangle(cornerRadius: rounded ? 999 : 15, style: .continuous)
         if #available(iOS 26, *) {
             content.foregroundStyle(tint)
                 .glassEffect(.regular.interactive(interactive), in: shape)

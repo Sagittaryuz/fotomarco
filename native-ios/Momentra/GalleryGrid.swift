@@ -20,6 +20,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     @Binding var columns: Int
     var refreshKey = 0
     var showsSectionHeaders = true
+    var contentVersion: Int? = nil
     var newestScrollRequest: Int? = nil
     let tile: (Item) -> Tile
     let open: (Item) -> Void
@@ -61,13 +62,22 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
 
     func updateUIView(_ view: UICollectionView, context: Context) {
         let coordinator = context.coordinator
-        let oldIDs = coordinator.parent.groups.map { $0.items.map(\.id) }
-        let newIDs = groups.map { $0.items.map(\.id) }
-        let changed = oldIDs != newIDs || coordinator.parent.columns != columns || coordinator.parent.refreshKey != refreshKey ||
-            coordinator.parent.showsSectionHeaders != showsSectionHeaders || coordinator.parent.groups.map(\.title) != groups.map(\.title)
+        let old = coordinator.parent
+        let contentChanged: Bool
+        if let contentVersion {
+            contentChanged = old.contentVersion != contentVersion
+        } else {
+            contentChanged = old.groups.map { $0.items.map(\.id) } != groups.map { $0.items.map(\.id) } ||
+                old.groups.map(\.title) != groups.map(\.title)
+        }
         coordinator.parent = self
-        view.isEditing = selecting
-        if changed { coordinator.rebuildIndex(); view.collectionViewLayout.invalidateLayout(); view.reloadData() }
+        if view.isEditing != selecting { view.isEditing = selecting }
+        if contentChanged { coordinator.rebuildIndex() }
+        if contentChanged || old.columns != columns || old.refreshKey != refreshKey ||
+            old.showsSectionHeaders != showsSectionHeaders {
+            view.collectionViewLayout.invalidateLayout()
+            view.reloadData()
+        }
         coordinator.synchronizeSelection()
         if let request = newestScrollRequest { coordinator.scrollToLastIfRequested(request) }
     }

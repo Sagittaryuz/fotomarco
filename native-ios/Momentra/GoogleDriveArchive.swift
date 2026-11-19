@@ -18,6 +18,8 @@ final class GoogleDriveArchive {
         let parents: [String]?
         let trashed: Bool?
         let trashedTime: String?
+        let thumbnailLink: String?
+        let version: String?
         let capabilities: Capabilities?
         let appProperties: [String: String]?
     }
@@ -146,12 +148,46 @@ final class GoogleDriveArchive {
         // A gallery read does not create folders. The marker also keeps captures
         // visible if multiple devices provision a Momentra folder concurrently.
         try await find("trashed = false and appProperties has { key='momentraArchivePhoto' and value='1' }",
-                       pageToken: pageToken, accessToken: accessToken)
+                       pageToken: pageToken, accessToken: accessToken, additionalFields: ",thumbnailLink,version")
     }
 
     func listTrash(pageToken: String? = nil, accessToken: String) async throws -> Page {
         try await find("trashed = true and appProperties has { key='momentraArchivePhoto' and value='1' }",
-                       pageToken: pageToken, accessToken: accessToken, additionalFields: ",trashedTime,capabilities(canUntrash)")
+                       pageToken: pageToken, accessToken: accessToken, additionalFields: ",trashedTime,capabilities(canUntrash),thumbnailLink,version")
+    }
+
+    static func validatedThumbnailURL(_ value: String) -> URL? {
+        guard (1...4096).contains(value.utf8.count), let url = URL(string: value),
+              url.scheme == "https", url.user == nil, url.password == nil, url.port == nil,
+              url.fragment == nil, let host = url.host?.lowercased() else { return nil }
+        let googleImageHost = host.range(of: #"^lh[0-9]+\.googleusercontent\.com$"#, options: .regularExpression) != nil
+        guard googleImageHost || host == "drive.google.com" || host == "drive.googleusercontent.com" else { return nil }
+        return url
+    }
+
+    /// The URL came from Drive's read-only thumbnailLink field. Keep the bearer on Google's
+    /// image hosts and use the same no-redirect session used for Drive requests.
+    func thumbnail(link: String, accessToken: String) async throws -> Data? {
+        guard let url = Self.validatedThumbnailURL(link) else { return nil }
+        guard (1...8192).contains(accessToken.utf8.count),
+              accessToken.utf8.allSatisfy({ (33...126).contains($0) }) else { throw ArchiveError.invalidRequest }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + accessToken, forHTTPHeaderField: "Authorization")
+        let (bytes, response) = try await session.bytes(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 404 || http.statusCode == 410 {
+            return nil
+        }
+        try Self.check(response)
+        let limit = 1_048_576
+        guard response.mimeType?.lowercased().hasPrefix("image/") == true,
+              response.expectedContentLength <= limit else { throw ArchiveError.invalidResponse }
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < limit else { throw ArchiveError.invalidResponse }
+            data.append(byte)
+        }
+        guard !data.isEmpty else { throw ArchiveError.invalidResponse }
+        return data
     }
 
     func download(id: String, accessToken: String) async throws -> Data {

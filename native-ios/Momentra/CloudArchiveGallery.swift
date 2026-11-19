@@ -53,8 +53,10 @@ fileprivate struct ArchiveGalleryPhoto: Identifiable {
     let captureID: UUID
     let isOriginal: Bool
     let profile: CaptureProfileTag?
+    let thumbnailLink: String?
+    let revision: String?
 
-    init?(id: String, name: String, date: Date?) {
+    init?(id: String, name: String, date: Date?, thumbnailLink: String? = nil, revision: String? = nil) {
         guard let metadata = CloudArchiveFilename(name) else { return nil }
         self.id = id
         self.name = name
@@ -62,6 +64,8 @@ fileprivate struct ArchiveGalleryPhoto: Identifiable {
         self.captureID = metadata.captureID
         isOriginal = metadata.isOriginal
         profile = metadata.profile
+        self.thumbnailLink = thumbnailLink
+        self.revision = revision
     }
 
     var versionLabel: String { isOriginal ? "Original" : "Com carimbo" }
@@ -435,7 +439,7 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
             page = (result.files.compactMap { Self.googlePhoto($0, trashed: false) }, result.nextPageToken)
         case .oneDrive:
             let result = try await OneDriveArchive().list(accessToken: token, nextPage: pageToken)
-            page = (result.items.compactMap { ArchiveGalleryPhoto(id: $0.id, name: $0.name, date: $0.date) },
+            page = (result.items.compactMap { ArchiveGalleryPhoto(id: $0.id, name: $0.name, date: $0.date, revision: $0.revision) },
                     result.nextPage)
         }
         try Task.checkCancellation()
@@ -445,7 +449,8 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
     static func googlePhoto(_ item: GoogleDriveArchive.Item, trashed: Bool) -> ArchiveGalleryPhoto? {
         guard item.mimeType.hasPrefix("image/"), item.appProperties?["momentraArchivePhoto"] == "1",
               item.trashed == trashed else { return nil }
-        return ArchiveGalleryPhoto(id: item.id, name: item.name, date: parseDate(item.createdTime))
+        return ArchiveGalleryPhoto(id: item.id, name: item.name, date: parseDate(item.createdTime),
+                                   thumbnailLink: item.thumbnailLink, revision: item.version)
     }
 
     static func parseDate(_ text: String?) -> Date? {
@@ -494,30 +499,75 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
 
     func image(_ photo: ArchiveGalleryPhoto, maximumPixels: Int) async throws -> UIImage {
         let version = revision
-        let key = "\(version.uuidString):\(photo.id):\(maximumPixels)" as NSString
+        let prefix = "\(version.uuidString):\(photo.id):\(photo.revision ?? ""):"
+        let key = (prefix + String(maximumPixels)) as NSString
         if let cached = cache.object(forKey: key) { return cached }
         await acquireDownload()
         defer { releaseDownload() }
         try Task.checkCancellation()
         if let cached = cache.object(forKey: key) { return cached }
 
+        let gridSize = 320
+        if maximumPixels <= gridSize, !photo.isOriginal {
+            // Successful deliveries already leave a stamped thumbnail on this iPhone.
+            let captureID = photo.captureID
+            let offline = await Task.detached(priority: .utility) {
+                guard let root = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
+                    appropriateFor: nil, create: false) else { return nil as CGImage? }
+                let file = root.appendingPathComponent("CloudThumbnails", isDirectory: true)
+                    .appendingPathComponent(captureID.uuidString).appendingPathExtension("jpg")
+                let attributes = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                guard attributes?.isRegularFile == true, attributes?.isSymbolicLink != true,
+                      let size = attributes?.fileSize, (1...2_000_000).contains(size) else { return nil }
+                let source = CGImageSourceCreateWithURL(file as CFURL, nil)
+                return Self.downsample(source, pixels: maximumPixels)
+            }.value
+            try Task.checkCancellation()
+            if let offline {
+                return remember(offline, key: key, version: version)
+            }
+        }
+
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        if maximumPixels <= gridSize, destination.provider == .googleDrive, let link = photo.thumbnailLink,
+           let thumbnail = try await drive.thumbnail(link: link, accessToken: token) {
+            let bitmap = await Task.detached(priority: .utility) {
+                Self.downsample(CGImageSourceCreateWithData(thumbnail as CFData, nil), pixels: maximumPixels)
+            }.value
+            try Task.checkCancellation()
+            guard let bitmap else { throw CocoaError(.fileReadCorruptFile) }
+            return remember(bitmap, key: key, version: version)
+        }
+
         let file = try await download(photo, accessToken: token)
         defer { try? FileManager.default.removeItem(at: file) }
         try Task.checkCancellation()
-        let bitmap = await Task.detached(priority: .utility) {
-            guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil as CGImage? }
-            return CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maximumPixels
-            ] as CFDictionary)
+        let gridKey = (prefix + String(gridSize)) as NSString
+        let needsGridPreview = maximumPixels > gridSize && cache.object(forKey: gridKey) == nil
+        let bitmaps = await Task.detached(priority: .utility) {
+            let source = CGImageSourceCreateWithURL(file as CFURL, nil)
+            return (Self.downsample(source, pixels: maximumPixels),
+                    needsGridPreview ? Self.downsample(source, pixels: gridSize) : nil)
         }.value
         try Task.checkCancellation()
-        guard let bitmap else { throw CocoaError(.fileReadCorruptFile) }
+        guard let bitmap = bitmaps.0 else { throw CocoaError(.fileReadCorruptFile) }
+        if let thumbnail = bitmaps.1 { _ = remember(thumbnail, key: gridKey, version: version) }
+        return remember(bitmap, key: key, version: version)
+    }
+
+    private func remember(_ bitmap: CGImage, key: NSString, version: UUID) -> UIImage {
         let image = UIImage(cgImage: bitmap)
         if revision == version { cache.setObject(image, forKey: key, cost: bitmap.bytesPerRow * bitmap.height) }
         return image
+    }
+
+    nonisolated private static func downsample(_ source: CGImageSource?, pixels: Int) -> CGImage? {
+        guard let source else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: pixels
+        ] as CFDictionary)
     }
 
     private func acquireDownload() async {
@@ -558,7 +608,7 @@ private struct ArchiveGalleryImage: View {
             .clipped()
         }
         .aspectRatio(fullView ? nil : 1, contentMode: .fit)
-        .task(id: "\(images.revision):\(photo.id):\(retry)") {
+        .task(id: "\(images.revision):\(photo.id):\(photo.revision ?? ""):\(retry)") {
             failed = false
             image = nil
             do {

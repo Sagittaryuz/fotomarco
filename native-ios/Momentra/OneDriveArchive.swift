@@ -8,6 +8,7 @@ struct OneDriveArchive {
         let id: String
         let name: String
         let date: Date?
+        let revision: String?
     }
 
     struct Page {
@@ -60,7 +61,7 @@ struct OneDriveArchive {
 
     private static let graph = URL(string: "https://graph.microsoft.com/v1.0/me/drive")!
     private static let fields = URLQueryItem(name: "$select",
-        value: "id,name,size,file,folder,parentReference,createdDateTime")
+        value: "id,name,size,file,folder,parentReference,createdDateTime,eTag")
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
@@ -160,7 +161,7 @@ struct OneDriveArchive {
             guard item.file != nil, item.folder == nil, item.parentReference?.id == folder,
                   Self.validID(item.id), Self.validName(item.name) else { return nil }
             let date = item.createdDateTime.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
-            return Item(id: item.id, name: item.name, date: date)
+            return Item(id: item.id, name: item.name, date: date, revision: item.eTag)
         }
         let next = listing.nextLink.flatMap { Self.paginationURL($0, folder: folder)?.absoluteString }
         if listing.nextLink != nil && next == nil { throw Failure.invalidResponse }

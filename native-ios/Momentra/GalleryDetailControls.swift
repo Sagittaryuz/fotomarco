@@ -13,7 +13,7 @@ struct GalleryDetailHeader<Actions: View>: View {
             Button(action: close) {
                 Image(systemName: "chevron.left").font(.body.weight(.semibold))
                     .frame(width: 44, height: 44)
-                    .modifier(GalleryControlSurface(tint: .yellow))
+                    .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
             }
             .accessibilityLabel("Voltar à galeria")
             Spacer(minLength: 0)
@@ -26,14 +26,14 @@ struct GalleryDetailHeader<Actions: View>: View {
                 }
             }
             .padding(.horizontal, 20).frame(minHeight: 44)
-            .modifier(GalleryControlSurface())
+            .modifier(GalleryControlSurface(rounded: true))
             .accessibilityElement(children: .combine)
             .accessibilityHint("\(position) de \(count)")
             Spacer(minLength: 0)
             if let overview {
                 Button(action: overview) {
                     Image(systemName: "square.grid.3x3").frame(width: 44, height: 44)
-                        .modifier(GalleryControlSurface())
+                        .modifier(GalleryControlSurface(rounded: true))
                 }
                 .accessibilityLabel("Mostrar grade")
             }
@@ -74,7 +74,7 @@ struct GalleryTrashButton: View {
     var body: some View {
         Button { showingConfirmation = true } label: {
             Image(systemName: "trash").frame(width: 44, height: 44)
-                .modifier(GalleryControlSurface())
+                .modifier(GalleryControlSurface(rounded: true))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

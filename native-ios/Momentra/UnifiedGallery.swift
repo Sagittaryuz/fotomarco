@@ -11,9 +11,16 @@ struct OriginalsView: View {
     @AppStorage("native.gallery.favoriteCloudKeys") private var cloudFavorites = Data()
     @State private var deviceFavorites: [String: Bool] = [:]
     @State private var local: [GalleryItem] = []
+    @State private var trackedPhotos: [GalleryItem] = []
+    @State private var favoritePhotos: [GalleryItem] = []
     @State private var localTrash: [GalleryItem] = []
     @State private var remote: [GalleryItem] = []
     @State private var remoteTrash: [GalleryItem] = []
+    @State private var cloudPages: [CloudDeliveryPlan.Destination: GalleryCloudItem.Page] = [:]
+    @State private var projection = GalleryProjection()
+    @State private var projectionVersion = 0
+    @State private var catalogLoaded = false
+    @State private var cloudRefresh = 0
     @State private var tab: Tab = .captures
     @State private var origin: GalleryOrigin?
     @State private var profile: UUID?
@@ -52,35 +59,43 @@ struct OriginalsView: View {
         var id: Self { self }
     }
 
-    private var visibleItems: [GalleryItem] {
-        let items = tab == .trash ? localTrash + remoteTrash : local + remote
-        let captures = Self.decode(captureFavorites)
-        let cloud = Self.decode(cloudFavorites)
-        return items.filter {
+    private struct GalleryProjection {
+        var items: [GalleryItem] = []
+        var sections: [GalleryGroup<GalleryItem>] = []
+    }
+
+    private func updateProjection() {
+        let photos = tab == .favorites ? favoritePhotos : trackedPhotos
+        let source = tab == .trash ? localTrash + remoteTrash : local + remote + photos
+        let captures = tab == .favorites ? Self.decode(captureFavorites) : []
+        let cloud = tab == .favorites ? Self.decode(cloudFavorites) : []
+        let items = source.filter {
             (origin == nil || $0.origin == origin) && (profile == nil || $0.profile?.id == profile) &&
             (tab != .favorites || $0.isFavorite(in: captures, cloud: cloud, device: deviceFavorites))
         }.sorted {
             if $0.date == $1.date { return $0.id < $1.id }
             return ($0.date ?? .distantPast) < ($1.date ?? .distantPast)
         }
+        let sections = GalleryGrouping.groups(items, date: \.date, profile: { _ in nil }).reversed().map {
+            GalleryGroup(date: $0.date, profile: nil, items: $0.items, showsProfile: false)
+        }
+        projection = GalleryProjection(items: items, sections: sections)
+        projectionVersion += 1
     }
 
     var body: some View {
-        let items = visibleItems
-        let groups = GalleryGrouping.groups(items, date: \.date, profile: { _ in nil }).reversed().map {
-            GalleryGroup(date: $0.date, profile: nil, items: $0.items, showsProfile: false)
-        }
+        let items = projection.items
         VStack(spacing: 0) {
             header(total: items.count, latest: items.last?.date)
-            if tab == .captures {
-                ScrollView {
-                    GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true)
-                }
-                .scrollIndicators(.hidden)
-                .frame(height: min(CGFloat(archive.accounts.count + 1) * 24, 76))
+            ScrollView {
+                GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true)
             }
+            .scrollIndicators(.hidden)
+            .frame(height: tab == .captures ? min(CGFloat(archive.accounts.count + 1) * 29 + 12, 99) : 0)
+            .clipped()
+            .accessibilityHidden(tab != .captures)
             if cloudError, origin != .local {
-                Button { reloadVersion += 1 } label: {
+                Button { cloudRefresh += 1 } label: {
                     Label("Algumas contas estão indisponíveis. Tentar novamente", systemImage: "arrow.clockwise")
                         .font(.caption).lineLimit(2)
                 }
@@ -92,8 +107,8 @@ struct OriginalsView: View {
             if items.isEmpty {
                 emptyState
             } else {
-                GalleryGrid(groups: groups, selecting: $selecting, selected: $selected, columns: $columns,
-                            newestScrollRequest: scrollRequest, tile: tile,
+                GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
+                            contentVersion: projectionVersion, newestScrollRequest: scrollRequest, tile: tile,
                             open: open, longPress: tab == .trash ? nil : { quickShare = $0 })
                     .accessibilityIdentifier("momentra-gallery-grid")
             }
@@ -106,7 +121,10 @@ struct OriginalsView: View {
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .task(id: reloadVersion) { await reload() }
+        .task(id: reloadVersion) { await reloadLocal() }
+        .task(id: CatalogRequest(trash: tab == .trash, destinations: archive.accounts.map(\.id), refresh: cloudRefresh)) {
+            await reloadCloud(trash: tab == .trash)
+        }
         .onChange(of: archive.accounts.map(\.id)) { _, destinations in
             remote.removeAll { item in
                 if case .cloud(let cloud) = item.source { return !destinations.contains(cloud.destination) }
@@ -116,23 +134,34 @@ struct OriginalsView: View {
                 if case .cloud(let cloud) = item.source { return !destinations.contains(cloud.destination) }
                 return false
             }
-            reloadVersion += 1
+            cloudPages = cloudPages.filter { destinations.contains($0.key) }
+            catalogLoaded = false
+            updateProjection()
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { reloadVersion += 1 } }
-        .onChange(of: tab) { oldTab, newTab in
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { reloadVersion += 1; cloudRefresh += 1 }
+        }
+        .onChange(of: tab) { _, _ in
             resetSelection()
             scrollRequest += 1
-            if oldTab == .trash || newTab == .trash { reloadVersion += 1 }
+            updateProjection()
+            reloadVersion += 1
         }
-        .onChange(of: origin) { _, _ in resetSelection(); scrollRequest += 1 }
-        .onChange(of: profile) { _, _ in resetSelection(); scrollRequest += 1 }
+        .onChange(of: origin) { _, _ in resetSelection(); scrollRequest += 1; updateProjection() }
+        .onChange(of: profile) { _, _ in resetSelection(); scrollRequest += 1; updateProjection() }
+        .onChange(of: captureFavorites) { _, _ in if tab == .favorites { updateProjection() } }
+        .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .fullScreenCover(item: $detail, onDismiss: detailDismissed) { item in
             MomentraGalleryDetail(items: detailItems(fallback: item), initial: item,
                                   profiles: stampProfiles.profiles,
                                   isFavorite: isFavorite, favorite: toggleFavorite,
                                   onTrash: { item in
                                       local.removeAll { $0.id == item.id }
+                                      trackedPhotos.removeAll { $0.id == item.id }
+                                      favoritePhotos.removeAll { $0.id == item.id }
                                       remote.removeAll { $0.id == item.id }
+                                      updateProjection()
+                                      if item.origin != .local { cloudRefresh += 1 }
                                   },
                                   onSavedCopy: { reloadVersion += 1 },
                                   returnToCamera: { leavingToCamera = true; detail = nil })
@@ -174,7 +203,7 @@ struct OriginalsView: View {
             HStack(spacing: 8) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.down").frame(width: 44, height: 44)
-                        .modifier(GalleryControlSurface())
+                        .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Fechar galeria")
                 Text(tab.rawValue).font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.65)
                     .accessibilityAddTraits(.isHeader)
@@ -199,7 +228,7 @@ struct OriginalsView: View {
                     } label: {
                         Text(selecting ? "Cancelar" : "Selecionar").font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 12).frame(minHeight: 42)
-                            .modifier(GalleryControlSurface())
+                            .modifier(GalleryControlSurface(rounded: true))
                     }.disabled(busy)
                 }
             }
@@ -223,7 +252,7 @@ struct OriginalsView: View {
             }
         } label: {
             Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
-                .modifier(GalleryControlSurface(tint: origin == nil ? .primary : .yellow))
+                .modifier(GalleryControlSurface(rounded: true, tint: origin == nil ? .primary : .yellow))
         }
         .accessibilityLabel("Filtrar por origem")
         .accessibilityValue(origin?.title ?? "Todos")
@@ -239,7 +268,7 @@ struct OriginalsView: View {
             }
         } label: {
             Image(systemName: "person.crop.circle").frame(width: 44, height: 44)
-                .modifier(GalleryControlSurface(tint: profile == nil ? .primary : .yellow))
+                .modifier(GalleryControlSurface(rounded: true, tint: profile == nil ? .primary : .yellow))
         }
         .accessibilityLabel("Filtrar por perfil")
     }
@@ -259,17 +288,17 @@ struct OriginalsView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .foregroundStyle(tab == choice ? .yellow : .white)
-                        .background(tab == choice ? Color.white.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 13))
+                        .background(tab == choice ? Color.white.opacity(0.08) : .clear, in: Capsule())
                     }
                     .accessibilityLabel(choice.rawValue)
                     .accessibilityAddTraits(tab == choice ? .isSelected : [])
                 }
             }
-            .padding(4).modifier(GalleryControlSurface(interactive: false))
+            .padding(5).modifier(GalleryControlSurface(rounded: true, interactive: false))
             Button { pane = .search } label: {
                 Image(systemName: "magnifyingglass").font(.title3.weight(.medium))
                     .frame(width: 54, height: 54)
-                    .modifier(GalleryControlSurface(tint: .yellow))
+                    .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
             }.accessibilityLabel("Buscar")
         }
         .buttonStyle(.plain)
@@ -339,7 +368,7 @@ struct OriginalsView: View {
     }
 
     private func detailItems(fallback: GalleryItem) -> [GalleryItem] {
-        let items = visibleItems
+        let items = projection.items
         return items.contains { $0.id == fallback.id } ? items : [fallback]
     }
 
@@ -359,49 +388,81 @@ struct OriginalsView: View {
 
     private func resetSelection() { selecting = false; selected.removeAll() }
 
-    private func reload() async {
+    private struct CatalogRequest: Equatable {
+        let trash: Bool
+        let destinations: [CloudDeliveryPlan.Destination]
+        let refresh: Int
+    }
+
+    private func reloadLocal() async {
         loading = true
         defer { if !Task.isCancelled { loading = false } }
-        let source = await Task.detached(priority: .utility) {
-            (PhotoProfileIndex.load(), try? OriginalStore.files(), try? OriginalStore.files(inTrash: true))
-        }.value
-        guard !Task.isCancelled else { return }
-        let lookup = source.0
-        if let files = source.1 {
-            local = files.map { Self.capture($0, lookup: lookup) }
-            authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            if authorization == .authorized || authorization == .limited {
-                let options = PHFetchOptions()
-                options.predicate = NSPredicate(format: "mediaType IN %@", [PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue])
-                let assets = PHAsset.fetchAssets(with: options)
-                var photos: [GalleryItem] = []
-                assets.enumerateObjects { asset, _, _ in
-                    photos.append(GalleryItem(source: .device(asset), date: asset.creationDate,
-                                              profile: lookup.assets[asset.localIdentifier]))
-                }
-                local.append(contentsOf: photos)
+        let activeTab = tab
+        let source = await Task.detached(priority: .utility) { () -> (files: [GalleryItem], photos: [GalleryItem])? in
+            let lookup = PhotoProfileIndex.load()
+            guard let files = try? OriginalStore.files(inTrash: activeTab == .trash) else { return nil }
+            let items = files.map { Self.capture($0, lookup: lookup) }
+            if activeTab == .trash { return (items, []) }
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            guard status == .authorized || status == .limited else { return (items, []) }
+            let options = PHFetchOptions()
+            let imageTypes = [PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue]
+            let assets: PHFetchResult<PHAsset>
+            if activeTab == .favorites {
+                options.predicate = NSPredicate(format: "favorite == YES AND mediaType IN %@", imageTypes)
+                assets = PHAsset.fetchAssets(with: options)
+            } else {
+                let ids = Array(lookup.assets.keys)
+                guard !ids.isEmpty else { return (items, []) }
+                options.predicate = NSPredicate(format: "mediaType IN %@", imageTypes)
+                assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: options)
             }
+            var photos: [GalleryItem] = []
+            photos.reserveCapacity(assets.count)
+            assets.enumerateObjects { asset, _, _ in
+                photos.append(GalleryItem(source: .device(asset), date: asset.creationDate,
+                                         profile: lookup.assets[asset.localIdentifier]))
+            }
+            return (items, photos)
+        }.value
+        guard !Task.isCancelled, activeTab == tab, let source else { return }
+        authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        let wasEmpty = projection.items.isEmpty
+        if activeTab == .trash {
+            localTrash = source.files
+        } else {
+            local = source.files
+            if activeTab == .favorites { favoritePhotos = source.photos }
+            else { trackedPhotos = source.photos }
         }
-        if let files = source.2 { localTrash = files.map { Self.capture($0, lookup: lookup) } }
-        if remote.isEmpty { scrollRequest += 1 }
+        updateProjection()
+        if wasEmpty { scrollRequest += 1 }
+    }
+
+    private func reloadCloud(trash: Bool) async {
         let accounts = archive.accounts
-        let showingTrash = tab == .trash
-        if accounts.isEmpty { remote = []; remoteTrash = []; cloudError = false; return }
+        let refresh = cloudRefresh
+        if !trash && catalogLoaded && refresh == lastCatalogRefresh { return }
+        guard !accounts.isEmpty else { remote = []; remoteTrash = []; cloudError = false; updateProjection(); return }
+        let lookup = await Task.detached(priority: .utility) { PhotoProfileIndex.load() }.value
+        guard !Task.isCancelled else { return }
         var results: [GalleryItem] = []
         var failed = false
         for account in accounts {
             do {
                 var next: String?
-                var prior: GalleryCloudItem.Page?
+                var prior = cloudPages[account.id]
                 var seen: Set<String> = []
                 repeat {
                     try Task.checkCancellation()
                     let page: GalleryCloudItem.Page
-                    if showingTrash {
+                    if trash {
                         page = try await GalleryCloudItem.loadTrash(for: account, pageToken: next, reusing: prior)
                     } else {
                         page = try await GalleryCloudItem.load(for: account, pageToken: next, reusing: prior)
                     }
+                    try Task.checkCancellation()
+                    if next == nil { cloudPages[account.id] = page }
                     results.append(contentsOf: page.items.map {
                         GalleryItem(source: .cloud($0), date: $0.captureDate(lookup: lookup), profile: $0.profileTag(lookup: lookup))
                     })
@@ -411,17 +472,32 @@ struct OriginalsView: View {
             } catch {
                 if Task.isCancelled { return }
                 failed = true
+                results += (trash ? remoteTrash : remote).filter {
+                    if case .cloud(let cloud) = $0.source { return cloud.destination == account.id }
+                    return false
+                }
             }
         }
         guard !Task.isCancelled else { return }
         var ids = Set<String>()
         let unique = results.filter { ids.insert($0.id).inserted }
-        if showingTrash { remoteTrash = unique } else { remote = unique }
+        let wasEmpty = projection.items.isEmpty
+        if trash {
+            remoteTrash = unique
+        } else {
+            remote = unique
+            catalogLoaded = true
+            lastCatalogRefresh = refresh
+        }
         cloudError = failed
-        scrollRequest += 1
+        updateProjection()
+        if wasEmpty || !selecting && openedAtNewest { scrollRequest += 1; openedAtNewest = false }
     }
 
-    private static func capture(_ item: OriginalFile, lookup: PhotoProfileLookup) -> GalleryItem {
+    @State private var lastCatalogRefresh = -1
+    @State private var openedAtNewest = true
+
+    nonisolated private static func capture(_ item: OriginalFile, lookup: PhotoProfileLookup) -> GalleryItem {
         let id = UUID(uuidString: item.url.deletingPathExtension().lastPathComponent)
         return GalleryItem(source: .capture(item), date: id.flatMap { lookup.dates[$0] } ?? item.date,
                            profile: id.flatMap { lookup.captures[$0] })
@@ -447,6 +523,7 @@ struct OriginalsView: View {
                 PHAssetChangeRequest(for: asset).isFavorite = value
             }
             deviceFavorites[asset.localIdentifier] = value
+            if tab == .favorites { updateProjection() }
         }
     }
 
@@ -495,8 +572,12 @@ struct OriginalsView: View {
             }
             if !deleted.isEmpty {
                 local.removeAll { deleted.contains($0.id) }
+                trackedPhotos.removeAll { deleted.contains($0.id) }
+                favoritePhotos.removeAll { deleted.contains($0.id) }
                 remote.removeAll { deleted.contains($0.id) }
                 resetSelection()
+                updateProjection()
+                if chosen.contains(where: { $0.origin != .local && deleted.contains($0.id) }) { cloudRefresh += 1 }
             }
             if failed { message = "Alguns itens não puderam ser movidos. Verifique as permissões e os envios pendentes." }
             reloadVersion += 1
@@ -513,6 +594,8 @@ struct OriginalsView: View {
                 localTrash.removeAll { $0.id == item.id }
                 remoteTrash.removeAll { $0.id == item.id }
                 trashItem = nil
+                updateProjection()
+                if item.origin != .local { catalogLoaded = false; cloudRefresh += 1 }
                 reloadVersion += 1
             } catch { message = "Não foi possível restaurar este item." }
         }

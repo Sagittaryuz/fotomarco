@@ -13,15 +13,19 @@ final class LiveRecognitionEngine: NSObject, ObservableObject, AVCaptureVideoDat
     @Published private(set) var item: LiveRecognizedItem?
     @Published private(set) var available = true
     let queue = DispatchQueue(label: "br.com.momentra.recognition", qos: .utility)
-    private var qrEnabled = true
-    private var textEnabled = true
+    private var qrEnabled = false
+    private var textEnabled = false
     private var lastScan = Date.distantPast
     private var misses = 0
 
     func setEnabled(qr: Bool, text: Bool) {
         queue.async {
-            self.qrEnabled = qr; self.textEnabled = text
-            if !qr && !text { DispatchQueue.main.async { self.item = nil } }
+            guard self.qrEnabled != qr || self.textEnabled != text else { return }
+            self.qrEnabled = qr
+            self.textEnabled = text
+            self.lastScan = .distantPast
+            self.misses = 0
+            DispatchQueue.main.async { if self.item != nil { self.item = nil } }
         }
     }
 
