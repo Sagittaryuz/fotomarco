@@ -433,7 +433,7 @@ struct CameraScreen: View {
                         Color.clear.frame(height: 190)
                     } else {
                     HStack(spacing: 10) {
-                        Button { showOriginals = true } label: {
+                        Button { openGallery() } label: {
                             Group {
                                 if let galleryThumbnail {
                                     Image(uiImage: galleryThumbnail).resizable().scaledToFill()
@@ -659,6 +659,12 @@ struct CameraScreen: View {
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
+    }
+
+    private func openGallery() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { showOriginals = true }
     }
 
     private var archiveSettingsSection: some View {

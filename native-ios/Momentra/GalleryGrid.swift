@@ -32,6 +32,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     let open: (Item) -> Void
     var longPress: ((Item) -> Void)? = nil
     var reachedEnd: (() -> Void)? = nil
+    var dragToCamera: ((CGFloat, Bool) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -63,6 +64,14 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         hold.numberOfTouchesRequired = 1
         hold.delegate = context.coordinator
         view.addGestureRecognizer(hold)
+        if dragToCamera != nil {
+            let swipe = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.cameraSwipe(_:)))
+            swipe.maximumNumberOfTouches = 1
+            swipe.delegate = context.coordinator
+            context.coordinator.cameraSwipeRecognizer = swipe
+            view.addGestureRecognizer(swipe)
+            view.panGestureRecognizer.require(toFail: swipe)
+        }
         context.coordinator.collection = view
         return view
     }
@@ -96,6 +105,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate {
         var parent: GalleryGrid
         weak var collection: UICollectionView?
+        weak var cameraSwipeRecognizer: UIPanGestureRecognizer?
         private var dragOrigin: IndexPath?
         private var dragInitial: Set<Item.ID> = []
         private var dragAdds = true
@@ -224,6 +234,10 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         }
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let collection else { return false }
+            if let swipe = cameraSwipeRecognizer, gestureRecognizer === swipe {
+                let velocity = swipe.velocity(in: collection)
+                return !parent.selecting && parent.dragToCamera != nil && -velocity.x > abs(velocity.y) * 1.35
+            }
             if gestureRecognizer is UIPinchGestureRecognizer { return !parent.selecting }
             guard collection.indexPathForItem(at: gestureRecognizer.location(in: collection)) != nil else { return false }
             if gestureRecognizer is UILongPressGestureRecognizer { return !parent.selecting && parent.longPress != nil }
@@ -231,6 +245,16 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
             gestureRecognizer is UIPinchGestureRecognizer
+        }
+        @objc func cameraSwipe(_ swipe: UIPanGestureRecognizer) {
+            // The collection moves during this gesture. Measure the finger in fixed window coordinates.
+            let distance = -swipe.translation(in: swipe.view?.window).x
+            switch swipe.state {
+            case .began, .changed: parent.dragToCamera?(distance, false)
+            case .ended: parent.dragToCamera?(distance, true)
+            case .cancelled, .failed: parent.dragToCamera?(0, true)
+            default: break
+            }
         }
         @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
             guard gesture.state == .ended else { return }

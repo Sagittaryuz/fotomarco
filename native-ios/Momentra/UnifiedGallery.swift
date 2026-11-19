@@ -5,6 +5,7 @@ struct OriginalsView: View {
     @ObservedObject var stampProfiles: StampProfilesStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption2) private var storageBandHeight = 44.0
     @StateObject private var archive = CloudArchiveAccounts.shared
     @AppStorage("native.gallery.favoriteCaptureKeys") private var captureFavorites = Data()
@@ -43,6 +44,11 @@ struct OriginalsView: View {
     @State private var authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     @State private var reloadVersion = 0
     @State private var scrollRequest = 0
+    @State private var galleryVisible = false
+    @State private var galleryDrag = CGSize.zero
+    @State private var galleryExit: ExitDirection?
+
+    private enum ExitDirection { case left, down }
 
     private enum Tab: String, CaseIterable {
         case captures = "Capturas", favorites = "Favoritos", trash = "Lixeira"
@@ -86,9 +92,31 @@ struct OriginalsView: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            let distance = max(abs(galleryDrag.width), abs(galleryDrag.height))
+            let dragOpacity = 1 - min(0.22, Double(distance) / 650)
+            galleryContent
+                .blur(radius: reduceMotion ? 0 : !galleryVisible || galleryExit != nil ? 16 : min(9, distance / 20))
+                .opacity(reduceMotion ? 1 : !galleryVisible || galleryExit != nil ? 0 : dragOpacity)
+                .offset(x: galleryExit == .left ? -geometry.size.width - 30 : galleryDrag.width,
+                        y: galleryExit == .down ? geometry.size.height + 30 : galleryDrag.height)
+                .allowsHitTesting(galleryExit == nil)
+        }
+        .presentationBackground(.clear)
+        .task {
+            guard !galleryVisible else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.26)) { galleryVisible = true }
+        }
+    }
+
+    private var galleryContent: some View {
         let items = projection.items
         VStack(spacing: 0) {
             header(total: items.count, latest: items.last?.date)
+                .contentShape(Rectangle())
+                .simultaneousGesture(gallerySwipe(toward: .down))
             GalleryCapacitySummary(section: 0, accounts: archive.accounts, compact: true,
                                    syncingCatalog: cloudSyncing, syncingQuota: $quotaSyncing,
                                    refresh: cloudActivation + cloudRefresh)
@@ -107,11 +135,14 @@ struct OriginalsView: View {
             }
             if items.isEmpty {
                 emptyState
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(gallerySwipe(toward: .left))
             } else {
                 GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
                             contentVersion: projectionVersion, newestScrollRequest: scrollRequest, tile: tile,
                             open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
-                            reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil)
+                            reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
+                            dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) })
                     .accessibilityIdentifier("momentra-gallery-grid")
             }
             if selecting {
@@ -207,7 +238,7 @@ struct OriginalsView: View {
     private func header(total: Int, latest: Date?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Button { dismiss() } label: {
+                Button { closeGallery(toward: .down) } label: {
                     Image(systemName: "chevron.down").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Fechar galeria")
@@ -386,6 +417,46 @@ struct OriginalsView: View {
     }
 
     private func resetSelection() { selecting = false; selected.removeAll() }
+
+    private func gallerySwipe(toward direction: ExitDirection) -> some Gesture {
+        DragGesture(minimumDistance: 14, coordinateSpace: .global)
+            .onChanged { trackSwipe(swipeDistance($0.translation, toward: direction), toward: direction, ended: false) }
+            .onEnded { trackSwipe(swipeDistance($0.translation, toward: direction), toward: direction, ended: true) }
+    }
+
+    private func swipeDistance(_ translation: CGSize, toward direction: ExitDirection) -> CGFloat {
+        let primary = direction == .left ? -translation.width : translation.height
+        let cross = direction == .left ? translation.height : translation.width
+        return primary > abs(cross) * 1.35 ? primary : 0
+    }
+
+    private func trackSwipe(_ distance: CGFloat, toward direction: ExitDirection, ended: Bool) {
+        guard !busy, !selecting, galleryExit == nil else { return }
+        if ended {
+            if distance >= 82 { closeGallery(toward: direction) }
+            else { withAnimation(.easeOut(duration: 0.19)) { galleryDrag = .zero } }
+        } else if !reduceMotion {
+            let movement = min(220, max(0, distance) * 0.76)
+            galleryDrag = direction == .left ? CGSize(width: -movement, height: 0) : CGSize(width: 0, height: movement)
+        }
+    }
+
+    private func closeGallery(toward direction: ExitDirection) {
+        guard galleryExit == nil else { return }
+        if reduceMotion { dismissWithoutAnimation(); return }
+        withAnimation(.easeInOut(duration: 0.24), completionCriteria: .logicallyComplete) {
+            galleryExit = direction
+            galleryDrag = .zero
+        } completion: {
+            dismissWithoutAnimation()
+        }
+    }
+
+    private func dismissWithoutAnimation() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { dismiss() }
+    }
 
     private func refreshFromEnd() {
         guard !cloudSyncing, !quotaSyncing, cloudRefresh == lastCatalogRefresh else { return }
