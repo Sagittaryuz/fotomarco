@@ -34,6 +34,8 @@ Em 20/11, o teste `testGalleryCatalogMeasurement` passou na revisão de app `999
 
 A candidata 0.1.27 (`c9e5fab`) solicita a partida da sessão antes dos preparativos secundários da tela e evita reconstruir a projeção quando os metadados remotos permanecem iguais. Passaram 176 testes nativos e a medição da grade no simulador registrou 9.598, 1.709 e 1.688 ms ([execução](https://github.com/Sagittaryuz/momentra/actions/runs/44667303036)). Os executores são diferentes e há apenas três repetições; os números não comprovam ganho ou regressão. A medição da câmera e a validação da atualização dependem de aparelho real. A primeira execução do teste de gesto de atualização da nuvem falhou ([execução](https://github.com/Sagittaryuz/momentra/actions/runs/44667410875)); comparação com a revisão anterior e repetição da candidata foram iniciadas, sem conclusão nesta anotação.
 
+Na repetição, o teste de sincronização passou tanto na [versão anterior](https://github.com/Sagittaryuz/momentra/actions/runs/44669544046) quanto na [candidata](https://github.com/Sagittaryuz/momentra/actions/runs/44669543890). A primeira falha permanece registrada como intermitência observada; verificar o gesto no iPhone.
+
 ## Referências Apple
 
 - [Especificações do iPhone 17 Pro](https://support.apple.com/en-us/125090)
