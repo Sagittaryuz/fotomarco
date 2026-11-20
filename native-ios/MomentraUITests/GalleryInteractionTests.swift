@@ -547,6 +547,20 @@ final class GalleryInteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Abrir capturas"].isHittable)
     }
 
+    func testReturningFromPhotoOpensNextPhotoWithOneTap() {
+        let app = launch()
+        openCapture(app)
+        let back = app.buttons["Voltar à galeria"]
+        let grid = app.collectionViews["momentra-gallery-grid"]
+        for index in [1, 2, 0] {
+            back.tap()
+            XCTAssertTrue(back.waitForNonExistence(timeout: 8))
+            XCTAssertTrue(grid.waitForExistence(timeout: 8))
+            grid.cells.element(boundBy: index).tap()
+            XCTAssertTrue(back.waitForExistence(timeout: 8), "A próxima foto deve abrir com um único toque.")
+        }
+    }
+
     func testGalleryReturnsToCameraWithHorizontalAndHeaderGestures() {
         let app = launch()
         let entry = app.buttons["Abrir capturas"]
