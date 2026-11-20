@@ -206,6 +206,38 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawShippingTemplate(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        context.saveGState(); defer { context.restoreGState() }
+        let banner = CGRect(x: box.minX, y: box.minY, width: box.width * 0.9, height: box.height * 0.34)
+        context.setFillColor(UIColor.white.withAlphaComponent(0.95).cgColor); context.fill(banner)
+        let code = CGRect(x: banner.minX, y: banner.minY, width: banner.width * 0.38, height: banner.height)
+        context.setFillColor(UIColor.systemYellow.cgColor); context.fill(code)
+        ((content.customFields["Código"] ?? "") as NSString).draw(in: code.insetBy(dx: code.width * 0.04, dy: code.height * 0.12),
+            withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.47, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
+        (content.time as NSString).draw(in: CGRect(x: banner.minX + banner.width * 0.40, y: banner.minY + banner.height * 0.1, width: banner.width * 0.35, height: banner.height * 0.8),
+            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.55, weight: .bold), .foregroundColor: UIColor.systemBlue, .paragraphStyle: paragraph])
+        let imageBox = CGRect(x: banner.minX + banner.width * 0.77, y: banner.minY + banner.height * 0.08, width: banner.width * 0.21, height: banner.height * 0.84)
+        if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
+            let factor = min(imageBox.width / logo.size.width, imageBox.height / logo.size.height)
+            let fitted = CGSize(width: logo.size.width * factor, height: logo.size.height * factor)
+            logo.draw(in: CGRect(x: imageBox.midX - fitted.width / 2, y: imageBox.midY - fitted.height / 2, width: fitted.width, height: fitted.height))
+        }
+        let bodyY = banner.maxY + box.height * 0.06
+        context.setFillColor(UIColor.systemYellow.cgColor)
+        context.fill(CGRect(x: box.minX, y: bodyY, width: max(1, box.width * 0.008), height: box.maxY - bodyY))
+        let eta = content.customFields["Previsão de entrega"].map { "Previsão: " + $0 } ?? ""
+        let lines = [content.date, eta, content.address ?? ""]
+        for index in lines.indices {
+            (lines[index] as NSString).draw(in: CGRect(x: box.minX + box.width * 0.04, y: bodyY + CGFloat(index) * box.height * 0.18, width: box.width * 0.95, height: box.height * 0.18),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func drawPortrait(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -781,6 +813,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .portrait {
                 fits = drawPortrait(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .shopee {
+                fits = drawShippingTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {

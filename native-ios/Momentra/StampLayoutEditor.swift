@@ -140,6 +140,7 @@ struct StampLayoutEditor: View {
                 Text("Prova de entrega").tag(StampLayout.Template.deliveryProof)
                 Text("Inspeção").tag(StampLayout.Template.inspection)
                 Text("Retrato").tag(StampLayout.Template.portrait)
+                Text("Shopee").tag(StampLayout.Template.shopee)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
