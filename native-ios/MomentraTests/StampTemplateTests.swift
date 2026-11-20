@@ -2,6 +2,14 @@ import XCTest
 @testable import Momentra
 
 final class StampTemplateTests: XCTestCase {
+    func testFixedTemplateFieldsWarnForValuesThatExceedTheirRenderedWidth() {
+        for template in StampLayout.Template.allCases {
+            for field in template.fields {
+                XCTAssertTrue(StampRenderer.customFieldFits("A", field: field, template: template), "\(template.rawValue).\(field)")
+                XCTAssertFalse(StampRenderer.customFieldFits(String(repeating: "W", count: 96), field: field, template: template), "\(template.rawValue).\(field)")
+            }
+        }
+    }
     func testMapPreferencesStayIndependentWhenChangingTemplates() throws {
         var layout = StampLayout()
         layout.showsMap = false

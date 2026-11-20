@@ -207,6 +207,10 @@ struct StampLayoutEditor: View {
                             get: { layout.wrappedValue.templateValue(field) },
                             set: { value in var next = layout.wrappedValue; next.setTemplateValue(value, for: field); layout.wrappedValue = next }
                         )).textFieldStyle(.roundedBorder)
+                        if !StampRenderer.customFieldFits(layout.wrappedValue.templateValue(field), field: field, template: layout.wrappedValue.template) {
+                            Text("O texto é maior que o espaço deste modelo e será abreviado na imagem. Encurte-o para exibi-lo inteiro.")
+                                .font(.caption).foregroundStyle(.yellow)
+                        }
                     }
                 }.padding(10).modifier(GalleryControlSurface(interactive: false))
                 }.frame(maxHeight: 220)

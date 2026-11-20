@@ -224,6 +224,45 @@ enum StampRenderer {
         UIFont(name: bold ? "AvenirNextCondensed-DemiBold" : "AvenirNextCondensed-Regular", size: size)
             ?? UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
     }
+    /// Compare against the same fixed font and normalized box used by the renderer.
+    /// A warning preserves the complete saved value while making truncation visible.
+    static func customFieldFits(_ value: String, field: String, template: StampLayout.Template) -> Bool {
+        guard !value.isEmpty else { return true }
+        let w: CGFloat = 1000, h = w * 0.49
+        let font: UIFont
+        let width: CGFloat
+        var text = value
+        switch (template, field) {
+        case (.spreadsheet, "Título"):
+            font = condensedStampFont(size: h * 0.35 * 0.52, bold: true); width = w * 0.95
+        case (.workReport, "Projeto"), (.workReport, "Inspeção"):
+            font = condensedStampFont(size: h * 0.105, bold: true); width = w * 0.66
+        case (.visit, "Título"):
+            font = .systemFont(ofSize: h * 0.36 * 0.52, weight: .bold); width = w * 0.64 * 0.40
+        case (.clean, "Texto"), (.checkIn, "Título"):
+            font = .systemFont(ofSize: h * 0.33 * 0.46, weight: .bold); width = w * 0.84 * 0.55
+        case (.custom, "Título"):
+            font = .systemFont(ofSize: h * 0.17, weight: .bold); width = w
+        case (.patrol, "Título"):
+            font = .systemFont(ofSize: h * 0.21, weight: .bold); width = w * 0.88 - h * 0.27
+        case (.construction, "Título"):
+            font = .systemFont(ofSize: h * 0.17, weight: .bold); width = w * 0.92
+        case (.construction, "Descrição"):
+            font = .systemFont(ofSize: h * 0.12, weight: .bold); width = w * 0.58
+        case (.portrait, "Nome"):
+            font = .systemFont(ofSize: h * 0.10, weight: .medium); width = w * 0.30
+        case (.delivery, "Veículo"), (.delivery, "Encomenda"):
+            font = .systemFont(ofSize: h * 0.36 * 0.30, weight: .bold); width = w * 0.64 * 0.90 - h * 0.36 * 0.32
+        case (.inspection, "Título"):
+            font = .systemFont(ofSize: h * 0.12, weight: .medium); width = w * 0.91
+        case (.shopee, "Código"):
+            font = .systemFont(ofSize: h * 0.34 * 0.47, weight: .bold); width = w * 0.90 * 0.38 * 0.92
+        case (.shopee, "Previsão de entrega"):
+            font = .systemFont(ofSize: h * 0.12, weight: .medium); width = w * 0.95; text = "Previsão: " + value
+        default: return true
+        }
+        return (text as NSString).size(withAttributes: [.font: font]).width <= width
+    }
     static func drawPatrol(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
