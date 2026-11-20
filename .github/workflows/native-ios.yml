@@ -57,7 +57,7 @@ jobs:
           from pathlib import Path
           p = Path("native-ios/Momentra/CameraScreen.swift")
           source = p.read_text()
-          previous = "        .task { await updates.check() }"
+          previous = "        .statusBarHidden()"
           assert source.count(previous) == 1
           p.write_text(source.replace(previous, previous + "\n        .modifier(GalleryBenchmarkFixture())", 1))
           PYTHON
