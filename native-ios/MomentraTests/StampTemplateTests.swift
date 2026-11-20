@@ -12,6 +12,23 @@ final class StampTemplateTests: XCTestCase {
         XCTAssertEqual(layout.templateValues["workReport"]?["Projeto"], "Obra")
         XCTAssertLessThan(try JSONEncoder().encode(locked).count, 2000)
     }
+
+    func testLockedCaptureContextFitsAfterManyTemplatesAreCustomized() throws {
+        var layout = StampLayout()
+        for template in StampLayout.Template.allCases {
+            layout.template = template
+            for field in template.fields {
+                layout.setTemplateValue(String(repeating: "A", count: 96), for: field)
+            }
+        }
+        layout.template = .construction
+        XCTAssertGreaterThan(try JSONEncoder().encode(layout).count, 2000)
+        let data = try JSONEncoder().encode(layout.lockedCaptureLayout())
+        XCTAssertLessThanOrEqual(data.count, 2000)
+        let restored = try JSONDecoder().decode(StampLayout.self, from: data)
+        XCTAssertEqual(restored.templateValue("Descrição"), String(repeating: "A", count: 96))
+        XCTAssertEqual(layout.templateValues.count, StampLayout.Template.allCases.filter { !$0.fields.isEmpty }.count)
+    }
     func testExistingLayoutDecodesWithoutTemplateChanges() throws {
         let layout = try JSONDecoder().decode(StampLayout.self, from: Data("{}".utf8))
         XCTAssertEqual(layout.template, .original)
