@@ -9,6 +9,9 @@ final class StampSnapshotTests: XCTestCase {
         let date = StampRenderer.fittedFixedFont(UIFont.systemFont(ofSize: 30), sample: "88/88/8888", width: 100)
         XCTAssertLessThanOrEqual(("88:88" as NSString).size(withAttributes: [.font: clock]).width, 120)
         XCTAssertLessThanOrEqual(("88/88/8888" as NSString).size(withAttributes: [.font: date]).width, 100)
+        let sample = "88.88888°S, 188.88888°O"
+        let coordinates = StampRenderer.fittedFixedFont(UIFont.systemFont(ofSize: 24), sample: sample, width: 160)
+        XCTAssertLessThanOrEqual((sample as NSString).size(withAttributes: [.font: coordinates]).width, 160)
     }
     func testMapLoadingOnlyRunsForTemplatesThatUseMap() {
         var layout = StampLayout()

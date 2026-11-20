@@ -377,8 +377,11 @@ enum StampRenderer {
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         let lines = [content.coordinate ?? "", content.date + " " + content.time]
         for index in lines.indices {
+            let font = index == 0
+                ? fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), sample: "88.88888°S, 188.88888°O", width: strip.width * 0.67)
+                : UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium)
             (lines[index] as NSString).draw(in: CGRect(x: strip.minX + box.width * 0.04, y: strip.minY + CGFloat(index) * strip.height * 0.5, width: strip.width * 0.67, height: strip.height * 0.48),
-                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+                withAttributes: [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         }
         if let heading = snapshot.heading {
             let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
@@ -565,8 +568,11 @@ enum StampRenderer {
             }
             let lines = delivery ? [content.time + "  " + content.date, content.address ?? ""] : [content.date, content.address ?? "", content.coordinate ?? ""]
             for index in lines.indices {
+                let font = !delivery && index == 2
+                    ? fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), sample: "88.88888°S, 188.88888°O", width: column * 0.94)
+                    : UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium)
                 (lines[index] as NSString).draw(in: CGRect(x: box.minX + column * 0.03, y: top.maxY + box.height * (0.04 + CGFloat(index) * 0.19), width: column * 0.94, height: box.height * 0.18),
-                    withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+                    withAttributes: [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
             }
             return true
         }
@@ -577,8 +583,11 @@ enum StampRenderer {
         (content.date as NSString).draw(in: CGRect(x: box.minX + column * 0.72, y: box.minY + box.height * 0.14, width: column * 0.28, height: box.height * 0.23),
             withAttributes: [.font: fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.12, weight: .semibold), sample: "88/88/8888", width: column * 0.28), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         for (index, text) in [content.address ?? "", content.coordinate ?? ""].enumerated() {
+            let font = index == 1
+                ? fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), sample: "88.88888°S, 188.88888°O", width: column)
+                : UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium)
             (text as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * (0.57 + CGFloat(index) * 0.20), width: column, height: box.height * 0.18),
-                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+                withAttributes: [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         }
         return true
     }
@@ -640,8 +649,11 @@ enum StampRenderer {
         let lines = [location, detail, content.coordinate ?? "", content.date + " " + content.time]
         for index in lines.indices {
             let y = box.minY + box.height * (0.08 + CGFloat(index) * 0.21)
-            (lines[index] as NSString).draw(in: CGRect(x: box.minX + inset, y: y, width: index >= 2 ? available * 0.7 : available, height: box.height * 0.2),
-                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * (index == 0 ? 0.15 : 0.11), weight: index == 0 ? .medium : .regular), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            let width = index >= 2 ? available * 0.7 : available
+            let base = UIFont.systemFont(ofSize: box.height * (index == 0 ? 0.15 : 0.11), weight: index == 0 ? .medium : .regular)
+            let font = index == 2 ? fittedFixedFont(base, sample: "88.88888°S, 188.88888°O", width: width) : base
+            (lines[index] as NSString).draw(in: CGRect(x: box.minX + inset, y: y, width: width, height: box.height * 0.2),
+                withAttributes: [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         }
         if let heading = snapshot.heading {
             let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading

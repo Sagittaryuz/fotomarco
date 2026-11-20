@@ -737,6 +737,7 @@ struct CameraScreen: View {
                             HStack(spacing: 6) {
                                 ForEach(StampLayout.MapAppearance.allCases, id: \.self) { appearance in
                                     Button {
+                                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                                         mapAppearance = appearance
                                     } label: {
                                         Text(appearance == .map ? "Mapa" : "Satélite")
@@ -761,7 +762,7 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Mapa")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { showMap = false } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showMap = false } } }
             }
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
