@@ -87,13 +87,13 @@ struct MomentraPhotoEditor: View {
     private var header: some View {
         VStack(spacing: 8) {
             HStack {
-                Button("Cancelar") { if changed { confirmCancel = true } else { dismiss() } }
+                Button("Cancelar") { lightEditorTap(); if changed { confirmCancel = true } else { dismiss() } }
                     .buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.primary)
                     .disabled(saving)
                 Spacer()
                 Text("Editor Momentra").font(.headline).accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button("Salvar cópia", action: save)
+                Button("Salvar cópia") { lightEditorTap(); save() }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).tint(.yellow).foregroundStyle(.black)
                     .disabled(!changed || input == nil || saving)
             }
@@ -104,8 +104,9 @@ struct MomentraPhotoEditor: View {
                     Spacer()
                     icon("pencil.tip", label: "Marcação") { section = .tools; markup.toggle() }
                     Menu {
-                        Button(showingOriginal ? "Mostrar edição" : "Comparar com o original") { showingOriginal.toggle() }
+                        Button(showingOriginal ? "Mostrar edição" : "Comparar com o original") { lightEditorTap(); showingOriginal.toggle() }
                         Button("Redefinir ajustes", role: .destructive) {
+                            lightEditorTap()
                             commit { $0 = PhotoEditRecipe() }
                             stampID = nil
                         }.disabled(!changed)
@@ -218,7 +219,7 @@ struct MomentraPhotoEditor: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 9) {
                     ForEach(PhotoEditFilter.allCases, id: \.self) { filter in
-                        Button { commit { $0.filter = filter; $0.strength = 1 } } label: {
+                        Button { lightEditorTap(); commit { $0.filter = filter; $0.strength = 1 } } label: {
                             VStack(spacing: 4) {
                                 if let image = filterPreviews[filter] {
                                     Image(decorative: image, scale: 1).resizable().scaledToFill()
@@ -249,7 +250,7 @@ struct MomentraPhotoEditor: View {
                 icon("arrow.left.and.right.righttriangle.left.righttriangle.right", label: "Espelhar") { commit { $0.flipped.toggle() } }
                 Menu {
                     ForEach(PhotoCropRatio.allCases, id: \.self) { ratio in
-                        Button(ratio.rawValue) { commit { $0.crop = ratio } }
+                        Button(ratio.rawValue) { lightEditorTap(); commit { $0.crop = ratio } }
                     }
                 } label: {
                     Label(recipe.crop.rawValue, systemImage: "rectangle.ratio.4.to.3")
@@ -280,9 +281,9 @@ struct MomentraPhotoEditor: View {
                 chip("Original", active: showingOriginal, icon: "eye") { showingOriginal.toggle() }
                 if date != nil, !stampProfiles.isEmpty {
                     Menu {
-                        Button("Sem carimbo") { stampID = nil }
+                        Button("Sem carimbo") { lightEditorTap(); stampID = nil }
                         ForEach(stampProfiles) { profile in
-                            Button(profile.name.isEmpty ? "Sem nome" : profile.name) { stampID = profile.id }
+                            Button(profile.name.isEmpty ? "Sem nome" : profile.name) { lightEditorTap(); stampID = profile.id }
                         }
                     } label: {
                         Label(stampID == nil ? "Carimbo" : "Com carimbo", systemImage: "seal")
@@ -297,7 +298,7 @@ struct MomentraPhotoEditor: View {
             if markup {
                 HStack {
                     ForEach(PhotoInk.allCases, id: \.self) { color in
-                        Button { ink = color } label: {
+                        Button { lightEditorTap(); ink = color } label: {
                             Circle().fill(Color(uiColor: color.color)).frame(width: 25, height: 25)
                                 .padding(3).overlay(Circle().strokeBorder(ink == color ? .white : .secondary))
                                 .frame(width: 44, height: 44)
@@ -306,7 +307,7 @@ struct MomentraPhotoEditor: View {
                         .accessibilityAddTraits(ink == color ? .isSelected : [])
                     }
                     Spacer()
-                    Button("Limpar traços") { commit { $0.strokes.removeAll() } }
+                    Button("Limpar traços") { lightEditorTap(); commit { $0.strokes.removeAll() } }
                         .font(.caption).disabled(recipe.strokes.isEmpty)
                 }
             }
@@ -322,14 +323,18 @@ struct MomentraPhotoEditor: View {
         }
     }
 
+    private func lightEditorTap() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+    }
+
     private func icon(_ image: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button(action: { lightEditorTap(); action() }) {
             Image(systemName: image).frame(width: 44, height: 44).modifier(GalleryControlSurface(rounded: true))
         }.buttonStyle(.plain).accessibilityLabel(label)
     }
 
     private func chip(_ title: String, active: Bool, icon: String? = nil, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button(action: { lightEditorTap(); action() }) {
             HStack(spacing: 5) {
                 if let icon { Image(systemName: icon) }
                 Text(title).lineLimit(1)
