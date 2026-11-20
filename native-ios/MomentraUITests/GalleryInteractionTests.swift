@@ -351,6 +351,9 @@ final class GalleryInteractionTests: XCTestCase {
         let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Cancelar", "Cancel")).firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 15))
         cancel.tap()
+        let dismissed = NSPredicate(format: "exists == false")
+        expectation(for: dismissed, evaluatedWith: cancel)
+        waitForExpectations(timeout: 10)
         XCTAssertTrue(app.buttons["Salvar"].waitForExistence(timeout: 8))
         app.buttons["Escolher"].tap()
         app.buttons["Arquivos"].tap()
