@@ -132,7 +132,7 @@ struct CameraScreen: View {
     private var normalCameraHeader: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Button { cycleFlash() } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); cycleFlash() } label: {
                     Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
                         .font(.title2).foregroundStyle(camera.flashMode == .off ? Color.white : Color.yellow)
                         .frame(width: 44, height: 44)
@@ -142,9 +142,9 @@ struct CameraScreen: View {
                 .accessibilityValue(camera.flashMode == .off ? "Desativado" : camera.flashMode == .auto ? "Automático" : "Ativado")
 
                 Menu {
-                    Button("Desligado") { timerSeconds = 0 }
-                    Button("3 segundos") { timerSeconds = 3 }
-                    Button("10 segundos") { timerSeconds = 10 }
+                    Button("Desligado") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); timerSeconds = 0 }
+                    Button("3 segundos") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); timerSeconds = 3 }
+                    Button("10 segundos") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); timerSeconds = 10 }
                 } label: {
                     VStack(spacing: 0) {
                         Image(systemName: "timer").font(.title2)
@@ -172,6 +172,7 @@ struct CameraScreen: View {
                 Spacer(minLength: 4)
 
                 Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel.toggle() }
                 } label: {
                     Text(photoAspect).font(.system(size: 17, weight: .semibold)).monospacedDigit().frame(width: 44, height: 44)
@@ -179,7 +180,7 @@ struct CameraScreen: View {
                 .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                 .accessibilityLabel("Proporção da foto")
 
-                Button { showSettings = true } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showSettings = true } label: {
                     Image(systemName: "gearshape.fill").font(.title2)
                         .frame(width: 44, height: 44)
                         .overlay(alignment: .topTrailing) {
@@ -268,7 +269,7 @@ struct CameraScreen: View {
                                         }
                                         Image(uiImage: image).resizable().frame(width: geometry.size.width, height: geometry.size.height).allowsHitTesting(false)
                                         let box = StampRenderer.workReportRect(in: geometry.size)
-                                        Button { showStampEditor = true } label: { Color.clear.contentShape(Rectangle()) }
+                                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampEditor = true } label: { Color.clear.contentShape(Rectangle()) }
                                             .frame(width: box.width, height: box.height)
                                             .position(x: box.midX, y: box.midY)
                                             .accessibilityLabel("Personalizar carimbo")
@@ -277,14 +278,14 @@ struct CameraScreen: View {
                                             StampMapPreview(snapshot: snapshot, markerSize: max(5, mapBox.width * 0.12))
                                                 .frame(width: mapBox.width, height: mapBox.height)
                                                 .position(x: mapBox.midX, y: mapBox.midY)
-                                            Button { showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
+                                            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
                                                 .frame(width: mapBox.width, height: mapBox.height)
                                                 .position(x: mapBox.midX, y: mapBox.midY)
                                                 .accessibilityLabel("Escolher mapa ou satélite")
                                         }
                                         if snapshot.layout.template == .largeMap && snapshot.mapEnabled && snapshot.location != nil {
                                             let mapBox = StampRenderer.workReportRect(in: geometry.size)
-                                            Button { showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
+                                            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
                                                 .frame(width: mapBox.width, height: mapBox.height * 0.64)
                                                 .position(x: mapBox.midX, y: mapBox.minY + mapBox.height * 0.32)
                                                 .accessibilityLabel("Escolher mapa ou satélite")
@@ -447,6 +448,7 @@ struct CameraScreen: View {
                         )
                         Spacer(minLength: 0)
                         Button {
+                            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                             mapLocation = makeSnapshot(at: Date()).location
                             showMap = true
                         } label: {
@@ -482,7 +484,7 @@ struct CameraScreen: View {
                         Color.clear.frame(height: 190)
                     } else {
                     HStack(spacing: 10) {
-                        Button { openGallery() } label: {
+                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); openGallery() } label: {
                             Group {
                                 if let galleryThumbnail {
                                     Image(uiImage: galleryThumbnail.image).resizable().scaledToFill()
@@ -508,7 +510,7 @@ struct CameraScreen: View {
                         Spacer(minLength: 0)
                         captureModePicker
                         Spacer(minLength: 0)
-                        Button { camera.flipCamera() } label: {
+                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); camera.flipCamera() } label: {
                             Image(systemName: "camera.rotate").font(.title2).frame(width: 52, height: 52)
                                 .background(.white.opacity(0.10), in: Circle())
                         }

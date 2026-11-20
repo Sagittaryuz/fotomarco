@@ -58,7 +58,7 @@ struct StampLayoutEditor: View {
                 ForEach(0..<4, id: \.self) { index in
                     let corner = corners[index]
                     let selected = point.wrappedValue == corner.1
-                    Button { point.wrappedValue = corner.1 } label: {
+                    Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); point.wrappedValue = corner.1 } label: {
                         RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.secondary, lineWidth: selected ? 2 : 1)
                             .frame(width: 36, height: 42)
                             .overlay(alignment: corner.2) {
@@ -77,7 +77,7 @@ struct StampLayoutEditor: View {
     }
 
     private func elementButton(_ element: Element) -> some View {
-        Button(element.rawValue) { editingElement = element }
+        Button(element.rawValue) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); editingElement = element }
             .font(.caption.weight(.semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -99,7 +99,7 @@ struct StampLayoutEditor: View {
             HStack {
                 Menu {
                     ForEach(store.profiles) { item in
-                        Button { store.select(item.id) } label: {
+                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.select(item.id) } label: {
                             if item.id == store.selectedID { Label(item.name, systemImage: "checkmark") }
                             else { Text(item.name) }
                         }
@@ -170,8 +170,8 @@ struct StampLayoutEditor: View {
                     if layout.wrappedValue.template.usesLogo {
                         ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
                             Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo \(slot + 1)") {
-                                Button { logoSlot = slot; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
-                                Button { logoSlot = slot; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = slot; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = slot; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
                             }.disabled(logoLoading)
                         }
                     }
@@ -248,10 +248,10 @@ struct StampLayoutEditor: View {
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Voltar") { dismiss() }.disabled(logoLoading)
+                Button("Voltar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() }.disabled(logoLoading)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Salvar") { originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
+                Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
             }
         }
         .alert("Momentra", isPresented: Binding(
