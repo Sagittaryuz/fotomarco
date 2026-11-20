@@ -119,6 +119,19 @@ jobs:
           if [ -d "$RUNNER_TEMP/Momentra.xcresult" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Momentra.xcresult"
           fi
+      - name: Export stamp preview attachments
+        if: success()
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/Momentra-stamp-previews"
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/Momentra.xcresult" --output-path "$RUNNER_TEMP/Momentra-stamp-previews"
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: momentra-stamp-previews
+          path: ${{ runner.temp }}/Momentra-stamp-previews/
+          if-no-files-found: warn
+          retention-days: 3
       - name: Capture camera layout on the simulator
         if: inputs.signing_candidate
         run: |

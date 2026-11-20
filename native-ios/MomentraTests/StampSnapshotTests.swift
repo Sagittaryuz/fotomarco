@@ -1,5 +1,6 @@
 import XCTest
 import CoreLocation
+import UIKit
 @testable import Momentra
 
 final class StampSnapshotTests: XCTestCase {
@@ -19,6 +20,31 @@ final class StampSnapshotTests: XCTestCase {
             layout.template = template
             let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil, layout: layout)
             XCTAssertNotNil(StampRenderer.overlay(size: CGSize(width: 400, height: 600), snapshot: snapshot, map: nil, address: nil), "\(template.rawValue)")
+        }
+    }
+
+    func testExportFixedTemplatePreviewsForVisualReview() throws {
+        let date = Date(timeIntervalSince1970: 1_760_000_000)
+        let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665),
+                                  altitude: 30, horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: date)
+        let map = UIImage(named: "StampSampleMap", in: Bundle(for: StampProfilesStore.self), compatibleWith: nil)
+        for template in StampLayout.Template.allCases where template.hasFixedRenderer {
+            var layout = StampLayout()
+            layout.template = template
+            for field in template.fields { layout.setTemplateValue(field + " exemplo", for: field) }
+            let snapshot = StampSnapshot(capturedAt: date, gpsEnabled: true, mapEnabled: true, addressEnabled: true,
+                                         location: location, heading: nil, layout: layout)
+            let image = try XCTUnwrap(StampRenderer.overlay(size: CGSize(width: 400, height: 600), snapshot: snapshot,
+                                                             map: map, address: "Central Park, Nova York"))
+            let preview = UIGraphicsImageRenderer(size: image.size).image { context in
+                UIColor.darkGray.setFill()
+                context.fill(CGRect(origin: .zero, size: image.size))
+                image.draw(at: .zero)
+            }
+            let attachment = XCTAttachment(image: preview)
+            attachment.name = "stamp-\(template.rawValue)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
     }
     func testFixedTemplateContentUsesSelectedFieldsAndRespectsLocationPermission() {
