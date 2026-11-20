@@ -85,6 +85,19 @@ struct StampLayout: Codable, Equatable {
     var showsForecast = true
     var template: Template = .original
     var templateValues: [String: [String: String]] = [:]
+    mutating func selectTemplate(_ next: Template) {
+        guard next != template else { return }
+        templateValues[template.rawValue, default: [:]]["_mapStyle"] = mapStyle.rawValue
+        templateValues[template.rawValue, default: [:]]["_showsMap"] = showsMap ? "1" : "0"
+        template = next
+        if let saved = templateValues[next.rawValue] {
+            mapStyle = saved["_mapStyle"].flatMap(MapAppearance.init(rawValue:)) ?? .map
+            showsMap = saved["_showsMap"].map { $0 == "1" } ?? true
+        } else {
+            mapStyle = .map
+            showsMap = true
+        }
+    }
     /// The locked camera only needs values for the currently selected template.
     func lockedCaptureLayout() -> StampLayout {
         var result = self

@@ -124,7 +124,10 @@ struct StampLayoutEditor: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Criar perfil")
             }
-            Picker("Modelo", selection: layout.template) {
+            Picker("Modelo", selection: Binding(
+                get: { layout.wrappedValue.template },
+                set: { value in var next = layout.wrappedValue; next.selectTemplate(value); layout.wrappedValue = next }
+            )) {
                 Text("Atual").tag(StampLayout.Template.original)
                 Text("Relatório de trabalho").tag(StampLayout.Template.workReport)
                 Text("Planilha").tag(StampLayout.Template.spreadsheet)

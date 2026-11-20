@@ -35,6 +35,12 @@ final class StampProfilesStoreTests: XCTestCase {
     func testTemplateImagesRemainIndependentAndDraftDoesNotOverwriteOriginal() {
         let store = StampProfilesStore(defaults: defaults)
         store.setLogo("company.png", for: store.selectedID)
+        var initialLayout = store.selected.layout
+        initialLayout.template = .portrait
+        store.setLayout(initialLayout)
+        XCTAssertEqual(store.selected.effectiveLogoName, "")
+        initialLayout.template = .original
+        store.setLayout(initialLayout)
         let draft = StampProfilesStore(draftOf: store)
         draft.setLogo("portrait.png", for: draft.selectedID, template: .portrait)
         draft.setLogo("delivery.png", for: draft.selectedID, template: .deliveryProof)

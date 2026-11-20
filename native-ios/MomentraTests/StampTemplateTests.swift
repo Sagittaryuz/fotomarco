@@ -2,6 +2,24 @@ import XCTest
 @testable import Momentra
 
 final class StampTemplateTests: XCTestCase {
+    func testMapPreferencesStayIndependentWhenChangingTemplates() throws {
+        var layout = StampLayout()
+        layout.showsMap = false
+        layout.mapStyle = .satellite
+        layout.selectTemplate(.map)
+        XCTAssertTrue(layout.showsMap)
+        XCTAssertEqual(layout.mapStyle, .map)
+        layout.mapStyle = .satellite
+        layout.selectTemplate(.largeMap)
+        XCTAssertEqual(layout.mapStyle, .map)
+        layout.selectTemplate(.map)
+        XCTAssertEqual(layout.mapStyle, .satellite)
+        layout.selectTemplate(.original)
+        XCTAssertFalse(layout.showsMap)
+        XCTAssertEqual(layout.mapStyle, .satellite)
+        let restored = try JSONDecoder().decode(StampLayout.self, from: JSONEncoder().encode(layout))
+        XCTAssertEqual(restored, layout)
+    }
     func testLockedCaptureContextKeepsOnlySelectedTemplateWithoutChangingOriginal() throws {
         var layout = StampLayout()
         layout.template = .visit

@@ -9,7 +9,7 @@ struct StampProfile: Identifiable, Codable, Equatable {
     var layout: StampLayout = StampLayout()
     var effectiveLogoName: String {
         guard layout.template != .original else { return logoName }
-        return layout.templateValues[layout.template.rawValue]?["_image"] ?? logoName
+        return layout.templateValues[layout.template.rawValue]?["_image"] ?? ""
     }
     var additionalLogoNames: [String] {
         guard layout.template == .construction else { return [] }
