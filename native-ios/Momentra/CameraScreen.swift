@@ -239,10 +239,8 @@ struct CameraScreen: View {
 
     private var cameraContent: some View {
         GeometryReader { geometry in
-            let previewFrame = mode == .photo && !camera.isRecording
-                ? (PhotoAspect(rawValue: photoAspect) ?? .standard)
-                    .previewFrame(in: geometry.size, top: wordmarkBottom, bottom: shutterTop)
-                : CGRect(origin: .zero, size: geometry.size)
+            let previewFrame = (PhotoAspect(rawValue: photoAspect) ?? .standard)
+                .previewFrame(in: geometry.size, top: wordmarkBottom, bottom: shutterTop)
             ZStack {
                 Color.black.ignoresSafeArea().contentShape(Rectangle())
                     .onTapGesture { dismissZoomDial() }
@@ -252,7 +250,7 @@ struct CameraScreen: View {
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
                     .overlay {
-                        if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .separate {
+                        if stampEnabled && stampProfiles.selected.layout.mode == .separate {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date))
                             }
@@ -281,14 +279,14 @@ struct CameraScreen: View {
                              : "\(archiveStatus.pending) captura(s) aguardando envio")
                             .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
                     }
-                    if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
+                    if stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if mode == .photo && !camera.isRecording && stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
+                    if stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
                     if recognitionDemand.qr || recognitionDemand.text {
                         LiveRecognitionBanner(engine: camera.recognition) { text in
                             selectedRecognizedText = RecognizedTextSelection(text: text)
@@ -803,6 +801,29 @@ struct CameraScreen: View {
         }
     }
 
+    private func importProfileLogo(_ result: Result<URL, Error>) {
+        guard let url = try? result.get() else { return }
+        let targetProfile = stampProfiles.selectedID
+        logoLoading = true
+        Task { @MainActor in
+            defer { logoLoading = false }
+            do {
+                let name = try await Task.detached(priority: .utility) {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let file = try FileHandle(forReadingFrom: url)
+                    defer { try? file.close() }
+                    let data = try file.read(upToCount: 20_000_001) ?? Data()
+                    return try ProfileLogoStore.save(data)
+                }.value
+                setLogo(name, for: targetProfile)
+                if stampProfiles.selectedID == targetProfile { refreshLogo() }
+            } catch {
+                importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o logotipo. A imagem anterior foi preservada."
+            }
+        }
+    }
+
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
@@ -827,7 +848,7 @@ struct CameraScreen: View {
                     Section("Carimbo") {
                         NavigationLink("Layout e perfis") {
                             StampLayoutEditor(store: stampProfiles, selectedLogo: $selectedLogo, logoLoading: logoLoading,
-                                              importLogo: { showLogoImport = true })
+                                              importLogo: $showLogoImport, importLogoResult: importProfileLogo)
                         }
                         if stampProfiles.profiles.count > 1 {
                             Picker("Perfil ao abrir o app", selection: Binding(
@@ -878,28 +899,6 @@ struct CameraScreen: View {
                 )) {
                     Button("OK", role: .cancel) { archiveConnectionError = nil }
                 } message: { Text(archiveConnectionError ?? "") }
-                .fileImporter(isPresented: $showLogoImport, allowedContentTypes: [.image]) { result in
-                    guard let url = try? result.get() else { return }
-                    let targetProfile = stampProfiles.selectedID
-                    logoLoading = true
-                    Task { @MainActor in
-                        defer { logoLoading = false }
-                        do {
-                            let name = try await Task.detached(priority: .utility) {
-                                let scoped = url.startAccessingSecurityScopedResource()
-                                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                                let file = try FileHandle(forReadingFrom: url)
-                                defer { try? file.close() }
-                                let data = try file.read(upToCount: 20_000_001) ?? Data()
-                                return try ProfileLogoStore.save(data)
-                            }.value
-                            setLogo(name, for: targetProfile)
-                            if stampProfiles.selectedID == targetProfile { refreshLogo() }
-                        } catch {
-                            importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o logotipo. A imagem anterior foi preservada."
-                        }
-                    }
-                }
                 .fileImporter(isPresented: $showSettingsImport, allowedContentTypes: [.json]) { result in
                     do {
                         let url = try result.get()

@@ -5,7 +5,9 @@ struct StampLayoutEditor: View {
     @ObservedObject var store: StampProfilesStore
     @Binding var selectedLogo: PhotosPickerItem?
     let logoLoading: Bool
-    let importLogo: () -> Void
+    @Binding var importLogo: Bool
+    let importLogoResult: (Result<URL, Error>) -> Void
+    @State private var showPhotoPicker = false
     @State private var showLimit = false
     @State private var chooseStartup = false
     @State private var confirmRemove = false
@@ -122,6 +124,8 @@ struct StampLayoutEditor: View {
             }
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
         }.padding(.horizontal, 12).padding(.vertical, 6)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedLogo, matching: .images)
+        .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image], onCompletion: importLogoResult)
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
@@ -183,8 +187,8 @@ struct StampLayoutEditor: View {
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 case .logo:
                     Menu("Escolher") {
-                        PhotosPicker(selection: $selectedLogo, matching: .images) { Label("Fotos", systemImage: "photo") }
-                        Button(action: importLogo) { Label("Arquivos", systemImage: "folder") }
+                        Button { showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                        Button { importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
                     }.disabled(logoLoading)
                     Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
