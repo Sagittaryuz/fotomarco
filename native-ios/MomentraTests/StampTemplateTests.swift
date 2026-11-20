@@ -78,4 +78,13 @@ final class StampTemplateTests: XCTestCase {
         layout.template = .workReport
         XCTAssertEqual(layout.templateValue("Inspeção"), "Piso Concreto")
     }
+
+    func testTemplateTextCannotBreakFixedLayoutWithPastedLineSeparators() {
+        var layout = StampLayout()
+        layout.template = .workReport
+        layout.setTemplateValue("A\r\nB\tC\u{2028}D", for: "Projeto")
+        let value = layout.templateValue("Projeto")
+        XCTAssertFalse(value.contains(where: { $0.isNewline || $0 == "\t" }))
+        XCTAssertTrue(value.contains("B C"))
+    }
 }

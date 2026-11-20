@@ -114,7 +114,9 @@ struct StampLayout: Codable, Equatable {
     mutating func setTemplateValue(_ value: String, for field: String) {
         guard template.fields.contains(field) else { return }
         var fields = templateValues[template.rawValue] ?? [:]
-        fields[field] = String(value.replacingOccurrences(of: "\n", with: " ").prefix(96))
+        let singleLine = value.components(separatedBy: .newlines).joined(separator: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+        fields[field] = String(singleLine.prefix(96))
         templateValues[template.rawValue] = fields
     }
     var map = StampPoint(x: 0.15, y: 0.13)
