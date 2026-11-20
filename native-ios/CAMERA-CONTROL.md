@@ -46,4 +46,6 @@ O IPA assinado contém a extensão de captura, a extensão de controle e metadad
 
 Ao comparar um novo IPA assinado, verificar cada executável, seu perfil de provisionamento e a elegibilidade da extensão no aparelho; não registrar os valores de credenciais ou identificadores de equipe. O nome `com.apple.developer.locked-camera-capture` não foi encontrado como texto nos executáveis desse IPA. Uma pergunta no fórum de desenvolvedores cita esse possível entitlement, mas não confirma que ele seja necessário ou como obtê-lo; não acrescentá-lo nem alegar solução sem evidência da Apple e do perfil de assinatura.
 
+Em 20/11/2026, o formulário autenticado do Signulous oferecia personalizações gerais, incluindo associar o identificador ao perfil e instalar como duplicata, mas não oferecia configuração de assinatura separada para as extensões. Essas opções não comprovam suporte ao registro das extensões e não foram alteradas; mudar o identificador principal poderia impedir a atualização sobre a instalação existente.
+
 Fontes: [Camera Control](https://developer.apple.com/design/human-interface-guidelines/camera-control/), [experiência de captura bloqueada](https://developer.apple.com/documentation/lockedcameracapture/creating-a-camera-experience-for-the-lock-screen), [diagnóstico de assinatura](https://developer.apple.com/library/archive/technotes/tn2415/).
