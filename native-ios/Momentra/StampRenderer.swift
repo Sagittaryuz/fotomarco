@@ -931,8 +931,12 @@ enum StampRenderer {
         let rows = [content.date, content.address, content.coordinate, content.weather].compactMap { $0 }.filter { !$0.isEmpty }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
-        let rightX = width * 0.30
+        let dividerX = width * 0.285
+        let dividerWidth = max(1, width * 0.006)
+        let dividerGap = width * 0.012
+        let rightX = dividerX + dividerWidth + dividerGap
         let rightWidth = width - rightX - width * 0.01
+        let noteText = content.note.uppercased(with: Locale(identifier: "pt_BR"))
         var pointSize = max(7, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(snapshot.layout.informationSize))
         while pointSize >= 6 {
             let font = condensedStampFont(size: pointSize, bold: true)
@@ -946,13 +950,12 @@ enum StampRenderer {
             }
             let lineGap = pointSize * 0.10
             let contentHeight = rowHeights.reduce(0, +) + CGFloat(max(0, rows.count - 1)) * lineGap
-            let clockSize = max(pointSize * 2.5, contentHeight * 0.85)
-            let heavyClock = UIFont(name: "AvenirNextCondensed-Bold", size: clockSize)
-                ?? UIFont.systemFont(ofSize: clockSize, weight: .bold)
-            let clockFont = fittedFixedFont(heavyClock,
-                                            sample: "88:88", width: width * 0.27)
-            let topHeight = max(contentHeight, clockFont.lineHeight)
-            let noteHeight: CGFloat = content.note.isEmpty ? 0 : ceil((content.note as NSString).boundingRect(
+            let prototype = UIFont(name: "AvenirNextCondensed-Bold", size: 100) ?? UIFont.systemFont(ofSize: 100, weight: .bold)
+            let prototypeLine = CTLineCreateWithAttributedString(NSAttributedString(string: content.time, attributes: [.font: prototype]))
+            let prototypeHeight = max(1, CTLineGetBoundsWithOptions(prototypeLine, .useGlyphPathBounds).height)
+            let clockFont = prototype.withSize(100 * contentHeight / prototypeHeight)
+            let topHeight = contentHeight
+            let noteHeight: CGFloat = noteText.isEmpty ? 0 : ceil((noteText as NSString).boundingRect(
                 with: CGSize(width: width - pointSize, height: .greatestFiniteMagnitude),
                 options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil).height) + pointSize * 0.5
             let height = ceil(topHeight + (noteHeight > 0 ? pointSize * 0.3 + noteHeight : 0))
@@ -967,16 +970,21 @@ enum StampRenderer {
                     let white: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white,
                                                                  .paragraphStyle: paragraph, .shadow: shadow,
                                                                  .strokeColor: UIColor.black.withAlphaComponent(0.75), .strokeWidth: -1.5]
-                    let clockY = (topHeight - clockFont.lineHeight) / 2
-                    (content.time as NSString).draw(in: CGRect(x: 0, y: clockY,
-                                                               width: width * 0.27, height: clockFont.lineHeight * 1.1),
-                                                    withAttributes: [.font: clockFont, .foregroundColor: UIColor.white, .shadow: shadow,
-                                                                     .strokeColor: UIColor.black.withAlphaComponent(0.75), .strokeWidth: -1.5])
-                    let clockLine = CTLineCreateWithAttributedString(NSAttributedString(string: content.time, attributes: [.font: clockFont]))
+                    let clockLine = CTLineCreateWithAttributedString(NSAttributedString(string: content.time, attributes: [
+                        .font: clockFont, .foregroundColor: UIColor.white,
+                        .strokeColor: UIColor.black.withAlphaComponent(0.75), .strokeWidth: -1.5]))
                     let glyphBounds = CTLineGetBoundsWithOptions(clockLine, .useGlyphPathBounds)
-                    let glyphTop = clockY + clockFont.ascender - glyphBounds.maxY
+                    let clockArea = max(1, dividerX - dividerGap)
+                    let horizontalScale = min(1, clockArea / max(1, glyphBounds.width))
+                    let glyphTop = (topHeight - glyphBounds.height) / 2
+                    context.saveGState()
+                    context.translateBy(x: clockArea - glyphBounds.maxX * horizontalScale, y: glyphTop + glyphBounds.maxY)
+                    context.scaleBy(x: horizontalScale, y: -1)
+                    context.textMatrix = .identity
+                    CTLineDraw(clockLine, context)
+                    context.restoreGState()
                     context.setFillColor(UIColor.systemYellow.cgColor)
-                    context.fill(CGRect(x: width * 0.285, y: glyphTop, width: max(1, width * 0.006), height: glyphBounds.height))
+                    context.fill(CGRect(x: dividerX, y: glyphTop, width: dividerWidth, height: glyphBounds.height))
                     var y: CGFloat = 0
                     for (index, row) in rows.enumerated() {
                         var rowAttributes = white
@@ -988,7 +996,7 @@ enum StampRenderer {
                         let box = CGRect(x: 0, y: topHeight + pointSize * 0.3, width: width, height: noteHeight)
                         context.setFillColor(UIColor.black.withAlphaComponent(0.38).cgColor)
                         context.fill(box)
-                        (content.note as NSString).draw(in: box.insetBy(dx: pointSize * 0.35, dy: pointSize * 0.18), withAttributes: white)
+                        (noteText as NSString).draw(in: box.insetBy(dx: pointSize * 0.35, dy: pointSize * 0.18), withAttributes: white)
                     }
                 }
                 let rect = positionedRect(size: size, element: image.size, centre: snapshot.layout.information, margin: margin)
