@@ -144,7 +144,8 @@ struct OriginalsView: View {
                                 bottomInset: selecting ? 0 : galleryFooterHeight,
                                 tile: tile, open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
                                 reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
-                                dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) })
+                                dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) },
+                                userStartedScrolling: { openedAtNewest = false })
                         .accessibilityIdentifier("momentra-gallery-grid")
                 }
                 if !selecting {
@@ -545,7 +546,7 @@ struct OriginalsView: View {
         }
         updateProjection()
         loadedLocalVersion = version
-        if wasEmpty { scrollRequest += 1 }
+        if wasEmpty || (!selecting && openedAtNewest) { scrollRequest += 1 }
     }
 
     private func reloadCloud(trash: Bool) async {
@@ -658,7 +659,7 @@ struct OriginalsView: View {
             remote = unique
         }
         updateProjection()
-        if wasEmpty || !selecting && openedAtNewest { scrollRequest += 1; openedAtNewest = false }
+        if wasEmpty || (!selecting && openedAtNewest) { scrollRequest += 1 }
     }
 
     @State private var lastCatalogRefresh = 0

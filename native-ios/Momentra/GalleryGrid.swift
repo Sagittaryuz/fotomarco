@@ -39,6 +39,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
     var longPress: ((Item) -> Void)? = nil
     var reachedEnd: (() -> Void)? = nil
     var dragToCamera: ((CGFloat, Bool) -> Void)? = nil
+    var userStartedScrolling: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -188,6 +189,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             }
         }
         func numberOfSections(in collectionView: UICollectionView) -> Int { parent.groups.count }
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { parent.userStartedScrolling?() }
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { parent.groups[section].items.count }
         func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "tile", for: indexPath) as! GallerySelectionCell
