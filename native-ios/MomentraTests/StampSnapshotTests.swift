@@ -4,6 +4,31 @@ import UIKit
 @testable import Momentra
 
 final class StampSnapshotTests: XCTestCase {
+    func testSeparateStampUsesDateLocationWeatherAndCustomNote() throws {
+        let date = Date(timeIntervalSince1970: 1_795_176_000)
+        let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: -17.88, longitude: -51.71),
+                                  altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: date)
+        let forecast = Forecast(validAt: date, updatedAt: date, temperatureC: 25, humidityPercent: 60,
+                                windMetersPerSecond: 3, seaLevelPressureHpa: 1012)
+        var layout = StampLayout(); layout.mode = .separate
+        let snapshot = StampSnapshot(capturedAt: date, gpsEnabled: true, addressEnabled: true,
+                                     cachedAddress: "Rua Um, 123", title: "Não é a nota", note: "Condomínio Hamoa Jataí",
+                                     pressure: PressureSample(hectopascals: 930, observedAt: date), forecast: forecast,
+                                     location: location, heading: nil, layout: layout)
+        let content = snapshot.separateInformation(address: "Rua Um, 123")
+        XCTAssertEqual(content.address, "Rua Um, 123")
+        XCTAssertEqual(content.coordinate, "-17.880000, -51.710000")
+        XCTAssertTrue(content.weather?.contains("930.0 hPa") == true)
+        XCTAssertTrue(content.weather?.contains("10.8 km/h") == true)
+        XCTAssertEqual(content.note, "Condomínio Hamoa Jataí")
+        XCTAssertNotNil(StampRenderer.separateInformationImage(snapshot: snapshot, address: content.address, size: CGSize(width: 400, height: 600)))
+        let unavailable = StampSnapshot(capturedAt: date, gpsEnabled: false, location: nil, heading: nil, layout: layout)
+            .separateInformation(address: "Não deve aparecer")
+        XCTAssertNil(unavailable.address)
+        XCTAssertNil(unavailable.coordinate)
+        XCTAssertNil(unavailable.weather)
+    }
+
     func testFixedFontFitsClockAndDateWithoutTruncation() {
         let clock = StampRenderer.fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: 70, weight: .medium), sample: "88:88", width: 120)
         let date = StampRenderer.fittedFixedFont(UIFont.systemFont(ofSize: 30), sample: "88/88/8888", width: 100)

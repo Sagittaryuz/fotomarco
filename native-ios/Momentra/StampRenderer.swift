@@ -102,6 +102,27 @@ struct StampSnapshot {
 
     var lines: [String] { informationLines(address: nil) }
 
+    func separateInformation(address: String?) -> SeparateStampInformation {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = "HH:mm"
+        let time = formatter.string(from: capturedAt)
+        formatter.dateFormat = "d MMM 'de' yyyy, EEEE"
+        let date = formatter.string(from: capturedAt)
+        let place = addressEnabled && layout.showsAddress && location != nil
+            ? address?.replacingOccurrences(of: "\n", with: ", ") : nil
+        let coordinate = location.map {
+            String(format: "%.6f, %.6f", $0.coordinate.latitude, $0.coordinate.longitude)
+        }
+        var weather: [String] = []
+        if let value = forecast?.temperatureC { weather.append(String(format: "%.1f °C", value)) }
+        if let pressure { weather.append(String(format: "%.1f hPa", pressure.hectopascals)) }
+        else if let value = forecast?.seaLevelPressureHpa { weather.append(String(format: "%.1f hPa (nível do mar)", value)) }
+        if let value = forecast?.windMetersPerSecond { weather.append(String(format: "%.1f km/h", value * 3.6)) }
+        return SeparateStampInformation(time: time, date: date, address: place, coordinate: coordinate,
+                                        weather: weather.isEmpty ? nil : weather.joined(separator: " | "), note: note)
+    }
+
     /// Real capture data for fixed templates. Missing sensor data stays absent.
     func templateContent(address: String?) -> StampTemplateContent {
         let date = DateFormatter()
@@ -163,6 +184,15 @@ struct StampSnapshot {
         if !values.isEmpty { result.append(values.joined(separator: " · ")) }
         return result
     }
+}
+
+struct SeparateStampInformation {
+    let time: String
+    let date: String
+    let address: String?
+    let coordinate: String?
+    let weather: String?
+    let note: String
 }
 
 struct StampTemplateContent {
@@ -889,6 +919,71 @@ enum StampRenderer {
                       width: width, height: height)
     }
 
+    /// The same bitmap is used by the live preview and exported photos/videos.
+    static func separateInformationImage(snapshot: StampSnapshot, address: String?, size: CGSize) -> (UIImage, CGRect)? {
+        let unit = min(size.width, size.height)
+        let margin = unit * 0.025
+        let space = availableSize(size: size, anchor: snapshot.layout.information, margin: margin)
+        let width = min(space.width, size.width * 0.60 * CGFloat(max(1, snapshot.layout.informationSize)))
+        guard width >= 20, space.height >= 12 else { return nil }
+        let content = snapshot.separateInformation(address: address)
+        let rows = [content.date, content.address, content.coordinate, content.weather].compactMap { $0 }.filter { !$0.isEmpty }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        let rightX = width * 0.30
+        let rightWidth = width - rightX - width * 0.01
+        var pointSize = max(7, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(snapshot.layout.informationSize))
+        while pointSize >= 6 {
+            let font = condensedStampFont(size: pointSize)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
+            let rowHeights = rows.map { row in
+                ceil((row as NSString).boundingRect(with: CGSize(width: rightWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil).height)
+            }
+            let lineGap = pointSize * 0.10
+            let contentHeight = rowHeights.reduce(0, +) + CGFloat(max(0, rows.count - 1)) * lineGap
+            let clockFont = fittedFixedFont(condensedStampFont(size: max(pointSize * 2.5, contentHeight * 0.75)),
+                                            sample: "88:88", width: width * 0.27)
+            let topHeight = max(contentHeight, clockFont.lineHeight)
+            let noteHeight: CGFloat = content.note.isEmpty ? 0 : ceil((content.note as NSString).boundingRect(
+                with: CGSize(width: width - pointSize, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil).height) + pointSize * 0.5
+            let height = ceil(topHeight + (noteHeight > 0 ? pointSize * 0.3 + noteHeight : 0))
+            if height <= space.height {
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                format.opaque = false
+                let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).image { renderer in
+                    let context = renderer.cgContext
+                    let shadow = NSShadow(); shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
+                    shadow.shadowBlurRadius = max(1, pointSize * 0.15); shadow.shadowOffset = CGSize(width: 1, height: 1)
+                    let white: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white,
+                                                                 .paragraphStyle: paragraph, .shadow: shadow]
+                    (content.time as NSString).draw(in: CGRect(x: 0, y: (topHeight - clockFont.lineHeight) / 2,
+                                                               width: width * 0.27, height: clockFont.lineHeight * 1.1),
+                                                    withAttributes: [.font: clockFont, .foregroundColor: UIColor.white, .shadow: shadow])
+                    context.setFillColor(UIColor.systemYellow.cgColor)
+                    context.fill(CGRect(x: width * 0.285, y: 0, width: max(1, width * 0.006), height: topHeight))
+                    var y: CGFloat = 0
+                    for (index, row) in rows.enumerated() {
+                        (row as NSString).draw(in: CGRect(x: rightX, y: y, width: rightWidth, height: rowHeights[index] + 1), withAttributes: white)
+                        y += rowHeights[index] + lineGap
+                    }
+                    if noteHeight > 0 {
+                        let box = CGRect(x: 0, y: topHeight + pointSize * 0.3, width: width, height: noteHeight)
+                        context.setFillColor(UIColor.black.withAlphaComponent(0.38).cgColor)
+                        context.fill(box)
+                        (content.note as NSString).draw(in: box.insetBy(dx: pointSize * 0.35, dy: pointSize * 0.18), withAttributes: white)
+                    }
+                }
+                let rect = positionedRect(size: size, element: image.size, centre: snapshot.layout.information, margin: margin)
+                return (image, rect)
+            }
+            pointSize *= 0.85
+        }
+        return nil
+    }
+
     static func drawSeparate(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
         let unit = min(size.width, size.height)
         let margin = unit * 0.025
@@ -901,30 +996,9 @@ enum StampRenderer {
             let markerSize = side * 0.12
             drawLocationMarker(center: CGPoint(x: rect.midX, y: rect.midY), diameter: markerSize, context: context)
         }
-        let lines = snapshot.informationLines(address: address)
-        let text = lines.joined(separator: "\n") as NSString
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        switch layout.textAlignment {
-        case "left": paragraph.alignment = .left
-        case "center": paragraph.alignment = .center
-        case "right": paragraph.alignment = .right
-        default: paragraph.alignment = layout.information.x >= 0.5 ? .right : .left
-        }
         if layout.showsInformation {
-            let textSpace = availableSize(size: size, anchor: layout.information, margin: margin)
-            let textWidth = max(1, min(textSpace.width, size.width * 0.60 * CGFloat(max(1, layout.informationSize))))
-            guard let measured = fitText(text, width: textWidth, maxHeight: textSpace.height,
-                                         initialSize: max(12, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(layout.informationSize)),
-                                         style: snapshot.fontStyle, paragraph: paragraph) else { return false }
-            let shadow = NSShadow()
-            shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
-            shadow.shadowBlurRadius = max(1, unit * 0.002)
-            shadow.shadowOffset = CGSize(width: 1, height: 1)
-            let rect = positionedRect(size: size, element: CGSize(width: textWidth, height: measured.height),
-                                      centre: layout.information, margin: margin)
-            text.draw(in: rect, withAttributes: [.font: measured.font, .foregroundColor: UIColor.white,
-                                                .paragraphStyle: paragraph, .shadow: shadow])
+            guard let (image, rect) = separateInformationImage(snapshot: snapshot, address: address, size: size) else { return false }
+            image.draw(in: rect)
         }
         if layout.showsLogo, let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
             let space = availableSize(size: size, anchor: layout.logo, margin: margin)
