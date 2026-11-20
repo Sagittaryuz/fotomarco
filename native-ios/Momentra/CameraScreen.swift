@@ -620,6 +620,8 @@ struct CameraScreen: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .momentraOpenCamera).receive(on: RunLoop.main)) { _ in
             showSettings = false
+            showStampEditor = false
+            showStampMapOptions = false
             showSupportPanel = false
             showOriginals = false
             cameraShareTask?.cancel()
