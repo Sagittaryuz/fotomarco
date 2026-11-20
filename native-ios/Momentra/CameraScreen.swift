@@ -296,8 +296,8 @@ struct CameraScreen: View {
                         } else if stampEnabled && stampProfiles.selected.layout.mode == .separate {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date),
-                                                  editMap: { showStampMapOptions = true },
-                                                  editInformation: { showStampEditor = true })
+                                                  editMap: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true },
+                                                  editInformation: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampEditor = true })
                             }
                         }
                     }
@@ -1249,8 +1249,8 @@ struct CameraScreen: View {
             if stampProfiles.selected.layout.horizontal == "right" { Spacer(minLength: 0) }
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 LiveStampView(snapshot: makeSnapshot(at: timeline.date),
-                              editMap: { showStampMapOptions = true },
-                              editInformation: { showStampEditor = true })
+                              editMap: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true },
+                              editInformation: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampEditor = true })
             }.frame(maxWidth: stampProfiles.selected.layout.horizontal == "auto" ? .infinity : 280)
             if stampProfiles.selected.layout.horizontal == "left" { Spacer(minLength: 0) }
         }.padding(.horizontal, 16)

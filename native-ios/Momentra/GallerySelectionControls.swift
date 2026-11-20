@@ -160,6 +160,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
                         LazyHStack(spacing: 12) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                                 Button {
+                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                                     if !selected.insert(item.id).inserted { selected.remove(item.id) }
                                 } label: {
                                     tile(item).frame(width: 136, height: 180).clipped()
@@ -180,7 +181,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
                     .scrollIndicators(.hidden).frame(height: 182)
                     .onAppear { proxy.scrollTo(current.id, anchor: .center) }
                 }
-                Button(action: prepare) {
+                Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); prepare() }) {
                     HStack {
                         if preparation != nil { ProgressView() }
                         Label("Compartilhar seleção", systemImage: "square.and.arrow.up")
@@ -194,7 +195,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
             .padding(.top, 14)
             .navigationTitle("Compartilhar")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Fechar") { preparation?.cancel(); dismiss() } }
+            .toolbar { Button("Fechar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); preparation?.cancel(); dismiss() } }
             .sheet(item: $batch, onDismiss: {
                 if shareSucceeded { onSuccess() }
             }) { batch in
