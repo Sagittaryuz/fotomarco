@@ -10,7 +10,7 @@ struct GalleryDetailHeader<Actions: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: close) {
+            Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); close() }) {
                 Image(systemName: "chevron.left").font(.body.weight(.semibold))
                     .frame(width: 44, height: 44)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
@@ -31,7 +31,7 @@ struct GalleryDetailHeader<Actions: View>: View {
             .accessibilityHint("\(position) de \(count)")
             Spacer(minLength: 0)
             if let overview {
-                Button(action: overview) {
+                Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); overview() }) {
                     Image(systemName: "square.grid.3x3").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }
@@ -72,7 +72,7 @@ struct GalleryTrashButton: View {
     @State private var showingConfirmation = false
 
     var body: some View {
-        Button { showingConfirmation = true } label: {
+        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showingConfirmation = true } label: {
             Image(systemName: "trash").frame(width: 44, height: 44)
                 .modifier(GalleryControlSurface(rounded: true))
         }
@@ -85,6 +85,7 @@ struct GalleryTrashButton: View {
                 Text(message).font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(role: .destructive) {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     showingConfirmation = false
                     confirm()
                 } label: {

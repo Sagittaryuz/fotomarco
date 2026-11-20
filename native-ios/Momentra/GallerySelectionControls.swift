@@ -12,14 +12,14 @@ struct GallerySelectionBar<Share: View>: View {
             share()
                 .accessibilityLabel("Compartilhar seleção")
             Spacer(minLength: 0)
-            Button(action: review) {
+            Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); review() }) {
                 Text("Mostrar seleção (\(count))").font(.subheadline.weight(.semibold))
                     .lineLimit(1).minimumScaleFactor(0.72)
                     .frame(minHeight: 44).padding(.horizontal, 12)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
             }
             Spacer(minLength: 0)
-            Button(role: .destructive, action: delete) {
+            Button(role: .destructive, action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); delete() }) {
                 Image(systemName: "trash").frame(width: 44, height: 44)
                     .modifier(GalleryControlSurface(rounded: true, tint: .red))
             }
@@ -51,7 +51,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
         let selection = items.filter { selected.contains($0.id) }
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Button { columns = columns == 3 ? 2 : 3 } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); columns = columns == 3 ? 2 : 3 } label: {
                     Image(systemName: "square.grid.2x2").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Alterar tamanho das miniaturas")
@@ -62,7 +62,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
                         .font(.headline).lineLimit(1).minimumScaleFactor(0.72)
                 }
                 Spacer(minLength: 0)
-                Button { dismiss() } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } label: {
                     Image(systemName: "checkmark").font(.body.weight(.bold))
                         .frame(width: 44, height: 44).modifier(GalleryControlSurface(rounded: true, tint: .yellow))
                 }.accessibilityLabel("Concluir revisão")
@@ -77,7 +77,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
                             selected: $selected, columns: $columns, showsSectionHeaders: false,
                             tile: tile, open: { _ in })
             }
-            Button { selected.removeAll() } label: {
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); selected.removeAll() } label: {
                 Text("Desmarcar tudo").font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 18).frame(minHeight: 44)
                     .modifier(GalleryControlSurface(rounded: true))

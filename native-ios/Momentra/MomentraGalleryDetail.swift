@@ -146,11 +146,11 @@ struct MomentraGalleryDetail: View {
 
     private func grouped(_ name: String, label: String, tint: Color = .primary,
                          action: @escaping () -> Void) -> some View {
-        Button(action: action) { icon(name).foregroundStyle(tint) }.accessibilityLabel(label)
+        Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); action() }) { icon(name).foregroundStyle(tint) }.accessibilityLabel(label)
     }
 
     private func button(_ name: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { icon(name).modifier(GalleryControlSurface(rounded: true)) }
+        Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); action() }) { icon(name).modifier(GalleryControlSurface(rounded: true)) }
             .buttonStyle(.plain).accessibilityLabel(label)
     }
 
