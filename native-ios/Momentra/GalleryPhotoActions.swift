@@ -73,7 +73,7 @@ enum GalleryPhotoActions {
             CLLocation(coordinate: $0.coordinate, altitude: 0, horizontalAccuracy: 0, verticalAccuracy: -1, timestamp: date)
         }
         let snapshot = StampSnapshot(capturedAt: date, gpsEnabled: location != nil, mapEnabled: layout.showsMap,
-            addressEnabled: layout.showsAddress, note: profile.note, logo: ProfileLogoStore.load(profile.logoName),
+            addressEnabled: layout.showsAddress, note: profile.note, logo: ProfileLogoStore.load(profile.effectiveLogoName),
             compact: layout.compact, position: layout.position, horizontal: layout.horizontal,
             longDate: layout.dateFormat == "long", fontStyle: layout.fontStyle,
             mapScale: layout.mapScale, mapCorner: layout.mapCorner, location: location, heading: nil, layout: layout)

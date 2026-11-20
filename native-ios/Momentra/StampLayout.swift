@@ -89,6 +89,7 @@ struct StampLayout: Codable, Equatable {
     func lockedCaptureLayout() -> StampLayout {
         var result = self
         result.templateValues = templateValues[template.rawValue].map { [template.rawValue: $0] } ?? [:]
+        result.templateValues[template.rawValue]?.removeValue(forKey: "_image")
         return result
     }
     func templateValue(_ field: String, fallback: String = "") -> String {

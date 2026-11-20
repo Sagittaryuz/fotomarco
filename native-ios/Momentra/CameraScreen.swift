@@ -685,7 +685,7 @@ struct CameraScreen: View {
         trackedCamera
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: stampProfiles.selectedID) { _, _ in refreshLogo(); refreshAddress(); publishCaptureContext() }
-        .onChange(of: stampProfiles.selected.logoName) { _, _ in refreshLogo() }
+        .onChange(of: stampProfiles.selected.effectiveLogoName) { _, _ in refreshLogo() }
         .onChange(of: stampProfiles.selected.layout) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.name) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.note) { _, _ in publishCaptureContext() }
@@ -1309,7 +1309,7 @@ struct CameraScreen: View {
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
             cloudOwnerHash: nil,
             layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout.lockedCaptureLayout())).flatMap { $0.count <= 2000 ? $0 : nil },
-            hasLogo: !stampProfiles.selected.logoName.isEmpty,
+            hasLogo: !stampProfiles.selected.effectiveLogoName.isEmpty,
             archivePlan: plan)
         let previous = captureContextTask
         let publish = Task { @MainActor in
@@ -1352,7 +1352,7 @@ struct CameraScreen: View {
         stampProfiles.setLogo(name, for: profileID)
     }
 
-    private func refreshLogo() { logo = ProfileLogoStore.load(stampProfiles.selected.logoName) }
+    private func refreshLogo() { logo = ProfileLogoStore.load(stampProfiles.selected.effectiveLogoName) }
 
     private func apply(_ transfer: SettingsTransfer) {
         let s = transfer.settings

@@ -32,6 +32,29 @@ final class StampProfilesStoreTests: XCTestCase {
         XCTAssertEqual(StampProfilesStore(defaults: defaults).selected.logoName, "obra.png")
     }
 
+    func testTemplateImagesRemainIndependentAndDraftDoesNotOverwriteOriginal() {
+        let store = StampProfilesStore(defaults: defaults)
+        store.setLogo("company.png", for: store.selectedID)
+        let draft = StampProfilesStore(draftOf: store)
+        draft.setLogo("portrait.png", for: draft.selectedID, template: .portrait)
+        draft.setLogo("delivery.png", for: draft.selectedID, template: .deliveryProof)
+        var layout = draft.selected.layout
+        layout.template = .portrait
+        draft.setLayout(layout)
+        XCTAssertEqual(draft.selected.effectiveLogoName, "portrait.png")
+        XCTAssertEqual(store.selected.effectiveLogoName, "company.png")
+        store.applyDraft(draft)
+        let restored = StampProfilesStore(defaults: defaults)
+        XCTAssertEqual(restored.selected.effectiveLogoName, "portrait.png")
+        layout = restored.selected.layout
+        layout.template = .deliveryProof
+        restored.setLayout(layout)
+        XCTAssertEqual(restored.selected.effectiveLogoName, "delivery.png")
+        layout.template = .original
+        restored.setLayout(layout)
+        XCTAssertEqual(restored.selected.effectiveLogoName, "company.png")
+    }
+
     func testMigrationCreatesOneNamedProfileAndRetainsLegacyKeys() {
         defaults.set("PIRESCO", forKey: "native.profile")
         defaults.set("Nota existente", forKey: "native.profile.piresco.note")

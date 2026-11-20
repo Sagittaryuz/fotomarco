@@ -7,6 +7,10 @@ struct StampProfile: Identifiable, Codable, Equatable {
     var note: String = ""
     var logoName: String = ""
     var layout: StampLayout = StampLayout()
+    var effectiveLogoName: String {
+        guard layout.template != .original else { return logoName }
+        return layout.templateValues[layout.template.rawValue]?["_image"] ?? logoName
+    }
 }
 
 /// Legacy keys remain intact for recovery and for older app versions.
@@ -114,9 +118,10 @@ final class StampProfilesStore: ObservableObject {
     func setNote(_ value: String) { update { $0.note = String(value.prefix(96)) } }
     func setLayout(_ value: StampLayout) { update { $0.layout = value } }
 
-    func setLogo(_ value: String, for id: UUID) {
+    func setLogo(_ value: String, for id: UUID, template: StampLayout.Template = .original) {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
-        profiles[index].logoName = value
+        if template == .original { profiles[index].logoName = value }
+        else { profiles[index].layout.templateValues[template.rawValue, default: [:]]["_image"] = value }
     }
 
     private func update(_ change: (inout StampProfile) -> Void) {

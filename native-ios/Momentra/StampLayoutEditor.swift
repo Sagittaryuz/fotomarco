@@ -189,8 +189,8 @@ struct StampLayoutEditor: View {
 
     var body: some View {
         editorContent
-        .task(id: store.selected.logoName) {
-            let name = store.selected.logoName
+        .task(id: store.selected.effectiveLogoName) {
+            let name = store.selected.effectiveLogoName
             let image = await Task.detached(priority: .utility) { ProfileLogoStore.load(name) }.value
             guard !Task.isCancelled else { return }
             previewLogo = image
@@ -199,6 +199,7 @@ struct StampLayoutEditor: View {
         .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image]) { result in
             guard let url = try? result.get() else { return }
             let profileID = store.selectedID
+            let template = store.selected.layout.template
             logoLoading = true
             Task {
                 defer { logoLoading = false }
@@ -210,7 +211,7 @@ struct StampLayoutEditor: View {
                         defer { try? file.close() }
                         return try ProfileLogoStore.save(file.read(upToCount: 20_000_001) ?? Data())
                     }.value
-                    store.setLogo(name, for: profileID)
+                    store.setLogo(name, for: profileID, template: template)
                 } catch {
                     importMessage = "Não foi possível importar o logotipo."
                 }
@@ -219,13 +220,14 @@ struct StampLayoutEditor: View {
         .onChange(of: selectedLogo) { _, item in
             guard let item else { return }
             let profileID = store.selectedID
+            let template = store.selected.layout.template
             logoLoading = true
             Task {
                 defer { logoLoading = false; selectedLogo = nil }
                 do {
                     guard let data = try await item.loadTransferable(type: Data.self) else { throw ProfileLogoStore.LogoError.invalid }
                     let name = try await Task.detached(priority: .utility) { try ProfileLogoStore.save(data) }.value
-                    store.setLogo(name, for: profileID)
+                    store.setLogo(name, for: profileID, template: template)
                 } catch {
                     importMessage = "Não foi possível importar o logotipo."
                 }
