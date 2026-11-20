@@ -735,7 +735,7 @@ struct CameraScreen: View {
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(item: $cameraShare) { batch in
-            batch.sheet {}.onAppear { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            batch.sheet {}
         }
         .alert("Atualização do Momentra", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
@@ -809,6 +809,7 @@ struct CameraScreen: View {
     private func shareCameraThumbnail() {
         guard let thumbnail = galleryThumbnail, cameraSurfaceVisible, cameraShareTask == nil, cameraShare == nil,
               !camera.isRecording, !camera.isFinishingRecording, !camera.isCapturing, countdown == 0 else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.4)
         cameraShareTask = Task {
             defer { cameraShareTask = nil }
             do {
