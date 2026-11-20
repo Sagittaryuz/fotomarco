@@ -907,6 +907,7 @@ struct CameraScreen: View {
                     archiveSettingsSection
                     Section("Ajustes da câmera") {
                         NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
+                            .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) })
                         Toggle("Escanear QR Codes", isOn: $scanQR)
                         Toggle("Mostrar Texto Detectado", isOn: $scanText)
                         Text("QR Codes e textos são reconhecidos automaticamente na prévia. Toque no resultado para abrir ou selecionar.")
@@ -921,11 +922,13 @@ struct CameraScreen: View {
                     }
                     Section("Aparência") {
                         NavigationLink("Ícone do aplicativo") { AppIconPicker() }
+                            .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) })
                     }
                     Section("Carimbo") {
                         NavigationLink("Layout e perfis") {
                             StampLayoutEditor(store: stampProfiles)
                         }
+                        .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) })
                         if stampProfiles.profiles.count > 1 {
                             Picker("Perfil ao abrir o app", selection: Binding(
                                 get: { stampProfiles.startupSelection },
