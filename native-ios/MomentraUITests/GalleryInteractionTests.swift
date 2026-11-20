@@ -337,6 +337,31 @@ final class GalleryInteractionTests: XCTestCase {
         snapshot("Opções do carimbo", app: app)
     }
 
+    func testStampEditorCanOpenPhotoAndFileSelectors() {
+        let app = launch()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Configurações")).firstMatch.tap()
+        let layout = app.buttons["Layout e perfis"]
+        for _ in 0..<3 where !layout.isHittable { app.swipeUp() }
+        XCTAssertTrue(layout.isHittable)
+        layout.tap()
+        XCTAssertTrue(app.buttons["Salvar"].waitForExistence(timeout: 8))
+        app.buttons["Logotipo"].tap()
+        app.buttons["Escolher"].tap()
+        app.buttons["Fotos"].tap()
+        let photoPicker = app.navigationBars["Fotos"]
+        XCTAssertTrue(photoPicker.waitForExistence(timeout: 10) || app.buttons["Cancelar"].waitForExistence(timeout: 3))
+        app.buttons["Cancelar"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Salvar"].waitForExistence(timeout: 8))
+        app.buttons["Escolher"].tap()
+        app.buttons["Arquivos"].tap()
+        let cancel = app.buttons["Cancelar"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        cancel.tap()
+        XCTAssertTrue(app.buttons["Salvar"].waitForExistence(timeout: 8))
+        app.buttons["Voltar"].tap()
+        XCTAssertTrue(layout.waitForExistence(timeout: 8))
+    }
+
     func testSettingsUsesADraggableNativeSwitch() {
         let app = launch()
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Configurações")).firstMatch.tap()
