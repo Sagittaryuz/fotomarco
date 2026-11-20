@@ -45,10 +45,11 @@ struct AppWelcomeGate: View {
                             Text("O login do Google ainda não está configurado nesta versão.")
                                 .font(.footnote).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
                         }
-                        Button("Continuar por enquanto") { page = 1 }
+                        Button("Continuar por enquanto") { welcomeTap(); page = 1 }
                             .foregroundStyle(.white.opacity(0.8))
                     } else {
                         Button {
+                            welcomeTap()
                             if page == 3 { lastPresentedVersion = currentVersion; completed = true } else { page += 1 }
                         } label: {
                             Text(page == 3 ? "Começar a usar" : "Continuar")
@@ -56,7 +57,7 @@ struct AppWelcomeGate: View {
                                 .frame(maxWidth: .infinity).padding(.vertical, 15)
                                 .background(.white, in: Capsule()).contentShape(Capsule())
                         }.buttonStyle(.plain)
-                        Button("Voltar") { page -= 1 }.foregroundStyle(.white.opacity(0.8))
+                        Button("Voltar") { welcomeTap(); page -= 1 }.foregroundStyle(.white.opacity(0.8))
                     }
                     HStack(spacing: 8) {
                         ForEach(0..<4) { index in
@@ -95,7 +96,7 @@ struct AppWelcomeGate: View {
                 Text("Novidades do Momentra").font(.title.bold())
                 Text("Deslize a foto para baixo para voltar à galeria. O WhatsApp abre após um compartilhamento concluído por ele. A galeria reaproveita a lista de fotos da nuvem.")
                     .multilineTextAlignment(.center).foregroundStyle(.secondary)
-                Button("Continuar") { showNews = false }.buttonStyle(.borderedProminent)
+                Button("Continuar") { welcomeTap(); showNews = false }.buttonStyle(.borderedProminent)
             }.padding(30)
         }.presentationDetents([.medium, .large])
     }
@@ -109,7 +110,12 @@ struct AppWelcomeGate: View {
          "O acesso ao Fotos permite escolher e salvar imagens. Você decide quais permissões conceder e pode alterá-las nos Ajustes do iPhone."][page]
     }
 
+    private func welcomeTap() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+    }
+
     private func signIn() {
+        welcomeTap()
         guard NativeGoogleAuth.configured else {
             message = "O login Google ainda precisa ser configurado para este aplicativo."; return
         }
