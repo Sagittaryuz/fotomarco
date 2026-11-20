@@ -45,12 +45,32 @@ final class GalleryDuplicateTests: XCTestCase {
         XCTAssertTrue(grouped.isFavorite(in: [grouped.id], cloud: [], device: [:]))
     }
 
-    private func cloud(_ provider: CloudDeliveryPlan.Provider, account: String, id: UUID, date: Date) throws -> GalleryItem {
+    func testCloudSnapshotSkipsOnlyEquivalentListings() throws {
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let old = try cloud(.googleDrive, account: "a", id: id, date: date, revision: "1")
+        let same = try cloud(.googleDrive, account: "a", id: id, date: date, revision: "1")
+        let revised = try cloud(.googleDrive, account: "a", id: id, date: date, revision: "2")
+        let otherAccount = try cloud(.googleDrive, account: "b", id: id, date: date, revision: "1")
+        let newDate = try cloud(.googleDrive, account: "a", id: id, date: date.addingTimeInterval(60), revision: "1")
+        let changedProfile = GalleryItem(source: same.source, date: same.date,
+            profile: CaptureProfileTag(id: UUID(), name: "Obra"))
+        XCTAssertTrue(GalleryItem.sameCloudSnapshot([old], [same]))
+        XCTAssertFalse(GalleryItem.sameCloudSnapshot([old], [revised]))
+        XCTAssertFalse(GalleryItem.sameCloudSnapshot([old], [otherAccount]))
+        XCTAssertFalse(GalleryItem.sameCloudSnapshot([old], [newDate]))
+        XCTAssertFalse(GalleryItem.sameCloudSnapshot([old], [changedProfile]))
+        XCTAssertFalse(GalleryItem.sameCloudSnapshot([old], []))
+        XCTAssertFalse(GalleryItem.sameCloudSnapshot([old, otherAccount], [otherAccount, old]))
+    }
+
+    private func cloud(_ provider: CloudDeliveryPlan.Provider, account: String, id: UUID, date: Date,
+                       revision: String? = nil) throws -> GalleryItem {
         let destination = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: provider,
                                          accountHash: String(repeating: account, count: 64)))
         let account = CloudArchiveAccounts.Account(id: destination, label: account, enabled: true)
         let name = CloudArchiveFilename.make(captureID: id, capturedAt: date, profile: nil, originalExtension: nil)
-        let entry = CloudGalleryCatalog.Entry(id: "file-id", name: name, date: date, revision: nil)
+        let entry = CloudGalleryCatalog.Entry(id: "file-id", name: name, date: date, revision: revision)
         let item = try XCTUnwrap(GalleryCloudItem.cachedPage([entry], for: account).items.first)
         return GalleryItem(source: .cloud(item), date: date, profile: nil)
     }

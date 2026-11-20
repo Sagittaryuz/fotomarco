@@ -73,6 +73,18 @@ struct GalleryItem: Identifiable {
 
     var id: String { photoIdentity ?? storageID }
 
+    /// An unchanged cloud listing need not rebuild the visible gallery.
+    /// Compare all metadata used by the gallery, including remote revision and account.
+    static func sameCloudSnapshot(_ left: [GalleryItem], _ right: [GalleryItem]) -> Bool {
+        guard left.count == right.count else { return false }
+        return zip(left, right).allSatisfy { old, new in
+            guard case .cloud(let a) = old.source, case .cloud(let b) = new.source else { return false }
+            return a.destination == b.destination && a.catalogEntry == b.catalogEntry &&
+                a.accountLabel == b.accountLabel && a.trashedAt == b.trashedAt && a.canRestore == b.canRestore &&
+                old.date == new.date && old.profile == new.profile
+        }
+    }
+
     var storageID: String {
         switch source {
         case .capture(let item): "capture/" + item.url.path

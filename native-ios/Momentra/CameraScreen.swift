@@ -535,6 +535,8 @@ struct CameraScreen: View {
             if ready { Task { await updates.check() } }
         }
         .onAppear {
+            camera.setRecognition(qr: recognitionDemand.qr, text: recognitionDemand.text)
+            camera.start()
             if !addressPreviewMigrated {
                 var layout = stampProfiles.selected.layout
                 layout.showsAddress = true
@@ -543,8 +545,6 @@ struct CameraScreen: View {
                 addressPreviewMigrated = true
             }
             refreshGalleryThumbnail()
-            camera.setRecognition(qr: recognitionDemand.qr, text: recognitionDemand.text)
-            camera.start()
             location.setEnabled(gpsEnabled)
             pressure.setEnabled(wantsPressure)
             refreshLogo()

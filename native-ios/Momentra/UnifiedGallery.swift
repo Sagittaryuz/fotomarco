@@ -646,6 +646,8 @@ struct OriginalsView: View {
     private func applyCloud(_ results: [GalleryItem], trash: Bool) {
         var ids = Set<String>()
         let unique = results.filter { ids.insert($0.storageID).inserted }
+        let previous = trash ? remoteTrash : remote
+        guard !GalleryItem.sameCloudSnapshot(previous, unique) else { return }
         let wasEmpty = projection.items.isEmpty
         if trash {
             remoteTrash = unique
