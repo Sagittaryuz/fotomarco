@@ -78,6 +78,7 @@ struct CameraScreen: View {
     @State private var countdown = 0
     @State private var countdownTask: Task<Void, Never>?
     @State private var logo: UIImage?
+    @State private var extraLogos: [UIImage?] = []
     @State private var galleryThumbnail: CameraService.CapturePreview?
     @State private var cameraShareTask: Task<Void, Never>?
     @State private var cameraShare: GalleryShareBatch?
@@ -686,6 +687,7 @@ struct CameraScreen: View {
         .onChange(of: showMap) { _, _ in refreshAddress() }
         .onChange(of: stampProfiles.selectedID) { _, _ in refreshLogo(); refreshAddress(); publishCaptureContext() }
         .onChange(of: stampProfiles.selected.effectiveLogoName) { _, _ in refreshLogo() }
+        .onChange(of: stampProfiles.selected.additionalLogoNames) { _, _ in refreshLogo() }
         .onChange(of: stampProfiles.selected.layout) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.name) { _, _ in publishCaptureContext() }
         .onChange(of: stampProfiles.selected.note) { _, _ in publishCaptureContext() }
@@ -1288,7 +1290,7 @@ struct CameraScreen: View {
         StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled,
             mapEnabled: stampProfiles.selected.layout.showsMap, addressEnabled: stampProfiles.selected.layout.showsAddress,
             cachedAddress: addressPreview.current(for: location.location, at: date), title: "", note: stampProfiles.selected.note,
-            logo: logo, logoCorner: "auto", compact: stampProfiles.selected.layout.compact,
+            logo: logo, extraLogos: extraLogos, logoCorner: "auto", compact: stampProfiles.selected.layout.compact,
             position: stampProfiles.selected.layout.position, horizontal: stampProfiles.selected.layout.horizontal,
             longDate: stampProfiles.selected.layout.dateFormat == "long", fontStyle: stampProfiles.selected.layout.fontStyle,
             mapScale: stampProfiles.selected.layout.mapScale, mapCorner: "auto",
@@ -1309,7 +1311,7 @@ struct CameraScreen: View {
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
             cloudOwnerHash: nil,
             layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout.lockedCaptureLayout())).flatMap { $0.count <= 2000 ? $0 : nil },
-            hasLogo: !stampProfiles.selected.effectiveLogoName.isEmpty,
+            hasLogo: !stampProfiles.selected.effectiveLogoName.isEmpty || stampProfiles.selected.additionalLogoNames.contains(where: { !$0.isEmpty }),
             archivePlan: plan)
         let previous = captureContextTask
         let publish = Task { @MainActor in
@@ -1352,7 +1354,10 @@ struct CameraScreen: View {
         stampProfiles.setLogo(name, for: profileID)
     }
 
-    private func refreshLogo() { logo = ProfileLogoStore.load(stampProfiles.selected.effectiveLogoName) }
+    private func refreshLogo() {
+        logo = ProfileLogoStore.load(stampProfiles.selected.effectiveLogoName)
+        extraLogos = stampProfiles.selected.additionalLogoNames.map { ProfileLogoStore.load($0) }
+    }
 
     private func apply(_ transfer: SettingsTransfer) {
         let s = transfer.settings

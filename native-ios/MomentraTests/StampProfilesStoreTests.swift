@@ -55,6 +55,19 @@ final class StampProfilesStoreTests: XCTestCase {
         XCTAssertEqual(restored.selected.effectiveLogoName, "company.png")
     }
 
+    func testConstructionLogosHaveIndependentSlotsAndPersist() {
+        let store = StampProfilesStore(defaults: defaults)
+        var layout = store.selected.layout
+        layout.template = .construction
+        store.setLayout(layout)
+        for slot in 0..<3 { store.setLogo("logo\(slot).png", for: store.selectedID, template: .construction, slot: slot) }
+        let restored = StampProfilesStore(defaults: defaults)
+        XCTAssertEqual(restored.selected.effectiveLogoName, "logo0.png")
+        XCTAssertEqual(restored.selected.additionalLogoNames, ["logo1.png", "logo2.png"])
+        let locked = restored.selected.layout.lockedCaptureLayout()
+        XCTAssertNil(locked.templateValues[StampLayout.Template.construction.rawValue]?["_image2"])
+    }
+
     func testMigrationCreatesOneNamedProfileAndRetainsLegacyKeys() {
         defaults.set("PIRESCO", forKey: "native.profile")
         defaults.set("Nota existente", forKey: "native.profile.piresco.note")

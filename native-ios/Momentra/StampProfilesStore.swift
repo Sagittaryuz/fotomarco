@@ -11,6 +11,11 @@ struct StampProfile: Identifiable, Codable, Equatable {
         guard layout.template != .original else { return logoName }
         return layout.templateValues[layout.template.rawValue]?["_image"] ?? logoName
     }
+    var additionalLogoNames: [String] {
+        guard layout.template == .construction else { return [] }
+        let fields = layout.templateValues[layout.template.rawValue] ?? [:]
+        return [fields["_image2"] ?? "", fields["_image3"] ?? ""]
+    }
 }
 
 /// Legacy keys remain intact for recovery and for older app versions.
@@ -118,10 +123,14 @@ final class StampProfilesStore: ObservableObject {
     func setNote(_ value: String) { update { $0.note = String(value.prefix(96)) } }
     func setLayout(_ value: StampLayout) { update { $0.layout = value } }
 
-    func setLogo(_ value: String, for id: UUID, template: StampLayout.Template = .original) {
+    func setLogo(_ value: String, for id: UUID, template: StampLayout.Template = .original, slot: Int = 0) {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
+        guard (0...2).contains(slot), slot == 0 || template == .construction else { return }
         if template == .original { profiles[index].logoName = value }
-        else { profiles[index].layout.templateValues[template.rawValue, default: [:]]["_image"] = value }
+        else {
+            let key = slot == 0 ? "_image" : "_image\(slot + 1)"
+            profiles[index].layout.templateValues[template.rawValue, default: [:]][key] = value
+        }
     }
 
     private func update(_ change: (inout StampProfile) -> Void) {

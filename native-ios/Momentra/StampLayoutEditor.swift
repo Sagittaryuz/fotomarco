@@ -12,6 +12,8 @@ struct StampLayoutEditor: View {
     @State private var importMessage: String?
     @State private var showPhotoPicker = false
     @State private var previewLogo: UIImage?
+    @State private var previewExtraLogos: [UIImage?] = []
+    @State private var logoSlot = 0
     @State private var showLimit = false
     @State private var chooseStartup = false
     @State private var confirmRemove = false
@@ -141,6 +143,7 @@ struct StampLayoutEditor: View {
                 Text("Inspeção").tag(StampLayout.Template.inspection)
                 Text("Retrato").tag(StampLayout.Template.portrait)
                 Text("Shopee").tag(StampLayout.Template.shopee)
+                Text("Construção").tag(StampLayout.Template.construction)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
@@ -148,7 +151,7 @@ struct StampLayoutEditor: View {
                 Text("Elementos separados").tag(StampLayout.Mode.separate)
             }.pickerStyle(.segmented)
             }
-            StampLayoutPreview(layout: layout, selectedElement: editingElement, logo: previewLogo)
+            StampLayoutPreview(layout: layout, selectedElement: editingElement, logo: previewLogo, extraLogos: previewExtraLogos)
                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -165,10 +168,12 @@ struct StampLayoutEditor: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     if layout.wrappedValue.template.usesLogo {
-                        Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo") {
-                            Button { showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
-                            Button { importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
-                        }.disabled(logoLoading)
+                        ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
+                            Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo \(slot + 1)") {
+                                Button { logoSlot = slot; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                                Button { logoSlot = slot; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                            }.disabled(logoLoading)
+                        }
                     }
                     if layout.wrappedValue.template.usesMap {
                         Picker("Visualização do mapa", selection: layout.mapStyle) {
@@ -190,17 +195,20 @@ struct StampLayoutEditor: View {
 
     var body: some View {
         editorContent
-        .task(id: store.selected.effectiveLogoName) {
+        .task(id: ([store.selected.effectiveLogoName] + store.selected.additionalLogoNames).joined(separator: "|")) {
             let name = store.selected.effectiveLogoName
-            let image = await Task.detached(priority: .utility) { ProfileLogoStore.load(name) }.value
+            let extraNames = store.selected.additionalLogoNames
+            let images = await Task.detached(priority: .utility) { (ProfileLogoStore.load(name), extraNames.map { ProfileLogoStore.load($0) }) }.value
             guard !Task.isCancelled else { return }
-            previewLogo = image
+            previewLogo = images.0
+            previewExtraLogos = images.1
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $selectedLogo, matching: .images)
         .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image]) { result in
             guard let url = try? result.get() else { return }
             let profileID = store.selectedID
             let template = store.selected.layout.template
+            let slot = logoSlot
             logoLoading = true
             Task {
                 defer { logoLoading = false }
@@ -212,7 +220,7 @@ struct StampLayoutEditor: View {
                         defer { try? file.close() }
                         return try ProfileLogoStore.save(file.read(upToCount: 20_000_001) ?? Data())
                     }.value
-                    store.setLogo(name, for: profileID, template: template)
+                    store.setLogo(name, for: profileID, template: template, slot: slot)
                 } catch {
                     importMessage = "Não foi possível importar o logotipo."
                 }
@@ -222,13 +230,14 @@ struct StampLayoutEditor: View {
             guard let item else { return }
             let profileID = store.selectedID
             let template = store.selected.layout.template
+            let slot = logoSlot
             logoLoading = true
             Task {
                 defer { logoLoading = false; selectedLogo = nil }
                 do {
                     guard let data = try await item.loadTransferable(type: Data.self) else { throw ProfileLogoStore.LogoError.invalid }
                     let name = try await Task.detached(priority: .utility) { try ProfileLogoStore.save(data) }.value
-                    store.setLogo(name, for: profileID, template: template)
+                    store.setLogo(name, for: profileID, template: template, slot: slot)
                 } catch {
                     importMessage = "Não foi possível importar o logotipo."
                 }
@@ -339,6 +348,7 @@ private struct StampLayoutPreview: View {
     @Binding var layout: StampLayout
     let selectedElement: StampLayoutEditor.Element
     let logo: UIImage?
+    let extraLogos: [UIImage?]
 
     private func highlight(_ element: StampLayoutEditor.Element) -> some View {
         RoundedRectangle(cornerRadius: 5)
@@ -361,7 +371,7 @@ private struct StampLayoutPreview: View {
                     let date = Date()
                     let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665), altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: date)
                     let sample = StampSnapshot(capturedAt: date, gpsEnabled: true, addressEnabled: true,
-                                               logo: logo, location: location, heading: nil, layout: layout)
+                                               logo: logo, extraLogos: extraLogos, location: location, heading: nil, layout: layout)
                     let map = layout.showsMap ? UIImage(named: layout.mapStyle == .satellite ? "StampSampleAerial" : "StampSampleMap") : nil
                     if let overlay = StampRenderer.overlay(size: size, snapshot: sample, map: map, address: "Central Park · Nova York") {
                         Image(uiImage: overlay).resizable().frame(width: size.width, height: size.height)

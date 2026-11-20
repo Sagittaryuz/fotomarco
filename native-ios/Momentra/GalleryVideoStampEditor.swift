@@ -84,7 +84,7 @@ struct GalleryVideoStampEditor: View {
             if stamped == nil, let date = item.date, let profile = profiles.first(where: { $0.id == selectedProfile }) {
                 let layout = profile.layout
                 let stamp = StampSnapshot(capturedAt: date, gpsEnabled: false, note: profile.note,
-                    logo: ProfileLogoStore.load(profile.effectiveLogoName), compact: layout.compact,
+                    logo: ProfileLogoStore.load(profile.effectiveLogoName), extraLogos: profile.additionalLogoNames.map { ProfileLogoStore.load($0) }, compact: layout.compact,
                     position: layout.position, horizontal: layout.horizontal, longDate: layout.dateFormat == "long",
                     fontStyle: layout.fontStyle, mapScale: layout.mapScale, mapCorner: layout.mapCorner,
                     location: nil, heading: nil, layout: layout)

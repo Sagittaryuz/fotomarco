@@ -61,7 +61,7 @@ struct StampLayout: Codable, Equatable {
         }
         var usesMap: Bool { [.visit, .largeMap, .map, .delivery].contains(self) }
         var usesLogo: Bool { [.construction, .completed, .portrait, .shopee, .deliveryProof].contains(self) }
-        var hasFixedRenderer: Bool { [.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map, .largeMap, .visit, .delivery, .clean, .checkIn, .patrol, .completed, .deliveryProof, .inspection, .portrait, .shopee].contains(self) }
+        var hasFixedRenderer: Bool { [.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map, .largeMap, .visit, .delivery, .clean, .checkIn, .patrol, .completed, .deliveryProof, .inspection, .portrait, .shopee, .construction].contains(self) }
     }
     var mode: Mode = .combined
     var showsMap = true
@@ -90,6 +90,8 @@ struct StampLayout: Codable, Equatable {
         var result = self
         result.templateValues = templateValues[template.rawValue].map { [template.rawValue: $0] } ?? [:]
         result.templateValues[template.rawValue]?.removeValue(forKey: "_image")
+        result.templateValues[template.rawValue]?.removeValue(forKey: "_image2")
+        result.templateValues[template.rawValue]?.removeValue(forKey: "_image3")
         return result
     }
     func templateValue(_ field: String, fallback: String = "") -> String {

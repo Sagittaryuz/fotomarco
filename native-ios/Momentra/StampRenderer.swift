@@ -48,6 +48,7 @@ struct StampSnapshot {
     let title: String
     let note: String
     let logo: UIImage?
+    let extraLogos: [UIImage?]
     let logoCorner: String
     let compact: Bool
     let position: String
@@ -61,7 +62,7 @@ struct StampSnapshot {
     let location: CLLocation?
     let heading: CLHeading?
 
-    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, cachedAddress: String? = nil, title: String = "", note: String = "", logo: UIImage? = nil, logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?, layout: StampLayout = StampLayout()) {
+    init(capturedAt: Date, gpsEnabled: Bool, mapEnabled: Bool = false, addressEnabled: Bool = false, cachedAddress: String? = nil, title: String = "", note: String = "", logo: UIImage? = nil, extraLogos: [UIImage?] = [], logoCorner: String = "auto", compact: Bool = false, position: String = "bottom", horizontal: String = "auto", longDate: Bool = false, fontStyle: String = "system", mapScale: String = "medium", mapCorner: String = "auto", pressure: PressureSample? = nil, forecast: Forecast? = nil, location: CLLocation?, heading: CLHeading?, layout: StampLayout = StampLayout()) {
         self.capturedAt = capturedAt
         self.layout = layout
         self.gpsEnabled = gpsEnabled
@@ -74,6 +75,7 @@ struct StampSnapshot {
         self.title = clean(title, limit: 40)
         self.note = clean(note, limit: 96)
         self.logo = logo
+        self.extraLogos = Array(extraLogos.prefix(2))
         self.logoCorner = ["auto", "top-left", "top-right", "bottom-left", "bottom-right"].contains(logoCorner) ? logoCorner : "auto"
         self.compact = compact
         self.position = position == "top" ? "top" : "bottom"
@@ -206,6 +208,41 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawConstruction(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        context.saveGState(); defer { context.restoreGState() }
+        let blue = UIColor(red: 0.15, green: 0.24, blue: 0.59, alpha: 0.96)
+        context.setFillColor(blue.cgColor)
+        context.fill(CGRect(x: box.minX, y: box.minY, width: box.width, height: box.height * 0.52))
+        context.setFillColor(UIColor(white: 0.84, alpha: 0.95).cgColor)
+        context.fill(CGRect(x: box.minX, y: box.minY + box.height * 0.52, width: box.width, height: box.height * 0.48))
+        let images = [snapshot.logo] + Array(snapshot.extraLogos.prefix(2))
+        for index in 0..<3 {
+            let cell = CGRect(x: box.minX + box.width * (0.03 + CGFloat(index) * 0.32), y: box.minY + box.height * 0.04, width: box.width * 0.29, height: box.height * 0.19)
+            context.setFillColor(UIColor.white.withAlphaComponent(0.9).cgColor); context.fill(cell)
+            if index < images.count, let image = images[index], image.size.width > 0, image.size.height > 0 {
+                let scale = min(cell.width / image.size.width, cell.height / image.size.height) * 0.9
+                let fitted = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                image.draw(in: CGRect(x: cell.midX - fitted.width / 2, y: cell.midY - fitted.height / 2, width: fitted.width, height: fitted.height))
+            }
+        }
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        let title = content.customFields["Título"] ?? "Registro de Construção"
+        (title as NSString).draw(in: CGRect(x: box.minX + box.width * 0.04, y: box.minY + box.height * 0.28, width: box.width * 0.92, height: box.height * 0.21),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.17, weight: .bold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        let rows = [("Descrição", content.customFields["Descrição"] ?? ""), ("Hora", content.date + " " + content.time)]
+        for index in rows.indices {
+            let y = box.minY + box.height * (0.57 + CGFloat(index) * 0.21)
+            (rows[index].0 as NSString).draw(in: CGRect(x: box.minX + box.width * 0.04, y: y, width: box.width * 0.32, height: box.height * 0.19),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .semibold), .foregroundColor: UIColor.darkGray, .paragraphStyle: paragraph])
+            (rows[index].1 as NSString).draw(in: CGRect(x: box.minX + box.width * 0.38, y: y, width: box.width * 0.58, height: box.height * 0.19),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func drawShippingTemplate(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -817,6 +854,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .shopee {
                 fits = drawShippingTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .construction {
+                fits = drawConstruction(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {
