@@ -21,7 +21,11 @@ final class StampSnapshotTests: XCTestCase {
         XCTAssertTrue(content.weather?.contains("930.0 hPa") == true)
         XCTAssertTrue(content.weather?.contains("10.8 km/h") == true)
         XCTAssertEqual(content.note, "Condomínio Hamoa Jataí")
-        XCTAssertNotNil(StampRenderer.separateInformationImage(snapshot: snapshot, address: content.address, size: CGSize(width: 400, height: 600)))
+        let (preview, _) = try XCTUnwrap(StampRenderer.separateInformationImage(snapshot: snapshot, address: content.address, size: CGSize(width: 400, height: 600)))
+        let attachment = XCTAttachment(image: preview)
+        attachment.name = "separate-information-example"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         let unavailable = StampSnapshot(capturedAt: date, gpsEnabled: false, location: nil, heading: nil, layout: layout)
             .separateInformation(address: "Não deve aparecer")
         XCTAssertNil(unavailable.address)
