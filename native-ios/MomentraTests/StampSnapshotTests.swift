@@ -28,11 +28,20 @@ final class StampSnapshotTests: XCTestCase {
         let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665),
                                   altitude: 30, horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: date)
         let map = UIImage(named: "StampSampleMap", in: Bundle(for: StampProfilesStore.self), compatibleWith: nil)
+        let logos = [UIColor.systemRed, .systemBlue, .systemGreen].map { color in
+            UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
+                color.setFill()
+                context.cgContext.fillEllipse(in: CGRect(x: 8, y: 8, width: 48, height: 48))
+            }
+        }
+        let forecast = Forecast(validAt: date, updatedAt: date, temperatureC: 22, humidityPercent: 60,
+                                windMetersPerSecond: 2, seaLevelPressureHpa: 1012)
         for template in StampLayout.Template.allCases where template.hasFixedRenderer {
             var layout = StampLayout()
             layout.template = template
             for field in template.fields { layout.setTemplateValue(field + " exemplo", for: field) }
             let snapshot = StampSnapshot(capturedAt: date, gpsEnabled: true, mapEnabled: true, addressEnabled: true,
+                                         logo: logos[0], extraLogos: [logos[1], logos[2]], forecast: forecast,
                                          location: location, heading: nil, layout: layout)
             let image = try XCTUnwrap(StampRenderer.overlay(size: CGSize(width: 400, height: 600), snapshot: snapshot,
                                                              map: map, address: "Central Park, Nova York"))
