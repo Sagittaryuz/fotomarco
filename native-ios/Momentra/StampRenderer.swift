@@ -337,6 +337,33 @@ enum StampRenderer {
         }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         let column = box.width * 0.64
+        if snapshot.layout.template == .visit || snapshot.layout.template == .delivery {
+            let delivery = snapshot.layout.template == .delivery
+            let top = CGRect(x: box.minX, y: box.minY, width: column, height: box.height * 0.36)
+            context.setFillColor(UIColor.white.withAlphaComponent(0.9).cgColor)
+            context.fill(top)
+            if delivery {
+                let lines = [content.customFields["Veículo"] ?? "", content.customFields["Encomenda"] ?? ""]
+                for index in lines.indices {
+                    (lines[index] as NSString).draw(in: CGRect(x: top.minX + top.width * 0.04, y: top.minY + CGFloat(index) * top.height * 0.5, width: top.width * 0.92, height: top.height * 0.48),
+                        withAttributes: [.font: UIFont.systemFont(ofSize: top.height * 0.30, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
+                }
+            } else {
+                context.setFillColor(UIColor.systemYellow.cgColor)
+                context.fill(CGRect(x: top.minX, y: top.minY, width: top.width * 0.45, height: top.height))
+                let title = content.customFields["Título"] ?? "Visita"
+                (title as NSString).draw(in: CGRect(x: top.minX + top.width * 0.03, y: top.minY + top.height * 0.10, width: top.width * 0.40, height: top.height * 0.8),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: top.height * 0.52, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
+                (content.time as NSString).draw(in: CGRect(x: top.minX + top.width * 0.48, y: top.minY + top.height * 0.08, width: top.width * 0.5, height: top.height * 0.85),
+                    withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: top.height * 0.60, weight: .bold), .foregroundColor: UIColor.systemBlue, .paragraphStyle: paragraph])
+            }
+            let lines = delivery ? [content.time + "  " + content.date, content.address ?? ""] : [content.date, content.address ?? "", content.coordinate ?? ""]
+            for index in lines.indices {
+                (lines[index] as NSString).draw(in: CGRect(x: box.minX + column * 0.03, y: top.maxY + box.height * (0.04 + CGFloat(index) * 0.19), width: column * 0.94, height: box.height * 0.18),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            }
+            return true
+        }
         (content.time as NSString).draw(in: CGRect(x: box.minX, y: box.minY, width: column * 0.65, height: box.height * 0.52),
             withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.40, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         context.setFillColor(UIColor.systemYellow.cgColor)
@@ -673,7 +700,7 @@ enum StampRenderer {
                 fits = drawTimeOrCustom(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
-            if snapshot.layout.template == .map {
+            if [.map, .visit, .delivery].contains(snapshot.layout.template) {
                 fits = drawMapTemplate(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
                 return
             }

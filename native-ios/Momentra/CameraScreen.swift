@@ -265,7 +265,7 @@ struct CameraScreen: View {
                                             .frame(width: box.width, height: box.height)
                                             .position(x: box.midX, y: box.midY)
                                             .accessibilityLabel("Personalizar carimbo")
-                                        if snapshot.layout.template == .map && snapshot.mapEnabled && snapshot.location != nil {
+                                        if snapshot.layout.template.usesMap && snapshot.mapEnabled && snapshot.location != nil {
                                             let mapBox = StampRenderer.fixedMapRect(in: geometry.size)
                                             StampMapPreview(snapshot: snapshot, markerSize: max(5, mapBox.width * 0.12))
                                                 .frame(width: mapBox.width, height: mapBox.height)
