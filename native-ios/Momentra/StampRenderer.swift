@@ -319,6 +319,14 @@ enum StampRenderer {
             context.setStrokeColor(UIColor.white.cgColor); context.setLineWidth(max(1, marker * 0.12))
             context.strokeEllipse(in: CGRect(x: box.midX - marker / 2, y: box.midY - marker / 2, width: marker, height: marker))
         }
+        let cameraBadge = CGRect(x: box.maxX - box.width * 0.24, y: box.minY + box.height * 0.04,
+                                 width: box.width * 0.21, height: box.height * 0.42)
+        context.setFillColor(UIColor(white: 0.20, alpha: 0.8).cgColor)
+        context.fill(cameraBadge)
+        if let icon = UIImage(systemName: "camera.fill")?.withTintColor(.white, renderingMode: .alwaysOriginal) {
+            let side = min(cameraBadge.width, cameraBadge.height) * 0.55
+            icon.draw(in: CGRect(x: cameraBadge.midX - side / 2, y: cameraBadge.midY - side / 2, width: side, height: side))
+        }
         let strip = CGRect(x: box.minX, y: box.minY + box.height * 0.64, width: box.width, height: box.height * 0.36)
         context.setFillColor(UIColor.black.withAlphaComponent(0.55).cgColor); context.fill(strip)
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
@@ -326,6 +334,14 @@ enum StampRenderer {
         for index in lines.indices {
             (lines[index] as NSString).draw(in: CGRect(x: strip.minX + box.width * 0.04, y: strip.minY + CGFloat(index) * strip.height * 0.5, width: strip.width * 0.67, height: strip.height * 0.48),
                 withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        if let heading = snapshot.heading {
+            let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+            if degrees >= 0 {
+                let right = NSMutableParagraphStyle(); right.alignment = .right
+                (String(format: "%.0f°", degrees) as NSString).draw(in: CGRect(x: strip.midX, y: strip.minY, width: strip.width * 0.46, height: strip.height * 0.48),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12), .foregroundColor: UIColor.white, .paragraphStyle: right])
+            }
         }
         if let temperature = snapshot.forecast?.temperatureC {
             let right = NSMutableParagraphStyle(); right.alignment = .right
