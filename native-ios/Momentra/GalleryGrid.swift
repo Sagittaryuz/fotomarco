@@ -2,6 +2,10 @@ import SwiftUI
 import UIKit
 
 enum GallerySelectionRange {
+    static func beginsRangeSelection(velocity: CGPoint) -> Bool {
+        abs(velocity.x) > 0 && abs(velocity.x) > abs(velocity.y) * 1.25
+    }
+
     static func applying<ID: Hashable>(_ ids: [ID], from: Int, through: Int, initial: Set<ID>, selecting: Bool) -> Set<ID> {
         guard ids.indices.contains(from), ids.indices.contains(through) else { return initial }
         var result = initial
@@ -269,7 +273,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             if gestureRecognizer is UIPinchGestureRecognizer { return !parent.selecting }
             guard collection.indexPathForItem(at: gestureRecognizer.location(in: collection)) != nil else { return false }
             if gestureRecognizer is UILongPressGestureRecognizer { return !parent.selecting && parent.longPress != nil }
-            return parent.selecting
+            guard parent.selecting, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            return GallerySelectionRange.beginsRangeSelection(velocity: pan.velocity(in: collection))
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
             gestureRecognizer is UIPinchGestureRecognizer
