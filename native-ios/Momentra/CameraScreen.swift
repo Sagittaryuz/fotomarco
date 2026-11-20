@@ -254,7 +254,21 @@ struct CameraScreen: View {
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
                     .overlay {
-                        if stampEnabled && stampProfiles.selected.layout.mode == .separate {
+                        if stampEnabled && stampProfiles.selected.layout.template == .workReport {
+                            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                                GeometryReader { geometry in
+                                    let snapshot = makeSnapshot(at: timeline.date)
+                                    if let image = StampRenderer.overlay(size: geometry.size, snapshot: snapshot, map: nil, address: snapshot.cachedAddress) {
+                                        Image(uiImage: image).resizable().frame(width: geometry.size.width, height: geometry.size.height).allowsHitTesting(false)
+                                        let box = StampRenderer.workReportRect(in: geometry.size)
+                                        Button { showStampEditor = true } label: { Color.clear.contentShape(Rectangle()) }
+                                            .frame(width: box.width, height: box.height)
+                                            .position(x: box.midX, y: box.midY)
+                                            .accessibilityLabel("Personalizar relatório de trabalho")
+                                    }
+                                }
+                            }
+                        } else if stampEnabled && stampProfiles.selected.layout.mode == .separate {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date),
                                                   editMap: { showStampMapOptions = true },
@@ -290,14 +304,14 @@ struct CameraScreen: View {
                              : "\(archiveStatus.pending) captura(s) aguardando envio")
                             .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
                     }
-                    if stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
+                    if stampEnabled && stampProfiles.selected.layout.template == .original && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if stampEnabled && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
+                    if stampEnabled && stampProfiles.selected.layout.template == .original && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
                     if recognitionDemand.qr || recognitionDemand.text {
                         LiveRecognitionBanner(engine: camera.recognition) { text in
                             selectedRecognizedText = RecognizedTextSelection(text: text)

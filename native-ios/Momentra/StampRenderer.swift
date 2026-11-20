@@ -206,6 +206,13 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func workReportRect(in size: CGSize) -> CGRect {
+        let unit = min(size.width, size.height)
+        let width = unit * 0.78
+        let height = width * 0.49
+        let margin = unit * 0.035
+        return CGRect(x: margin, y: size.height - margin - height, width: width, height: height)
+    }
     /// Fixed-proportion work report, shared by photo and video rendering.
     static func drawWorkReport(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         let unit = min(size.width, size.height)
@@ -214,7 +221,7 @@ enum StampRenderer {
         let height = width * 0.49
         let margin = unit * 0.035
         guard size.width >= width + margin * 2, size.height >= height + margin * 2 else { return false }
-        let box = CGRect(x: margin, y: size.height - margin - height, width: width, height: height)
+        let box = workReportRect(in: size)
         let content = snapshot.templateContent(address: address)
         let headerHeight = height * 0.31
         context.saveGState()
