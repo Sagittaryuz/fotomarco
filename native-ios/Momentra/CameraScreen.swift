@@ -112,6 +112,7 @@ struct CameraScreen: View {
     @State private var quickReleasePending = false
     @State private var suppressQuickPhoto = false
     @Environment(\.scenePhase) private var scenePhase
+    @State private var didEnterBackground = false
 
     private var cameraHeader: some View {
         Group {
@@ -602,8 +603,16 @@ struct CameraScreen: View {
         }
         .onDisappear { modeTransitionTask?.cancel(); modeTransitionBlur = false; finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures() }
-            else { finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+            if phase == .active {
+                if didEnterBackground {
+                    didEnterBackground = false
+                    returnToCamera()
+                }
+                camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures()
+            } else {
+                if phase == .background { didEnterBackground = true }
+                finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear()
+            }
         }
     }
 
@@ -622,6 +631,15 @@ struct CameraScreen: View {
             retryCloudCaptures()
         }
         .onReceive(NotificationCenter.default.publisher(for: .momentraOpenCamera).receive(on: RunLoop.main)) { _ in
+            returnToCamera()
+            camera.start()
+        }
+    }
+
+    private func returnToCamera() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
             showSettings = false
             showStampEditor = false
             showStampMapOptions = false
@@ -633,7 +651,6 @@ struct CameraScreen: View {
             showSettingsImport = false
             showAspectPanel = false
             selectedRecognizedText = nil
-            camera.start()
         }
     }
 
