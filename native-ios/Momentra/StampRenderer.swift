@@ -253,9 +253,16 @@ enum StampRenderer {
         return true
     }
     static func fittedFixedFont(_ font: UIFont, sample: String, width: CGFloat) -> UIFont {
-        let measured = (sample as NSString).size(withAttributes: [.font: font]).width
-        guard measured > 0, width > 0, measured > width else { return font }
-        return font.withSize(font.pointSize * width / measured * 0.97)
+        guard width > 0 else { return font }
+        var result = font
+        for _ in 0..<12 {
+            let measured = (sample as NSString).size(withAttributes: [.font: result]).width
+            guard measured > width, measured > 0 else { return result }
+            let nextSize = min(result.pointSize - 0.1, result.pointSize * width / measured * 0.95)
+            guard nextSize > 0 else { break }
+            result = result.withSize(nextSize)
+        }
+        return result
     }
     static func drawConstruction(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
