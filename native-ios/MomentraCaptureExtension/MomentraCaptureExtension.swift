@@ -78,9 +78,9 @@ private struct LockedCameraScreen: View {
         guard context.stampEnabled else { return nil }
         let layout = context.layoutData.flatMap { data in
             data.count <= 2000 ? try? JSONDecoder().decode(StampLayout.self, from: data) : nil
-        }
-        let mapUnavailable = context.gpsEnabled && (layout?.showsMap ?? false)
-        let logoUnavailable = context.hasLogo == true && (layout?.showsLogo ?? true)
+        } ?? StampLayout()
+        let mapUnavailable = context.gpsEnabled && layout.showsMap && (layout.template == .original || layout.template.usesMap)
+        let logoUnavailable = context.hasLogo == true && layout.showsLogo && (layout.template == .original || layout.template.usesLogo)
         if mapUnavailable && logoUnavailable { return "Mapa e logotipo indisponíveis com a tela bloqueada." }
         if mapUnavailable { return "Mapa indisponível com a tela bloqueada." }
         if logoUnavailable { return "Logotipo indisponível com a tela bloqueada." }
@@ -91,6 +91,15 @@ private struct LockedCameraScreen: View {
     private var stampPreview: some View {
         if let context, context.stampEnabled {
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                let layout = context.layoutData.flatMap { try? JSONDecoder().decode(StampLayout.self, from: $0) } ?? StampLayout()
+                if layout.template.hasFixedRenderer {
+                    let snapshot = StampSnapshot(capturedAt: timeline.date, gpsEnabled: context.gpsEnabled,
+                                                 location: location.location, heading: location.heading, layout: layout)
+                    if let image = StampRenderer.overlay(size: CGSize(width: 320, height: 140), snapshot: snapshot, map: nil, address: nil) {
+                        Image(uiImage: image).resizable().scaledToFit().frame(height: 140)
+                            .accessibilityLabel("Pré-visualização do carimbo")
+                    }
+                } else {
                 VStack(alignment: .leading, spacing: 4) {
                     if !context.note.isEmpty { Text(context.note) }
                     Text(timeline.date, format: .dateTime.day().month().year().hour().minute().second())
@@ -104,6 +113,7 @@ private struct LockedCameraScreen: View {
                 .font(context.compact ? .caption2 : .caption)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10).background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+                }
             }.padding(.horizontal)
         }
     }

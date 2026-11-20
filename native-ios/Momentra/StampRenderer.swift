@@ -206,6 +206,39 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawInspection(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        let font = UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium)
+        context.saveGState()
+        defer { context.restoreGState() }
+        func label(_ text: String, rect: CGRect, background: UIColor?) {
+            if let background { context.setFillColor(background.cgColor); context.fill(rect) }
+            (text as NSString).draw(in: rect.insetBy(dx: box.width * 0.015, dy: box.height * 0.02),
+                withAttributes: [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        if let heading = snapshot.heading {
+            let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+            if degrees >= 0 { label(String(format: "%.0f°", degrees), rect: CGRect(x: box.minX, y: box.minY, width: box.width * 0.36, height: box.height * 0.21), background: .systemOrange) }
+        }
+        if let location = snapshot.location, location.verticalAccuracy >= 0 {
+            label(String(format: "%.0f m", location.altitude), rect: CGRect(x: box.minX + box.width * 0.40, y: box.minY, width: box.width * 0.23, height: box.height * 0.21), background: UIColor(white: 0.2, alpha: 0.7))
+        }
+        if let coordinate = content.coordinate {
+            label(coordinate, rect: CGRect(x: box.minX, y: box.minY + box.height * 0.27, width: box.width * 0.84, height: box.height * 0.21), background: UIColor(white: 0.2, alpha: 0.7))
+        }
+        context.setFillColor(UIColor.systemOrange.cgColor)
+        context.fill(CGRect(x: box.minX, y: box.minY + box.height * 0.55, width: max(1, box.width * 0.008), height: box.height * 0.45))
+        let title = content.customFields["Título"]
+        let lines = [content.date + " " + content.time, content.address ?? "", title ?? ""]
+        for index in lines.indices {
+            label(lines[index], rect: CGRect(x: box.minX + box.width * 0.035, y: box.minY + box.height * (0.55 + CGFloat(index) * 0.15), width: box.width * 0.94, height: box.height * 0.16), background: nil)
+        }
+        return true
+    }
     static func drawProofTemplate(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -650,6 +683,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .completed || snapshot.layout.template == .deliveryProof {
                 fits = drawProofTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .inspection {
+                fits = drawInspection(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {
