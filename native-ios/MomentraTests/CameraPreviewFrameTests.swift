@@ -27,4 +27,18 @@ final class CameraPreviewFrameTests: XCTestCase {
     func testUnmeasuredControlsDoNotShowAnUnboundedPreview() {
         XCTAssertEqual(PhotoAspect.standard.previewFrame(in: CGSize(width: 390, height: 780), top: 35, bottom: 0), .zero)
     }
+
+    func testAllAspectsKeepTheStandardFrameTop() {
+        for screen in [CGSize(width: 390, height: 844), CGSize(width: 320, height: 568),
+                       CGSize(width: 844, height: 390)] {
+            let top: CGFloat = 60
+            let bottom = screen.height - 130
+            let reference = PhotoAspect.standard.previewFrame(in: screen, top: top, bottom: bottom)
+            for aspect in PhotoAspect.allCases {
+                let frame = aspect.previewFrame(in: screen, top: top, bottom: bottom)
+                XCTAssertEqual(frame.minY, reference.minY, accuracy: 0.001)
+                XCTAssertLessThanOrEqual(frame.maxY, bottom + 0.001)
+            }
+        }
+    }
 }

@@ -155,8 +155,12 @@ enum PhotoAspect: String, CaseIterable {
         let start = max(0, top)
         let end = min(screen.height, bottom)
         let available = CGSize(width: screen.width, height: end - start)
-        guard let size = fittedSize(in: available, landscape: screen.width >= screen.height) else { return .zero }
-        return CGRect(x: (screen.width - size.width) / 2, y: start + (available.height - size.height) / 2,
+        let landscape = screen.width >= screen.height
+        guard let reference = PhotoAspect.standard.fittedSize(in: available, landscape: landscape) else { return .zero }
+        let anchor = start + (available.height - reference.height) / 2
+        let remaining = CGSize(width: screen.width, height: end - anchor)
+        guard let size = fittedSize(in: remaining, landscape: landscape) else { return .zero }
+        return CGRect(x: (screen.width - size.width) / 2, y: anchor,
                       width: size.width, height: size.height)
     }
 
