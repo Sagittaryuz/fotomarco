@@ -14,7 +14,7 @@ final class StampSnapshotTests: XCTestCase {
     }
 
     func testFixedTemplatesProduceAnOverlayWithoutLocation() throws {
-        for template in [StampLayout.Template.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom] {
+        for template in [StampLayout.Template.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map] {
             var layout = StampLayout()
             layout.template = template
             let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil, layout: layout)

@@ -206,6 +206,43 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func fixedMapRect(in size: CGSize) -> CGRect {
+        let box = workReportRect(in: size)
+        let side = min(box.height * 0.9, box.width * 0.32)
+        return CGRect(x: box.maxX - side, y: box.midY - side / 2, width: side, height: side)
+    }
+
+    static func drawMapTemplate(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let mapRect = fixedMapRect(in: size)
+        context.saveGState()
+        defer { context.restoreGState() }
+        if snapshot.mapEnabled, let map {
+            map.draw(in: mapRect)
+            let marker = mapRect.width * 0.12
+            context.setFillColor(UIColor.systemBlue.cgColor)
+            context.fillEllipse(in: CGRect(x: mapRect.midX - marker / 2, y: mapRect.midY - marker / 2, width: marker, height: marker))
+            context.setStrokeColor(UIColor.white.cgColor)
+            context.setLineWidth(max(1, marker * 0.12))
+            context.strokeEllipse(in: CGRect(x: mapRect.midX - marker / 2, y: mapRect.midY - marker / 2, width: marker, height: marker))
+        }
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        let column = box.width * 0.64
+        (content.time as NSString).draw(in: CGRect(x: box.minX, y: box.minY, width: column * 0.65, height: box.height * 0.52),
+            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.40, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        context.setFillColor(UIColor.systemYellow.cgColor)
+        context.fill(CGRect(x: box.minX + column * 0.68, y: box.minY + box.height * 0.05, width: max(1, box.width * 0.008), height: box.height * 0.40))
+        (content.date as NSString).draw(in: CGRect(x: box.minX + column * 0.72, y: box.minY + box.height * 0.14, width: column * 0.28, height: box.height * 0.23),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .semibold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        for (index, text) in [content.address ?? "", content.coordinate ?? ""].enumerated() {
+            (text as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * (0.57 + CGFloat(index) * 0.20), width: column, height: box.height * 0.18),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func drawTimeOrCustom(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -528,6 +565,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .timeLocation || snapshot.layout.template == .custom {
                 fits = drawTimeOrCustom(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .map {
+                fits = drawMapTemplate(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {

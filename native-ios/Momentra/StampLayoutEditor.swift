@@ -128,6 +128,7 @@ struct StampLayoutEditor: View {
                 Text("Localização e clima").tag(StampLayout.Template.locationWeather)
                 Text("Hora e localização").tag(StampLayout.Template.timeLocation)
                 Text("Personalizado").tag(StampLayout.Template.custom)
+                Text("Mapa").tag(StampLayout.Template.map)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
@@ -151,6 +152,13 @@ struct StampLayoutEditor: View {
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
             } else {
                 VStack(alignment: .leading, spacing: 8) {
+                    if layout.wrappedValue.template.usesMap {
+                        Picker("Visualização do mapa", selection: layout.mapStyle) {
+                            Text("Mapa").tag(StampLayout.MapAppearance.map)
+                            Text("Satélite").tag(StampLayout.MapAppearance.satellite)
+                        }.pickerStyle(.segmented)
+                        Toggle("Mostrar mapa", isOn: flag(\.showsMap)).toggleStyle(DirectionalSwitchStyle())
+                    }
                     ForEach(layout.wrappedValue.template.fields, id: \.self) { field in
                         TextField(field, text: Binding(
                             get: { layout.wrappedValue.templateValue(field) },
@@ -327,7 +335,8 @@ private struct StampLayoutPreview: View {
                     let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665), altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: date)
                     let sample = StampSnapshot(capturedAt: date, gpsEnabled: true, addressEnabled: true,
                                                location: location, heading: nil, layout: layout)
-                    if let overlay = StampRenderer.overlay(size: size, snapshot: sample, map: nil, address: "Central Park · Nova York") {
+                    let map = layout.showsMap ? UIImage(named: layout.mapStyle == .satellite ? "StampSampleAerial" : "StampSampleMap") : nil
+                    if let overlay = StampRenderer.overlay(size: size, snapshot: sample, map: map, address: "Central Park · Nova York") {
                         Image(uiImage: overlay).resizable().frame(width: size.width, height: size.height)
                     }
                 } else if layout.mode == .combined {
