@@ -100,6 +100,26 @@ struct StampSnapshot {
 
     var lines: [String] { informationLines(address: nil) }
 
+    /// Real capture data for fixed templates. Missing sensor data stays absent.
+    func templateContent(address: String?) -> StampTemplateContent {
+        let date = DateFormatter()
+        date.locale = Locale(identifier: "pt_BR")
+        date.dateFormat = "dd/MM/yyyy"
+        let time = DateFormatter()
+        time.locale = date.locale
+        time.dateFormat = "HH:mm"
+        let address = addressEnabled && location != nil ? address : nil
+        let coordinate = location.map { String(format: "%.6f, %.6f", $0.coordinate.latitude, $0.coordinate.longitude) }
+        var values: [String: String] = [:]
+        for field in layout.template.fields {
+            let value = layout.templateValue(field).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { values[field] = value }
+        }
+        return StampTemplateContent(template: layout.template, date: date.string(from: capturedAt),
+                                    time: time.string(from: capturedAt), address: address,
+                                    coordinate: coordinate, customFields: values)
+    }
+
     func informationLines(address: String?) -> [String] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "pt_BR")
@@ -131,6 +151,15 @@ struct StampSnapshot {
         if !values.isEmpty { result.append(values.joined(separator: " · ")) }
         return result
     }
+}
+
+struct StampTemplateContent {
+    let template: StampLayout.Template
+    let date: String
+    let time: String
+    let address: String?
+    let coordinate: String?
+    let customFields: [String: String]
 }
 
 enum PhotoAspect: String, CaseIterable {

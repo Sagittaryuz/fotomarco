@@ -3,6 +3,22 @@ import CoreLocation
 @testable import Momentra
 
 final class StampSnapshotTests: XCTestCase {
+    func testFixedTemplateContentUsesSelectedFieldsAndRespectsLocationPermission() {
+        var layout = StampLayout()
+        layout.template = .workReport
+        layout.setTemplateValue("Obra A", for: "Projeto")
+        layout.setTemplateValue("Piso", for: "Inspeção")
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, addressEnabled: true,
+                                     location: CLLocation(latitude: -17.9, longitude: -51.7), heading: nil, layout: layout)
+        let content = snapshot.templateContent(address: "Endereço antigo")
+        XCTAssertEqual(content.template, .workReport)
+        XCTAssertEqual(content.customFields["Projeto"], "Obra A")
+        XCTAssertEqual(content.customFields["Inspeção"], "Piso")
+        XCTAssertNil(content.address)
+        XCTAssertNil(content.coordinate)
+        XCTAssertFalse(content.date.isEmpty)
+        XCTAssertFalse(content.time.isEmpty)
+    }
     func testDisabledGPSNeverAppearsInStamp() {
         let now = Date()
         let location = CLLocation(latitude: -17.9, longitude: -51.7)
