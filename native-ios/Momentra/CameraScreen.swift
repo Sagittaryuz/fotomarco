@@ -71,6 +71,7 @@ struct CameraScreen: View {
     @State private var mode: CaptureMode = .photo
     @State private var modeTransitionBlur = false
     @State private var modeTransitionTask: Task<Void, Never>?
+    @State private var lastZoomHaptic = 0.0
     @State private var timerSeconds = 0
     @State private var countdown = 0
     @State private var countdownTask: Task<Void, Never>?
@@ -349,7 +350,7 @@ struct CameraScreen: View {
                         Button {
                             guard !suppressQuickPhoto else { return }
                             if camera.isRecording && (mode == .video || quickRecordingLocked) {
-                                camera.stopRecording(); quickRecording = false; quickRecordingLocked = false
+                                stopVideoWithFeedback(); quickRecording = false; quickRecordingLocked = false
                             } else if mode == .video {
                                 startVideoRecording()
                             } else {
@@ -596,7 +597,7 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in
-            UISelectionFeedbackGenerator().selectionChanged()
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
             refreshAddress()
             modeTransitionTask?.cancel()
             guard !reduceMotion else { modeTransitionBlur = false; return }
@@ -606,6 +607,13 @@ struct CameraScreen: View {
                 guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: 0.5)) { modeTransitionBlur = false }
             }
+        }
+        .onChange(of: camera.zoomFactor) { old, new in
+            let now = ProcessInfo.processInfo.systemUptime
+            guard cameraSurfaceVisible, camera.ready, (old * 10).rounded() != (new * 10).rounded(),
+                  now - lastZoomHaptic >= 0.1 else { return }
+            lastZoomHaptic = now
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
         }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
@@ -624,7 +632,10 @@ struct CameraScreen: View {
                 suppressQuickPhoto = false
             }
         }
-        .onReceive(camera.capturedPhoto) { _ in showShutterFeedback() }
+        .onReceive(camera.capturedPhoto) { _ in
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
+            showShutterFeedback()
+        }
         .onReceive(camera.completedPhoto) { showCapturedPhoto($0) }
         .onChange(of: reduceMotion) { _, enabled in if enabled { finishPhotoFlight() } }
     }
@@ -655,7 +666,7 @@ struct CameraScreen: View {
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(item: $cameraShare) { batch in
-            batch.sheet {}.onAppear { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            batch.sheet {}.onAppear { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35) }
         }
         .alert("Atualização do Momentra", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
@@ -1261,12 +1272,18 @@ struct CameraScreen: View {
     private func handleHardwareCapture() {
         guard camera.ready, !camera.isCapturing, !camera.isSwitching, !camera.isFinishingRecording else { return }
         if mode == .video {
-            if camera.isRecording { camera.stopRecording() } else { startVideoRecording() }
+            if camera.isRecording { stopVideoWithFeedback() } else { startVideoRecording() }
         } else if countdown > 0 {
             cancelCountdown()
         } else {
             schedulePhoto()
         }
+    }
+
+    private func stopVideoWithFeedback() {
+        guard camera.isRecording, !camera.isFinishingRecording else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
+        camera.stopRecording()
     }
 
     private var canPreviewAddress: Bool {
