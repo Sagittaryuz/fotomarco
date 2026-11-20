@@ -55,6 +55,7 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 
 ## Processamento e validação
 
+- Siga o [plano de otimização](PLANO-DE-OTIMIZACAO.md) para medir o gargalo, comparar revisões e priorizar câmera, galeria, memória e uso sustentado.
 - Mantenha captura e ajustes de lente na fila da sessão AVFoundation. Converta o ponto do toque pela camada de prévia. Mostre o marcador depois que foco ou exposição aceitar o ponto. Teste câmera frontal, traseira, troca de lente e o modo de captura bloqueada no iPhone.
 - Descarregue codificação, mapa, miniaturas e persistência da interface. Reuse miniaturas por conta e revisão. Pesquise no Fotos pelos identificadores do Momentra quando a aba é Capturas. Evite percorrer o armazenamento inteiro para calcular o uso do volume.
 - Use `GalleryThumbnailCache` para miniaturas. O cache usa o diretório Caches do iOS, com alvo de 12 MiB de memória e limites de 32 MiB e 400 arquivos no disco. As chaves locais incluem tamanho e modificação. As chaves remotas incluem conta, arquivo e revisão. O cache é descartável e separado das prévias offline que a fila de envio preserva.
