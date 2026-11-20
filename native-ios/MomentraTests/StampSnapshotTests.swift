@@ -21,7 +21,9 @@ final class StampSnapshotTests: XCTestCase {
         XCTAssertTrue(content.weather?.contains("930.0 hPa") == true)
         XCTAssertTrue(content.weather?.contains("10.8 km/h") == true)
         XCTAssertEqual(content.note, "Condomínio Hamoa Jataí")
-        let (preview, _) = try XCTUnwrap(StampRenderer.separateInformationImage(snapshot: snapshot, address: content.address, size: CGSize(width: 400, height: 600)))
+        let (preview, _) = try XCTUnwrap(StampRenderer.separateInformationImage(snapshot: snapshot, address: content.address, size: CGSize(width: 400, height: 600), displayScale: 3))
+        XCTAssertEqual(preview.scale, 3)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(preview.cgImage).width, Int(preview.size.width * 3) - 1)
         let attachment = XCTAttachment(image: preview)
         attachment.name = "separate-information-example"
         attachment.lifetime = .keepAlways

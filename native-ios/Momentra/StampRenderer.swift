@@ -3,6 +3,7 @@ import UIKit
 import MapKit
 import ImageIO
 import CoreImage
+import CoreText
 import UniformTypeIdentifiers
 
 enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
@@ -920,7 +921,7 @@ enum StampRenderer {
     }
 
     /// The same bitmap is used by the live preview and exported photos/videos.
-    static func separateInformationImage(snapshot: StampSnapshot, address: String?, size: CGSize) -> (UIImage, CGRect)? {
+    static func separateInformationImage(snapshot: StampSnapshot, address: String?, size: CGSize, displayScale: CGFloat = 1) -> (UIImage, CGRect)? {
         let unit = min(size.width, size.height)
         let margin = unit * 0.025
         let space = availableSize(size: size, anchor: snapshot.layout.information, margin: margin)
@@ -934,15 +935,21 @@ enum StampRenderer {
         let rightWidth = width - rightX - width * 0.01
         var pointSize = max(7, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(snapshot.layout.informationSize))
         while pointSize >= 6 {
-            let font = condensedStampFont(size: pointSize)
+            let font = condensedStampFont(size: pointSize, bold: true)
+            let dateFont = UIFont(name: "AvenirNextCondensed-Bold", size: pointSize * 1.15)
+                ?? UIFont.systemFont(ofSize: pointSize * 1.15, weight: .bold)
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
-            let rowHeights = rows.map { row in
-                ceil((row as NSString).boundingRect(with: CGSize(width: rightWidth, height: .greatestFiniteMagnitude),
-                    options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs, context: nil).height)
+            let rowHeights = rows.enumerated().map { index, row in
+                let rowAttrs: [NSAttributedString.Key: Any] = [.font: index == 0 ? dateFont : font, .paragraphStyle: paragraph]
+                return ceil((row as NSString).boundingRect(with: CGSize(width: rightWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: rowAttrs, context: nil).height)
             }
             let lineGap = pointSize * 0.10
             let contentHeight = rowHeights.reduce(0, +) + CGFloat(max(0, rows.count - 1)) * lineGap
-            let clockFont = fittedFixedFont(condensedStampFont(size: max(pointSize * 2.5, contentHeight * 0.75)),
+            let clockSize = max(pointSize * 2.5, contentHeight * 0.85)
+            let heavyClock = UIFont(name: "AvenirNextCondensed-Bold", size: clockSize)
+                ?? UIFont.systemFont(ofSize: clockSize, weight: .bold)
+            let clockFont = fittedFixedFont(heavyClock,
                                             sample: "88:88", width: width * 0.27)
             let topHeight = max(contentHeight, clockFont.lineHeight)
             let noteHeight: CGFloat = content.note.isEmpty ? 0 : ceil((content.note as NSString).boundingRect(
@@ -951,22 +958,30 @@ enum StampRenderer {
             let height = ceil(topHeight + (noteHeight > 0 ? pointSize * 0.3 + noteHeight : 0))
             if height <= space.height {
                 let format = UIGraphicsImageRendererFormat()
-                format.scale = 1
+                format.scale = min(3, max(1, displayScale))
                 format.opaque = false
                 let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).image { renderer in
                     let context = renderer.cgContext
                     let shadow = NSShadow(); shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
-                    shadow.shadowBlurRadius = max(1, pointSize * 0.15); shadow.shadowOffset = CGSize(width: 1, height: 1)
+                    shadow.shadowBlurRadius = max(0.3, pointSize * 0.04); shadow.shadowOffset = CGSize(width: 0.5, height: 0.5)
                     let white: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white,
-                                                                 .paragraphStyle: paragraph, .shadow: shadow]
-                    (content.time as NSString).draw(in: CGRect(x: 0, y: (topHeight - clockFont.lineHeight) / 2,
+                                                                 .paragraphStyle: paragraph, .shadow: shadow,
+                                                                 .strokeColor: UIColor.black.withAlphaComponent(0.75), .strokeWidth: -1.5]
+                    let clockY = (topHeight - clockFont.lineHeight) / 2
+                    (content.time as NSString).draw(in: CGRect(x: 0, y: clockY,
                                                                width: width * 0.27, height: clockFont.lineHeight * 1.1),
-                                                    withAttributes: [.font: clockFont, .foregroundColor: UIColor.white, .shadow: shadow])
+                                                    withAttributes: [.font: clockFont, .foregroundColor: UIColor.white, .shadow: shadow,
+                                                                     .strokeColor: UIColor.black.withAlphaComponent(0.75), .strokeWidth: -1.5])
+                    let clockLine = CTLineCreateWithAttributedString(NSAttributedString(string: content.time, attributes: [.font: clockFont]))
+                    let glyphBounds = CTLineGetBoundsWithOptions(clockLine, .useGlyphPathBounds)
+                    let glyphTop = clockY + clockFont.ascender - glyphBounds.maxY
                     context.setFillColor(UIColor.systemYellow.cgColor)
-                    context.fill(CGRect(x: width * 0.285, y: 0, width: max(1, width * 0.006), height: topHeight))
+                    context.fill(CGRect(x: width * 0.285, y: glyphTop, width: max(1, width * 0.006), height: glyphBounds.height))
                     var y: CGFloat = 0
                     for (index, row) in rows.enumerated() {
-                        (row as NSString).draw(in: CGRect(x: rightX, y: y, width: rightWidth, height: rowHeights[index] + 1), withAttributes: white)
+                        var rowAttributes = white
+                        if index == 0 { rowAttributes[.font] = dateFont }
+                        (row as NSString).draw(in: CGRect(x: rightX, y: y, width: rightWidth, height: rowHeights[index] + 1), withAttributes: rowAttributes)
                         y += rowHeights[index] + lineGap
                     }
                     if noteHeight > 0 {

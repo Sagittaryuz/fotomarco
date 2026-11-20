@@ -5,6 +5,7 @@ struct SeparateLiveStamp: View {
     let snapshot: StampSnapshot
     var editMap: () -> Void = {}
     var editInformation: () -> Void = {}
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         GeometryReader { proxy in
@@ -24,7 +25,7 @@ struct SeparateLiveStamp: View {
                     .position(x: rect.midX, y: rect.midY)
                 }
                 if layout.showsInformation {
-                    if let (image, rect) = StampRenderer.separateInformationImage(snapshot: snapshot, address: snapshot.cachedAddress, size: size) {
+                    if let (image, rect) = StampRenderer.separateInformationImage(snapshot: snapshot, address: snapshot.cachedAddress, size: size, displayScale: displayScale) {
                         Image(uiImage: image).resizable()
                             .frame(width: rect.width, height: rect.height)
                             .contentShape(Rectangle()).onTapGesture(perform: editInformation)
