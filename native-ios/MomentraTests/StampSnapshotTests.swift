@@ -34,6 +34,22 @@ final class StampSnapshotTests: XCTestCase {
         }
     }
 
+    func testFixedTemplatesKeepDifferentVisualDesigns() throws {
+        func render(_ template: StampLayout.Template) throws -> Data {
+            var layout = StampLayout()
+            layout.template = template
+            let snapshot = StampSnapshot(capturedAt: Date(timeIntervalSince1970: 1_760_000_000),
+                                         gpsEnabled: false, location: nil, heading: nil, layout: layout)
+            let image = try XCTUnwrap(StampRenderer.overlay(size: CGSize(width: 400, height: 600), snapshot: snapshot, map: nil, address: nil))
+            return try XCTUnwrap(image.pngData())
+        }
+        let report = try render(.workReport)
+        let spreadsheet = try render(.spreadsheet)
+        let inspection = try render(.inspection)
+        XCTAssertNotEqual(report, spreadsheet)
+        XCTAssertNotEqual(spreadsheet, inspection)
+    }
+
     func testExportFixedTemplatePreviewsForVisualReview() throws {
         let date = Date(timeIntervalSince1970: 1_760_000_000)
         let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665),
