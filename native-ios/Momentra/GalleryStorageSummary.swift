@@ -102,6 +102,7 @@ struct GalleryCapacitySummary: View {
             let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
             let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
             Button {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                 if let url = URL(string: "photos-redirect://") { openURL(url) }
             } label: {
                 row(name: name, shortName: "iPhone", quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
@@ -116,6 +117,7 @@ struct GalleryCapacitySummary: View {
                 let duplicateProvider = accounts.lazy.filter { $0.id.provider == account.id.provider }.dropFirst().first != nil
                 let shortName = duplicateProvider ? account.label : google ? "Drive" : "OneDrive"
                 Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     openFolder(for: account.id, accountLabel: account.label)
                 } label: {
                     row(name: name, shortName: shortName, quota: quotas[account.id],
