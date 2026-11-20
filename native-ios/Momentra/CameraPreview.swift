@@ -66,6 +66,7 @@ struct CameraPreview: View {
         focusRequest = request
         focus(point, device) { accepted in
             guard accepted, focusRequest == request else { return }
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
             marker = FocusMarker(point: position)
         }
     }

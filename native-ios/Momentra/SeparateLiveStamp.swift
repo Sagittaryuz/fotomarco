@@ -3,6 +3,8 @@ import MapKit
 
 struct SeparateLiveStamp: View {
     let snapshot: StampSnapshot
+    var editMap: () -> Void = {}
+    var editInformation: () -> Void = {}
 
     var body: some View {
         GeometryReader { proxy in
@@ -18,6 +20,7 @@ struct SeparateLiveStamp: View {
                                                            centre: layout.map, margin: margin)
                     StampMapPreview(snapshot: snapshot, markerSize: 11)
                     .frame(width: side, height: side)
+                    .overlay { Color.clear.contentShape(Rectangle()).onTapGesture(perform: editMap) }
                     .position(x: rect.midX, y: rect.midY)
                 }
                 if layout.showsInformation {
@@ -40,6 +43,7 @@ struct SeparateLiveStamp: View {
                         .multilineTextAlignment(textAlignment(layout))
                         .shadow(color: .black, radius: 2, x: 1, y: 1)
                         .frame(width: rect.width, height: rect.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
+                        .onTapGesture(perform: editInformation)
                         .position(x: rect.midX, y: rect.midY)
                 }
                 if layout.showsLogo, let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
@@ -49,10 +53,11 @@ struct SeparateLiveStamp: View {
                     let logoSize = CGSize(width: logo.size.width * factor, height: logo.size.height * factor)
                     let rect = StampRenderer.positionedRect(size: size, element: logoSize, centre: layout.logo, margin: margin)
                     Image(uiImage: logo).resizable().scaledToFit().frame(width: logoSize.width, height: logoSize.height)
+                        .onTapGesture(perform: editInformation)
                         .position(x: rect.midX, y: rect.midY)
                 }
             }.frame(width: size.width, height: size.height)
-        }.allowsHitTesting(false).accessibilityHidden(true)
+        }
     }
 
     private func textAlignment(_ layout: StampLayout) -> TextAlignment {

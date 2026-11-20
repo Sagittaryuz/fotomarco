@@ -60,6 +60,8 @@ struct CameraScreen: View {
     @State private var flashNoticeTask: Task<Void, Never>?
     @State private var selectedRecognizedText: RecognizedTextSelection?
     @State private var showSettings = false
+    @State private var showStampEditor = false
+    @State private var showStampMapOptions = false
     @State private var showUpdateMessage = false
     @State private var showSupportPanel = false
     @State private var showOriginals = false
@@ -253,9 +255,10 @@ struct CameraScreen: View {
                     .overlay {
                         if stampEnabled && stampProfiles.selected.layout.mode == .separate {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                                SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date))
+                                SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date),
+                                                  editMap: { showStampMapOptions = true },
+                                                  editInformation: { showStampEditor = true })
                             }
-                            .allowsHitTesting(false)
                         }
                     }
                     .overlay {
@@ -528,7 +531,7 @@ struct CameraScreen: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showStampEditor && !showStampMapOptions && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active { Task { await updates.check() } }
         }
@@ -658,6 +661,7 @@ struct CameraScreen: View {
             retryCloudCaptures()
         }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
+        .onChange(of: showStampEditor) { _, showing in if !showing { publishCaptureContext() } }
 
     }
 
@@ -718,6 +722,17 @@ struct CameraScreen: View {
             }
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
+        .sheet(isPresented: $showStampEditor) {
+            NavigationStack { StampLayoutEditor(store: stampProfiles) }
+                .presentationDetents([.fraction(0.55), .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showStampMapOptions) {
+            StampMapOptionsPopup(store: stampProfiles)
+                .presentationDetents([.height(330)])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.ultraThinMaterial)
+        }
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
@@ -1189,7 +1204,9 @@ struct CameraScreen: View {
         HStack(spacing: 0) {
             if stampProfiles.selected.layout.horizontal == "right" { Spacer(minLength: 0) }
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                LiveStampView(snapshot: makeSnapshot(at: timeline.date))
+                LiveStampView(snapshot: makeSnapshot(at: timeline.date),
+                              editMap: { showStampMapOptions = true },
+                              editInformation: { showStampEditor = true })
             }.frame(maxWidth: stampProfiles.selected.layout.horizontal == "auto" ? .infinity : 280)
             if stampProfiles.selected.layout.horizontal == "left" { Spacer(minLength: 0) }
         }.padding(.horizontal, 16)
@@ -1205,7 +1222,7 @@ struct CameraScreen: View {
     }
 
     private var cameraSurfaceVisible: Bool {
-        scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSupportPanel &&
+        scenePhase == .active && !showSettings && !showStampEditor && !showStampMapOptions && !showOriginals && !showMap && !showSupportPanel &&
             !showAspectPanel && !showSettingsImport && selectedRecognizedText == nil && cameraShare == nil
     }
 
@@ -1356,6 +1373,8 @@ private struct CameraHardwareCaptureModifier: ViewModifier {
 
 private struct LiveStampView: View {
     let snapshot: StampSnapshot
+    let editMap: () -> Void
+    let editInformation: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1364,8 +1383,8 @@ private struct LiveStampView: View {
                 .frame(width: (snapshot.mapScale == "small" ? 60 : snapshot.mapScale == "large" ? 100 : 80) * snapshot.layout.mapSize * snapshot.layout.combinedSize,
                        height: (snapshot.mapScale == "small" ? 75 : snapshot.mapScale == "large" ? 125 : 100) * snapshot.layout.mapSize * snapshot.layout.combinedSize)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                .overlay { Color.clear.contentShape(Rectangle()).onTapGesture(perform: editMap) }
+                .accessibilityLabel("Escolher mapa ou satélite")
             }
             if snapshot.layout.showsInformation {
             VStack(alignment: snapshot.layout.textAlignment == "right" ? .trailing : snapshot.layout.textAlignment == "center" ? .center : .leading, spacing: 2) {
@@ -1374,12 +1393,15 @@ private struct LiveStampView: View {
                         .fontDesign(snapshot.fontStyle == "mono" ? .monospaced : snapshot.fontStyle == "serif" ? .serif : .default)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: editInformation)
             }
             Spacer(minLength: 0)
             if snapshot.layout.showsLogo, let logo = snapshot.logo {
                 Image(uiImage: logo).resizable().scaledToFit().frame(width: 38 * snapshot.layout.logoSize * snapshot.layout.combinedSize,
                                                                  height: 38 * snapshot.layout.logoSize * snapshot.layout.combinedSize)
                     .accessibilityLabel("Logotipo do perfil")
+                    .onTapGesture(perform: editInformation)
             }
         }
         .foregroundStyle(.white)
