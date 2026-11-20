@@ -208,6 +208,11 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func fittedFixedFont(_ font: UIFont, sample: String, width: CGFloat) -> UIFont {
+        let measured = (sample as NSString).size(withAttributes: [.font: font]).width
+        guard measured > 0, width > 0, measured > width else { return font }
+        return font.withSize(font.pointSize * width / measured * 0.97)
+    }
     static func drawConstruction(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -257,7 +262,7 @@ enum StampRenderer {
         ((content.customFields["Código"] ?? "") as NSString).draw(in: code.insetBy(dx: code.width * 0.04, dy: code.height * 0.12),
             withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.47, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
         (content.time as NSString).draw(in: CGRect(x: banner.minX + banner.width * 0.40, y: banner.minY + banner.height * 0.1, width: banner.width * 0.35, height: banner.height * 0.8),
-            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.55, weight: .bold), .foregroundColor: UIColor.systemBlue, .paragraphStyle: paragraph])
+            withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.55, weight: .bold), sample: "88:88", width: banner.width * 0.35), .foregroundColor: UIColor.systemBlue, .paragraphStyle: paragraph])
         let imageBox = CGRect(x: banner.minX + banner.width * 0.77, y: banner.minY + banner.height * 0.08, width: banner.width * 0.21, height: banner.height * 0.84)
         if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
             let factor = min(imageBox.width / logo.size.width, imageBox.height / logo.size.height)
@@ -283,11 +288,11 @@ enum StampRenderer {
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         context.saveGState(); defer { context.restoreGState() }
         (content.time as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * 0.05, width: box.width * 0.4, height: box.height * 0.56),
-            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.43, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.43, weight: .medium), sample: "88:88", width: box.width * 0.4), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         context.setFillColor(UIColor.systemYellow.cgColor)
         context.fill(CGRect(x: box.minX + box.width * 0.41, y: box.minY + box.height * 0.1, width: max(1, box.width * 0.008), height: box.height * 0.43))
         (content.date as NSString).draw(in: CGRect(x: box.minX + box.width * 0.44, y: box.minY + box.height * 0.18, width: box.width * 0.25, height: box.height * 0.22),
-            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.13, weight: .semibold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            withAttributes: [.font: fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.13, weight: .semibold), sample: "88/88/8888", width: box.width * 0.25), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         ((content.address ?? "") as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * 0.67, width: box.width * 0.69, height: box.height * 0.23),
             withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.14, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         let portraitBox = CGRect(x: box.minX + box.width * 0.70, y: box.minY, width: box.width * 0.30, height: box.height * 0.85)
@@ -403,7 +408,7 @@ enum StampRenderer {
         }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         (content.time as NSString).draw(in: CGRect(x: logoBox.maxX + banner.height * 0.12, y: banner.minY + banner.height * 0.06, width: banner.width * 0.42, height: banner.height * 0.84),
-            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.68, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.68, weight: .medium), sample: "88:88", width: banner.width * 0.42), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         let symbol = delivery ? "✓" : "●"
         (symbol as NSString).draw(in: CGRect(x: banner.maxX - banner.height * 0.7, y: banner.minY + banner.height * 0.08, width: banner.height * 0.6, height: banner.height * 0.8),
             withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.55, weight: .bold), .foregroundColor: delivery ? UIColor.white : UIColor.systemYellow, .paragraphStyle: paragraph])
@@ -444,7 +449,7 @@ enum StampRenderer {
             withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.46, weight: .bold), .foregroundColor: patrol ? yellow : clean ? UIColor.white : UIColor.black, .paragraphStyle: paragraph])
         if !patrol {
             (content.time as NSString).draw(in: CGRect(x: banner.minX + banner.width * 0.59, y: banner.minY + banner.height * 0.05, width: banner.width * 0.39, height: banner.height * 0.88),
-                withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.62, weight: .medium), .foregroundColor: clean ? UIColor.white : blue, .paragraphStyle: paragraph])
+                withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.62, weight: .medium), sample: "88:88", width: banner.width * 0.39), .foregroundColor: clean ? UIColor.white : blue, .paragraphStyle: paragraph])
         }
         let bodyY = banner.maxY + box.height * 0.08
         context.setFillColor((clean ? blue : yellow).cgColor)
@@ -499,7 +504,7 @@ enum StampRenderer {
                 (title as NSString).draw(in: CGRect(x: top.minX + top.width * 0.03, y: top.minY + top.height * 0.10, width: top.width * 0.40, height: top.height * 0.8),
                     withAttributes: [.font: UIFont.systemFont(ofSize: top.height * 0.52, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
                 (content.time as NSString).draw(in: CGRect(x: top.minX + top.width * 0.48, y: top.minY + top.height * 0.08, width: top.width * 0.5, height: top.height * 0.85),
-                    withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: top.height * 0.60, weight: .bold), .foregroundColor: UIColor.systemBlue, .paragraphStyle: paragraph])
+                    withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: top.height * 0.60, weight: .bold), sample: "88:88", width: top.width * 0.5), .foregroundColor: UIColor.systemBlue, .paragraphStyle: paragraph])
             }
             let lines = delivery ? [content.time + "  " + content.date, content.address ?? ""] : [content.date, content.address ?? "", content.coordinate ?? ""]
             for index in lines.indices {
@@ -509,11 +514,11 @@ enum StampRenderer {
             return true
         }
         (content.time as NSString).draw(in: CGRect(x: box.minX, y: box.minY, width: column * 0.65, height: box.height * 0.52),
-            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.40, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.40, weight: .medium), sample: "88:88", width: column * 0.65), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         context.setFillColor(UIColor.systemYellow.cgColor)
         context.fill(CGRect(x: box.minX + column * 0.68, y: box.minY + box.height * 0.05, width: max(1, box.width * 0.008), height: box.height * 0.40))
         (content.date as NSString).draw(in: CGRect(x: box.minX + column * 0.72, y: box.minY + box.height * 0.14, width: column * 0.28, height: box.height * 0.23),
-            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .semibold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            withAttributes: [.font: fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.12, weight: .semibold), sample: "88/88/8888", width: column * 0.28), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         for (index, text) in [content.address ?? "", content.coordinate ?? ""].enumerated() {
             (text as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * (0.57 + CGFloat(index) * 0.20), width: column, height: box.height * 0.18),
                 withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
@@ -535,11 +540,11 @@ enum StampRenderer {
         }
         if snapshot.layout.template == .timeLocation {
             text(content.time, CGRect(x: box.minX, y: box.minY, width: box.width * 0.57, height: box.height * 0.59),
-                 UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.52, weight: .medium))
+                 fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.52, weight: .medium), sample: "88:88", width: box.width * 0.57))
             context.setFillColor(yellow.cgColor)
             context.fill(CGRect(x: box.minX + box.width * 0.58, y: box.minY + box.height * 0.04, width: max(1, box.width * 0.008), height: box.height * 0.50))
             text(content.date, CGRect(x: box.minX + box.width * 0.62, y: box.minY + box.height * 0.13, width: box.width * 0.37, height: box.height * 0.24),
-                 UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold))
+                 fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold), sample: "88/88/8888", width: box.width * 0.37))
             text(content.address ?? "", CGRect(x: box.minX, y: box.minY + box.height * 0.67, width: box.width, height: box.height * 0.26),
                  UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold))
         } else {

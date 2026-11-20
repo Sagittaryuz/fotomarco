@@ -4,6 +4,12 @@ import UIKit
 @testable import Momentra
 
 final class StampSnapshotTests: XCTestCase {
+    func testFixedFontFitsClockAndDateWithoutTruncation() {
+        let clock = StampRenderer.fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: 70, weight: .medium), sample: "88:88", width: 120)
+        let date = StampRenderer.fittedFixedFont(UIFont.systemFont(ofSize: 30), sample: "88/88/8888", width: 100)
+        XCTAssertLessThanOrEqual(("88:88" as NSString).size(withAttributes: [.font: clock]).width, 120)
+        XCTAssertLessThanOrEqual(("88/88/8888" as NSString).size(withAttributes: [.font: date]).width, 100)
+    }
     func testMapLoadingOnlyRunsForTemplatesThatUseMap() {
         var layout = StampLayout()
         layout.template = .workReport
