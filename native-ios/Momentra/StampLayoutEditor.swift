@@ -254,8 +254,12 @@ struct StampLayoutEditor: View {
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 case .logo:
                     Menu("Escolher") {
-                        Button { showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
-                        Button { importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                        Button {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showPhotoPicker = true }
+                        } label: { Label("Fotos", systemImage: "photo") }
+                        Button {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { importLogo = true }
+                        } label: { Label("Arquivos", systemImage: "folder") }
                     }.disabled(logoLoading)
                     Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
