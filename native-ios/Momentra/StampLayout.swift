@@ -14,6 +14,56 @@ struct StampPoint: Codable, Equatable {
 struct StampLayout: Codable, Equatable {
     enum Mode: String, Codable, CaseIterable { case combined, separate }
     enum MapAppearance: String, Codable, CaseIterable { case map, satellite }
+    enum Template: String, Codable, CaseIterable, Identifiable {
+        case original, locationWeather, spreadsheet, workReport, visit, clean, largeMap
+        case timeLocation, custom, map, patrol, checkIn, construction
+        case completed, portrait, delivery, inspection, shopee, deliveryProof
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .original: "Atual"
+            case .locationWeather: "Localização e clima"
+            case .spreadsheet: "Planilha"
+            case .workReport: "Relatório de trabalho"
+            case .visit: "Registro de visita"
+            case .clean: "Limpo"
+            case .largeMap: "Mapa grande"
+            case .timeLocation: "Hora e localização"
+            case .custom: "Personalizado"
+            case .map: "Mapa"
+            case .patrol: "Patrulha"
+            case .checkIn: "Registrar entrada"
+            case .construction: "Construção"
+            case .completed: "Concluído"
+            case .portrait: "Retrato"
+            case .delivery: "Entrega"
+            case .inspection: "Inspeção"
+            case .shopee: "Shopee"
+            case .deliveryProof: "Prova de entrega"
+            }
+        }
+        var fields: [String] {
+            switch self {
+            case .spreadsheet: ["Título"]
+            case .workReport: ["Projeto", "Inspeção"]
+            case .visit: ["Título"]
+            case .clean: ["Texto"]
+            case .custom: ["Título"]
+            case .patrol: ["Título"]
+            case .checkIn: ["Título"]
+            case .construction: ["Título", "Descrição"]
+            case .completed: ["Título"]
+            case .portrait: ["Nome"]
+            case .delivery: ["Veículo", "Encomenda"]
+            case .inspection: ["Título"]
+            case .shopee: ["Código", "Previsão de entrega"]
+            case .deliveryProof: ["Título"]
+            case .original, .locationWeather, .largeMap, .timeLocation, .map: []
+            }
+        }
+        var usesMap: Bool { [.visit, .largeMap, .map, .delivery].contains(self) }
+        var usesLogo: Bool { [.construction, .completed, .portrait, .shopee, .deliveryProof].contains(self) }
+    }
     var mode: Mode = .combined
     var showsMap = true
     var showsInformation = true
@@ -34,6 +84,18 @@ struct StampLayout: Codable, Equatable {
     var compact = false
     var showsAddress = true
     var showsForecast = true
+    var template: Template = .original
+    var templateValues: [String: [String: String]] = [:]
+    func templateValue(_ field: String, fallback: String = "") -> String {
+        templateValues[template.rawValue]?[field] ?? fallback
+    }
+
+    mutating func setTemplateValue(_ value: String, for field: String) {
+        guard template.fields.contains(field) else { return }
+        var fields = templateValues[template.rawValue] ?? [:]
+        fields[field] = String(value.replacingOccurrences(of: "\n", with: " ").prefix(96))
+        templateValues[template.rawValue] = fields
+    }
     var map = StampPoint(x: 0.15, y: 0.13)
     var information = StampPoint(x: 0.72, y: 0.16)
     var logo = StampPoint(x: 0.85, y: 0.90)
@@ -43,7 +105,7 @@ struct StampLayout: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case mode, showsMap, showsInformation, showsLogo, mapStyle, mapSize, informationSize, logoSize, combinedSize
         case fontStyle, dateFormat, textAlignment, position, horizontal, mapScale, mapCorner, logoCorner, compact, showsAddress
-        case map, information, logo, showsForecast
+        case map, information, logo, showsForecast, template, templateValues
     }
 
     init(from decoder: Decoder) throws {
@@ -77,6 +139,8 @@ struct StampLayout: Codable, Equatable {
         compact = try values.decodeIfPresent(Bool.self, forKey: .compact) ?? false
         showsAddress = try values.decodeIfPresent(Bool.self, forKey: .showsAddress) ?? true
         showsForecast = try values.decodeIfPresent(Bool.self, forKey: .showsForecast) ?? true
+        template = (try? values.decodeIfPresent(Template.self, forKey: .template)) ?? .original
+        templateValues = (try? values.decodeIfPresent([String: [String: String]].self, forKey: .templateValues)) ?? [:]
         map = try values.decodeIfPresent(StampPoint.self, forKey: .map) ?? StampPoint(x: 0.15, y: 0.13)
         information = try values.decodeIfPresent(StampPoint.self, forKey: .information) ?? StampPoint(x: 0.72, y: 0.16)
         logo = try values.decodeIfPresent(StampPoint.self, forKey: .logo) ?? StampPoint(x: 0.85, y: 0.90)
