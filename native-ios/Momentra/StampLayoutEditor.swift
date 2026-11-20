@@ -166,6 +166,7 @@ struct StampLayoutEditor: View {
             }
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
             } else {
+                ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     if layout.wrappedValue.template.usesLogo {
                         ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
@@ -189,6 +190,8 @@ struct StampLayoutEditor: View {
                         )).textFieldStyle(.roundedBorder)
                     }
                 }.padding(10).modifier(GalleryControlSurface(interactive: false))
+                }.frame(maxHeight: 220)
+                    .scrollDismissesKeyboard(.interactively)
             }
         }.padding(.horizontal, 12).padding(.vertical, 6)
     }
