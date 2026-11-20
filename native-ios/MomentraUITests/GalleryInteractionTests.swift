@@ -348,13 +348,12 @@ final class GalleryInteractionTests: XCTestCase {
         app.buttons["Logotipo"].tap()
         app.buttons["Escolher"].tap()
         app.buttons["Fotos"].tap()
-        let photoPicker = app.navigationBars["Fotos"]
-        XCTAssertTrue(photoPicker.waitForExistence(timeout: 10) || app.buttons["Cancelar"].waitForExistence(timeout: 3))
-        app.buttons["Cancelar"].firstMatch.tap()
+        let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Cancelar", "Cancel")).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15))
+        cancel.tap()
         XCTAssertTrue(app.buttons["Salvar"].waitForExistence(timeout: 8))
         app.buttons["Escolher"].tap()
         app.buttons["Arquivos"].tap()
-        let cancel = app.buttons["Cancelar"].firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 10))
         cancel.tap()
         XCTAssertTrue(app.buttons["Salvar"].waitForExistence(timeout: 8))

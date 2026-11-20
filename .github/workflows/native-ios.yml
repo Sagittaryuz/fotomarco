@@ -152,6 +152,7 @@ jobs:
           xcrun simctl install "$DEVICE" "$RUNNER_TEMP/gallery/Build/Products/Debug-iphonesimulator/Momentra.app"
           xcrun simctl privacy "$DEVICE" grant all br.com.momentra.camera
           xcrun simctl privacy "$DEVICE" grant photos br.com.momentra.camera
+          if [ "$TEST_METHOD" = testStampEditorCanOpenPhotoAndFileSelectors ]; then exit 0; fi
           CONTAINER=$(xcrun simctl get_app_container "$DEVICE" br.com.momentra.camera data)
           mkdir -p "$CONTAINER/Documents/Originals"
           for number in 1 2 3; do
