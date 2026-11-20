@@ -129,6 +129,9 @@ struct StampLayoutEditor: View {
                 Text("Hora e localização").tag(StampLayout.Template.timeLocation)
                 Text("Personalizado").tag(StampLayout.Template.custom)
                 Text("Mapa").tag(StampLayout.Template.map)
+                Text("Limpo").tag(StampLayout.Template.clean)
+                Text("Registrar entrada").tag(StampLayout.Template.checkIn)
+                Text("Patrulha").tag(StampLayout.Template.patrol)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {

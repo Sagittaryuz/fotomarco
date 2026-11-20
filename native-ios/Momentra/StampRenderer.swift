@@ -206,6 +206,45 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawBannerTemplate(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let template = snapshot.layout.template
+        let patrol = template == .patrol
+        let clean = template == .clean
+        let blue = UIColor(red: 0.05, green: 0.28, blue: 0.68, alpha: 0.96)
+        let yellow = UIColor(red: 1, green: 0.75, blue: 0.12, alpha: 1)
+        let headline = content.customFields[clean ? "Texto" : "Título"] ?? (clean ? "Limpo" : patrol ? "Segurança" : "Ponto Eletrônico")
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        context.saveGState()
+        defer { context.restoreGState() }
+        let bannerY = box.minY + (clean ? box.height * 0.13 : 0)
+        let banner = CGRect(x: box.minX, y: bannerY, width: box.width * (patrol ? 1 : 0.84), height: box.height * 0.33)
+        context.setFillColor((patrol || clean ? blue : yellow).cgColor)
+        context.fill(banner)
+        if clean {
+            ("★★★★★" as NSString).draw(in: CGRect(x: box.minX, y: box.minY - box.height * 0.02, width: box.width * 0.45, height: box.height * 0.16),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12), .foregroundColor: yellow, .paragraphStyle: paragraph])
+        }
+        let titleWidth = banner.width * (patrol ? 0.72 : 0.55)
+        (headline as NSString).draw(in: CGRect(x: banner.minX + banner.width * 0.04, y: banner.minY + banner.height * 0.12, width: titleWidth, height: banner.height * 0.78),
+            withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.46, weight: .bold), .foregroundColor: patrol ? yellow : clean ? UIColor.white : UIColor.black, .paragraphStyle: paragraph])
+        if !patrol {
+            (content.time as NSString).draw(in: CGRect(x: banner.minX + banner.width * 0.59, y: banner.minY + banner.height * 0.05, width: banner.width * 0.39, height: banner.height * 0.88),
+                withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.62, weight: .medium), .foregroundColor: clean ? UIColor.white : blue, .paragraphStyle: paragraph])
+        }
+        let bodyY = banner.maxY + box.height * 0.08
+        context.setFillColor((clean ? blue : yellow).cgColor)
+        context.fill(CGRect(x: box.minX, y: bodyY, width: max(1, box.width * 0.008), height: box.maxY - bodyY))
+        let lines = patrol ? [content.time + "  " + content.date, content.address ?? ""] : [content.date, content.address ?? ""]
+        for index in lines.indices {
+            (lines[index] as NSString).draw(in: CGRect(x: box.minX + box.width * 0.04, y: bodyY + CGFloat(index) * box.height * 0.20, width: box.width * 0.95, height: box.height * 0.20),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.13, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func fixedMapRect(in size: CGSize) -> CGRect {
         let box = workReportRect(in: size)
         let side = min(box.height * 0.9, box.width * 0.32)
@@ -569,6 +608,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .map {
                 fits = drawMapTemplate(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if [.clean, .checkIn, .patrol].contains(snapshot.layout.template) {
+                fits = drawBannerTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {
