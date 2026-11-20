@@ -3,6 +3,15 @@ import CoreLocation
 @testable import Momentra
 
 final class StampSnapshotTests: XCTestCase {
+    func testWorkReportProducesOverlayAndRejectsInsufficientSpace() throws {
+        var layout = StampLayout()
+        layout.template = .workReport
+        layout.setTemplateValue("Obra A", for: "Projeto")
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil, layout: layout)
+        let overlay = try XCTUnwrap(StampRenderer.overlay(size: CGSize(width: 400, height: 600), snapshot: snapshot, map: nil, address: nil))
+        XCTAssertEqual(overlay.size, CGSize(width: 400, height: 600))
+        XCTAssertNil(StampRenderer.overlay(size: CGSize(width: 20, height: 20), snapshot: snapshot, map: nil, address: nil))
+    }
     func testFixedTemplateContentUsesSelectedFieldsAndRespectsLocationPermission() {
         var layout = StampLayout()
         layout.template = .workReport

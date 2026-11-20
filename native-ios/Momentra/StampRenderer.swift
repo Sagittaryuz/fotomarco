@@ -206,6 +206,43 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    /// Fixed-proportion work report, shared by photo and video rendering.
+    static func drawWorkReport(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        let unit = min(size.width, size.height)
+        guard unit >= 40 else { return false }
+        let width = unit * 0.78
+        let height = width * 0.49
+        let margin = unit * 0.035
+        guard size.width >= width + margin * 2, size.height >= height + margin * 2 else { return false }
+        let box = CGRect(x: margin, y: size.height - margin - height, width: width, height: height)
+        let content = snapshot.templateContent(address: address)
+        let headerHeight = height * 0.31
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setFillColor(UIColor(red: 0.84, green: 0.52, blue: 0.18, alpha: 0.95).cgColor)
+        context.fill(CGRect(x: box.minX, y: box.minY, width: width, height: headerHeight))
+        context.setFillColor(UIColor(white: 0.82, alpha: 0.94).cgColor)
+        context.fill(CGRect(x: box.minX, y: box.minY + headerHeight, width: width, height: height - headerHeight))
+        let padding = width * 0.035
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let titleFont = UIFont.systemFont(ofSize: height * 0.16, weight: .bold)
+        ("Relatório de trabalho" as NSString).draw(in: CGRect(x: box.minX + padding, y: box.minY + height * 0.055, width: width - padding * 2, height: headerHeight * 0.8),
+            withAttributes: [.font: titleFont, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        let rowHeight = (height - headerHeight) / 3
+        let labels = ["Projeto", "Inspeção", "Endereço"]
+        let values = [content.customFields["Projeto"] ?? "", content.customFields["Inspeção"] ?? "", content.address ?? ""]
+        let font = UIFont.systemFont(ofSize: height * 0.105, weight: .medium)
+        let bold = UIFont.systemFont(ofSize: height * 0.105, weight: .bold)
+        for index in 0..<3 {
+            let y = box.minY + headerHeight + CGFloat(index) * rowHeight + rowHeight * 0.2
+            (labels[index] as NSString).draw(in: CGRect(x: box.minX + padding, y: y, width: width * 0.28, height: rowHeight * 0.8),
+                withAttributes: [.font: font, .foregroundColor: UIColor.darkGray, .paragraphStyle: paragraph])
+            (values[index] as NSString).draw(in: CGRect(x: box.minX + width * 0.30, y: y, width: width * 0.66, height: rowHeight * 0.8),
+                withAttributes: [.font: bold, .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func stampBox(imageSize: CGSize, height: CGFloat, margin: CGFloat, horizontal: String, position: String) -> CGRect? {
         guard imageSize.width > margin * 2, imageSize.height > margin * 2,
               height > 0, height <= imageSize.height - margin * 2 else { return nil }
@@ -353,6 +390,10 @@ enum StampRenderer {
             // Do not rely solely on upstream callers to filter location-derived assets.
             let map = snapshot.mapEnabled && snapshot.location != nil ? map : nil
             let address = snapshot.addressEnabled && snapshot.location != nil ? address : nil
+            if snapshot.layout.template == .workReport {
+                fits = drawWorkReport(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
             if snapshot.layout.mode == .separate {
                 fits = drawSeparate(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
                 return
