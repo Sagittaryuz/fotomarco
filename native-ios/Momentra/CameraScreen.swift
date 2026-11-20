@@ -596,6 +596,7 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in
+            UISelectionFeedbackGenerator().selectionChanged()
             refreshAddress()
             modeTransitionTask?.cancel()
             guard !reduceMotion else { modeTransitionBlur = false; return }
