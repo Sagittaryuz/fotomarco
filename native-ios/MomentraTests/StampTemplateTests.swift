@@ -2,6 +2,16 @@ import XCTest
 @testable import Momentra
 
 final class StampTemplateTests: XCTestCase {
+    func testLockedCaptureContextKeepsOnlySelectedTemplateWithoutChangingOriginal() throws {
+        var layout = StampLayout()
+        layout.template = .visit
+        layout.templateValues = ["visit": ["Título": "Visita"], "workReport": ["Projeto": "Obra"]]
+        let locked = layout.lockedCaptureLayout()
+        XCTAssertEqual(locked.templateValue("Título"), "Visita")
+        XCTAssertNil(locked.templateValues["workReport"])
+        XCTAssertEqual(layout.templateValues["workReport"]?["Projeto"], "Obra")
+        XCTAssertLessThan(try JSONEncoder().encode(locked).count, 2000)
+    }
     func testExistingLayoutDecodesWithoutTemplateChanges() throws {
         let layout = try JSONDecoder().decode(StampLayout.self, from: Data("{}".utf8))
         XCTAssertEqual(layout.template, .original)

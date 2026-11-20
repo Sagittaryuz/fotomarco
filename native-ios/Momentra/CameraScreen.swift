@@ -1271,7 +1271,7 @@ struct CameraScreen: View {
             saveToPhotos: plan?.keepLocal ?? effectiveLocalStorage,
             profileID: stampProfiles.selected.id, profileName: LockedCaptureMetadata.safeProfileName(stampProfiles.selected.name),
             cloudOwnerHash: nil,
-            layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout)).flatMap { $0.count <= 2000 ? $0 : nil },
+            layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout.lockedCaptureLayout())).flatMap { $0.count <= 2000 ? $0 : nil },
             hasLogo: !stampProfiles.selected.logoName.isEmpty,
             archivePlan: plan)
         let previous = captureContextTask

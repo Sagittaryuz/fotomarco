@@ -86,6 +86,12 @@ struct StampLayout: Codable, Equatable {
     var showsForecast = true
     var template: Template = .original
     var templateValues: [String: [String: String]] = [:]
+    /// The locked camera only needs values for the currently selected template.
+    func lockedCaptureLayout() -> StampLayout {
+        var result = self
+        result.templateValues = templateValues[template.rawValue].map { [template.rawValue: $0] } ?? [:]
+        return result
+    }
     func templateValue(_ field: String, fallback: String = "") -> String {
         templateValues[template.rawValue]?[field] ?? fallback
     }
