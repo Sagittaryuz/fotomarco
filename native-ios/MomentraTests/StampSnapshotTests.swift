@@ -105,6 +105,15 @@ final class StampSnapshotTests: XCTestCase {
         XCTAssertFalse(content.date.isEmpty)
         XCTAssertFalse(content.time.isEmpty)
     }
+
+    func testFixedTemplateCoordinatesIncludeCorrectHemispheres() {
+        let now = Date()
+        let point = CLLocation(coordinate: CLLocationCoordinate2D(latitude: -17.9, longitude: -51.7),
+                               altitude: 0, horizontalAccuracy: 5, verticalAccuracy: -1, timestamp: now)
+        let snapshot = StampSnapshot(capturedAt: now, gpsEnabled: true, location: point, heading: nil)
+        let coordinate = snapshot.templateContent(address: nil).coordinate
+        XCTAssertEqual(coordinate, "17.90000°S, 51.70000°O")
+    }
     func testDisabledGPSNeverAppearsInStamp() {
         let now = Date()
         let location = CLLocation(latitude: -17.9, longitude: -51.7)

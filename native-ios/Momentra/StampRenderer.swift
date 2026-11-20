@@ -117,7 +117,10 @@ struct StampSnapshot {
         year.locale = date.locale
         year.dateFormat = "yyyy"
         let address = addressEnabled && location != nil ? address : nil
-        let coordinate = location.map { String(format: "%.6f, %.6f", $0.coordinate.latitude, $0.coordinate.longitude) }
+        let coordinate = location.map { fix in
+            String(format: "%.5f°%@, %.5f°%@", abs(fix.coordinate.latitude), fix.coordinate.latitude < 0 ? "S" : "N",
+                   abs(fix.coordinate.longitude), fix.coordinate.longitude < 0 ? "O" : "L")
+        }
         var values: [String: String] = [:]
         for field in layout.template.fields {
             let value = layout.templateValue(field).trimmingCharacters(in: .whitespacesAndNewlines)
