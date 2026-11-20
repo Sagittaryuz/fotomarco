@@ -206,6 +206,47 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawLocationWeather(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        let unit = min(size.width, size.height)
+        guard unit >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setFillColor(UIColor(white: 0.13, alpha: 0.84).cgColor)
+        context.fill(box)
+        context.setFillColor(UIColor(red: 1, green: 0.73, blue: 0.13, alpha: 1).cgColor)
+        context.fill(CGRect(x: box.minX, y: box.maxY - box.height * 0.027, width: box.width, height: box.height * 0.027))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let inset = box.width * 0.04
+        let available = box.width - inset * 2
+        let addressParts = (content.address ?? "").split(separator: ",", maxSplits: 1).map(String.init)
+        let location = addressParts.first ?? (snapshot.gpsEnabled ? "Localização indisponível" : "Localização desativada")
+        let detail = addressParts.count > 1 ? addressParts[1].trimmingCharacters(in: .whitespaces) : ""
+        let lines = [location, detail, content.coordinate ?? "", content.date + " " + content.time]
+        for index in lines.indices {
+            let y = box.minY + box.height * (0.08 + CGFloat(index) * 0.21)
+            (lines[index] as NSString).draw(in: CGRect(x: box.minX + inset, y: y, width: index >= 2 ? available * 0.7 : available, height: box.height * 0.2),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * (index == 0 ? 0.15 : 0.11), weight: index == 0 ? .medium : .regular), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        if let heading = snapshot.heading {
+            let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+            if degrees >= 0 {
+                let right = NSMutableParagraphStyle(); right.alignment = .right
+                (String(format: "%.0f°", degrees) as NSString).draw(in: CGRect(x: box.midX, y: box.minY + box.height * 0.50, width: box.width * 0.46, height: box.height * 0.2),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.11), .foregroundColor: UIColor.white, .paragraphStyle: right])
+            }
+        }
+        if let temperature = snapshot.forecast?.temperatureC {
+            let text = String(format: "%.0f °C", temperature) as NSString
+            let right = NSMutableParagraphStyle(); right.alignment = .right
+            text.draw(in: CGRect(x: box.midX, y: box.minY + box.height * 0.72, width: box.width * 0.46, height: box.height * 0.2),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.11), .foregroundColor: UIColor.white, .paragraphStyle: right])
+        }
+        return true
+    }
     static func drawSpreadsheet(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         let unit = min(size.width, size.height)
         guard unit >= 40 else { return false }
@@ -444,6 +485,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .spreadsheet {
                 fits = drawSpreadsheet(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .locationWeather {
+                fits = drawLocationWeather(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {

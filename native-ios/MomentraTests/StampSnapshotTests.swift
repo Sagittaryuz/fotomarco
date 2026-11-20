@@ -12,6 +12,15 @@ final class StampSnapshotTests: XCTestCase {
         XCTAssertEqual(overlay.size, CGSize(width: 400, height: 600))
         XCTAssertNil(StampRenderer.overlay(size: CGSize(width: 20, height: 20), snapshot: snapshot, map: nil, address: nil))
     }
+
+    func testFixedTemplatesProduceAnOverlayWithoutLocation() throws {
+        for template in [StampLayout.Template.workReport, .spreadsheet, .locationWeather] {
+            var layout = StampLayout()
+            layout.template = template
+            let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil, layout: layout)
+            XCTAssertNotNil(StampRenderer.overlay(size: CGSize(width: 400, height: 600), snapshot: snapshot, map: nil, address: nil), "\(template.rawValue)")
+        }
+    }
     func testFixedTemplateContentUsesSelectedFieldsAndRespectsLocationPermission() {
         var layout = StampLayout()
         layout.template = .workReport

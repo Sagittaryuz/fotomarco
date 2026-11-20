@@ -125,6 +125,7 @@ struct StampLayoutEditor: View {
                 Text("Atual").tag(StampLayout.Template.original)
                 Text("Relatório de trabalho").tag(StampLayout.Template.workReport)
                 Text("Planilha").tag(StampLayout.Template.spreadsheet)
+                Text("Localização e clima").tag(StampLayout.Template.locationWeather)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
