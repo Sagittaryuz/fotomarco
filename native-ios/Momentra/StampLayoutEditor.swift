@@ -126,7 +126,10 @@ struct StampLayoutEditor: View {
             }
             Picker("Modelo", selection: Binding(
                 get: { layout.wrappedValue.template },
-                set: { value in var next = layout.wrappedValue; next.selectTemplate(value); layout.wrappedValue = next }
+                set: { value in
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    var next = layout.wrappedValue; next.selectTemplate(value); layout.wrappedValue = next
+                }
             )) {
                 Text("Atual").tag(StampLayout.Template.original)
                 Text("Relatório de trabalho").tag(StampLayout.Template.workReport)
@@ -149,7 +152,13 @@ struct StampLayoutEditor: View {
                 Text("Construção").tag(StampLayout.Template.construction)
             }
             if layout.wrappedValue.template == .original {
-            Picker("Composição", selection: layout.mode) {
+            Picker("Composição", selection: Binding(
+                get: { layout.wrappedValue.mode },
+                set: { value in
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    var next = layout.wrappedValue; next.mode = value; layout.wrappedValue = next
+                }
+            )) {
                 Text("Carimbo único").tag(StampLayout.Mode.combined)
                 Text("Elementos separados").tag(StampLayout.Mode.separate)
             }.pickerStyle(.segmented)
@@ -180,7 +189,13 @@ struct StampLayoutEditor: View {
                         }
                     }
                     if layout.wrappedValue.template.usesMap {
-                        Picker("Visualização do mapa", selection: layout.mapStyle) {
+                        Picker("Visualização do mapa", selection: Binding(
+                            get: { layout.wrappedValue.mapStyle },
+                            set: { value in
+                                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                                var next = layout.wrappedValue; next.mapStyle = value; layout.wrappedValue = next
+                            }
+                        )) {
                             Text("Mapa").tag(StampLayout.MapAppearance.map)
                             Text("Satélite").tag(StampLayout.MapAppearance.satellite)
                         }.pickerStyle(.segmented)
