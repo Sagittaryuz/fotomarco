@@ -23,6 +23,9 @@ struct DirectionalSwitchStyle: ToggleStyle {
             .toggleStyle(.switch)
             .labelsHidden()
             .fixedSize(horizontal: true, vertical: false)
+            .onChange(of: configuration.isOn) { _, _ in
+                if isEnabled { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            }
             .simultaneousGesture(DragGesture(minimumDistance: 10).onEnded { value in
                 let distance = value.translation
                 guard isEnabled, abs(distance.width) >= 10, abs(distance.width) > abs(distance.height) * 1.25 else { return }

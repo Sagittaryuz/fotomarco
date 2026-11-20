@@ -33,6 +33,7 @@ struct MomentraSupportPanel: View {
                     .rotationEffect(.degrees(reduceMotion ? 0 : -2))
                     .padding(.horizontal, 15)
                 Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     UIPasteboard.general.string = "+55" + Self.phone.filter(\.isNumber)
                     copied = true
                 } label: {

@@ -155,6 +155,7 @@ struct CameraScreen: View {
 
                 Spacer(minLength: 4)
                 Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     setSupportPanel(true)
                 } label: {
                     MomentraWordmark()
@@ -600,7 +601,7 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
             refreshAddress()
             modeTransitionTask?.cancel()
             guard !reduceMotion else { modeTransitionBlur = false; return }
@@ -616,7 +617,7 @@ struct CameraScreen: View {
             guard cameraSurfaceVisible, camera.ready, (old * 10).rounded() != (new * 10).rounded(),
                   now - lastZoomHaptic >= 0.1 else { return }
             lastZoomHaptic = now
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
         }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
@@ -636,7 +637,7 @@ struct CameraScreen: View {
             }
         }
         .onReceive(camera.capturedPhoto) { _ in
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
             showShutterFeedback()
         }
         .onReceive(camera.completedPhoto) { showCapturedPhoto($0) }
@@ -670,7 +671,7 @@ struct CameraScreen: View {
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(item: $cameraShare) { batch in
-            batch.sheet {}.onAppear { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35) }
+            batch.sheet {}.onAppear { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         }
         .alert("Atualização do Momentra", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
@@ -788,6 +789,7 @@ struct CameraScreen: View {
 
     private func requestUpdate(_ version: String, fromBanner: Bool = false) {
         guard !directUpdate.busy else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
         Task {
             await directUpdate.install(expectedVersion: version) {
                 UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
@@ -1299,7 +1301,7 @@ struct CameraScreen: View {
 
     private func stopVideoWithFeedback() {
         guard camera.isRecording, !camera.isFinishingRecording else { return }
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.35)
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
         camera.stopRecording()
     }
 
