@@ -28,6 +28,10 @@ Manter a câmera e a galeria responsivas sem prejudicar captura, qualidade, segu
 - **Caches:** a grade usa cache limitado em memória e disco; o visualizador usa outro cache, com limite de 128 MiB e imagens de prévia de até 1.800 pixels. As consultas da mesma chave compartilham a aquisição; leitura, decodificação e escrita do cache são serializadas pelo ator e merecem medição sob rolagem rápida. São prévias limitadas, não garantia de que o original esteja disponível offline. Arquivos originais e itens pendentes de envio não podem ser tratados como cache descartável.
 - **Protocolo de comparação:** para abertura fria e quente registrar separadamente tempo até interface, primeiro quadro vivo e captura possível; para galeria, tempo até grade interativa e primeira foto nítida. Comparar mediana e dispersão após várias repetições nas mesmas condições, inclusive rede desligada, cache cheio, foto/vídeo, reconhecimento e temperatura. Medir quadros perdidos, memória e energia em aparelho real; o simulador não mede câmera física nem comprova 120 Hz. Não há resultados físicos registrados até esta revisão.
 
+### Referência inicial no simulador
+
+Em 20/11, o teste `testGalleryCatalogMeasurement` passou na revisão de app `99937dc`, em simulador iPhone 17 Pro, com três capturas de teste visíveis e 24 fotos pessoais fictícias excluídas de Capturas. Os três tempos entre o comando de toque do XCTest e a existência da grade foram 7.562, 1.876 e 1.904 ms (primeira abertura e duas reaberturas). O resultado inclui custo e espera da automação, não mede miniaturas nítidas nem câmera real, não representa bibliotecas grandes ou contas de nuvem, e não demonstra ganho frente a outra versão. Evidência: [execução 44665888313](https://github.com/Sagittaryuz/momentra/actions/runs/44665888313), anexo “Medição da galeria”. A compilação anterior dos testes utilizou Xcode 26.6 e SDK de simulador 26.5; não inferir por isso os padrões efetivos da compilação instalada sem verificar o artefato de dispositivo.
+
 ## Referências Apple
 
 - [Especificações do iPhone 17 Pro](https://support.apple.com/en-us/125090)
