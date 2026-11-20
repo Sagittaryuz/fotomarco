@@ -752,7 +752,9 @@ struct CameraScreen: View {
                 Group {
                     if let coordinate = mapLocation?.coordinate {
                         Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))) {
-                            Marker("Localização", coordinate: coordinate)
+                            Annotation("Localização", coordinate: coordinate, anchor: .center) {
+                                MomentraLocationMarker(size: 28)
+                            }
                         }
                         .mapStyle(mapAppearance == .satellite ? .imagery : .standard)
                         .overlay(alignment: .topLeading) {

@@ -220,6 +220,20 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawLocationMarker(center: CGPoint, diameter: CGFloat, context: CGContext) {
+        let marker = CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2,
+                            width: diameter, height: diameter)
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setFillColor(UIColor.systemYellow.cgColor)
+        context.fillEllipse(in: marker)
+        context.setStrokeColor(UIColor.white.cgColor)
+        context.setLineWidth(max(1, diameter * 0.10))
+        context.strokeEllipse(in: marker)
+        UIImage(systemName: "location.fill")?.withTintColor(.black, renderingMode: .alwaysOriginal)
+            .draw(in: marker.insetBy(dx: diameter * 0.24, dy: diameter * 0.24))
+    }
+
     static func condensedStampFont(size: CGFloat, bold: Bool = false) -> UIFont {
         UIFont(name: bold ? "AvenirNextCondensed-DemiBold" : "AvenirNextCondensed-Regular", size: size)
             ?? UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
@@ -409,10 +423,7 @@ enum StampRenderer {
         if snapshot.mapEnabled, let map {
             map.draw(in: box)
             let marker = box.height * 0.09
-            context.setFillColor(UIColor.systemBlue.cgColor)
-            context.fillEllipse(in: CGRect(x: box.midX - marker / 2, y: box.midY - marker / 2, width: marker, height: marker))
-            context.setStrokeColor(UIColor.white.cgColor); context.setLineWidth(max(1, marker * 0.12))
-            context.strokeEllipse(in: CGRect(x: box.midX - marker / 2, y: box.midY - marker / 2, width: marker, height: marker))
+            drawLocationMarker(center: CGPoint(x: box.midX, y: box.midY), diameter: marker, context: context)
         }
         let cameraBadge = CGRect(x: box.maxX - box.width * 0.24, y: box.minY + box.height * 0.04,
                                  width: box.width * 0.21, height: box.height * 0.42)
@@ -578,11 +589,7 @@ enum StampRenderer {
         if snapshot.mapEnabled, let map {
             map.draw(in: mapRect)
             let marker = mapRect.width * 0.12
-            context.setFillColor(UIColor.systemBlue.cgColor)
-            context.fillEllipse(in: CGRect(x: mapRect.midX - marker / 2, y: mapRect.midY - marker / 2, width: marker, height: marker))
-            context.setStrokeColor(UIColor.white.cgColor)
-            context.setLineWidth(max(1, marker * 0.12))
-            context.strokeEllipse(in: CGRect(x: mapRect.midX - marker / 2, y: mapRect.midY - marker / 2, width: marker, height: marker))
+            drawLocationMarker(center: CGPoint(x: mapRect.midX, y: mapRect.midY), diameter: marker, context: context)
         }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         let column = box.width * 0.64
@@ -892,12 +899,7 @@ enum StampRenderer {
             let rect = positionedRect(size: size, element: CGSize(width: side, height: side), centre: layout.map, margin: margin)
             map.draw(in: rect)
             let markerSize = side * 0.12
-            let marker = CGRect(x: rect.midX - markerSize / 2, y: rect.midY - markerSize / 2, width: markerSize, height: markerSize)
-            context.setFillColor(UIColor.systemBlue.cgColor)
-            context.fillEllipse(in: marker)
-            context.setStrokeColor(UIColor.white.cgColor)
-            context.setLineWidth(max(1, side * 0.012))
-            context.strokeEllipse(in: marker)
+            drawLocationMarker(center: CGPoint(x: rect.midX, y: rect.midY), diameter: markerSize, context: context)
         }
         let lines = snapshot.informationLines(address: address)
         let text = lines.joined(separator: "\n") as NSString
@@ -1061,12 +1063,7 @@ enum StampRenderer {
                 }
                 map.draw(in: mapRect)
                 let markerSize = mapSide * 0.12
-                let marker = CGRect(x: mapRect.midX-markerSize/2, y: mapRect.midY-markerSize/2, width: markerSize, height: markerSize)
-                context.cgContext.setFillColor(UIColor.systemBlue.cgColor)
-                context.cgContext.fillEllipse(in: marker)
-                context.cgContext.setStrokeColor(UIColor.white.cgColor)
-                context.cgContext.setLineWidth(max(1, mapSide * 0.012))
-                context.cgContext.strokeEllipse(in: marker)
+                StampRenderer.drawLocationMarker(center: CGPoint(x: mapRect.midX, y: mapRect.midY), diameter: markerSize, context: context.cgContext)
             }
             let textRect = CGRect(x: box.minX + margin + inlineMapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
             text.draw(in: textRect, withAttributes: attrs)

@@ -1,6 +1,22 @@
 import MapKit
 import SwiftUI
 
+struct MomentraLocationMarker: View {
+    var size: CGFloat
+
+    var body: some View {
+        Circle().fill(Color.yellow)
+            .overlay(Circle().stroke(.white, lineWidth: max(1, size * 0.10)))
+            .overlay {
+                Image(systemName: "location.fill")
+                    .resizable().scaledToFit()
+                    .foregroundStyle(.black)
+                    .padding(size * 0.24)
+            }
+            .frame(width: size, height: size)
+    }
+}
+
 /// Uses the same complete MapKit image as the photo carimbo.
 struct StampMapPreview: View {
     let snapshot: StampSnapshot
@@ -24,8 +40,7 @@ struct StampMapPreview: View {
                         Image(uiImage: image).resizable().scaledToFit()
                             .frame(width: proxy.size.width, height: proxy.size.height).clipped()
                     }
-                    Circle().fill(.blue).frame(width: markerSize, height: markerSize)
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                    MomentraLocationMarker(size: markerSize)
                 } else {
                     ProgressView().controlSize(.small)
                 }
