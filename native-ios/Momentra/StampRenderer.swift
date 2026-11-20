@@ -206,6 +206,35 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawPortrait(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        context.saveGState(); defer { context.restoreGState() }
+        (content.time as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * 0.05, width: box.width * 0.4, height: box.height * 0.56),
+            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.43, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        context.setFillColor(UIColor.systemYellow.cgColor)
+        context.fill(CGRect(x: box.minX + box.width * 0.41, y: box.minY + box.height * 0.1, width: max(1, box.width * 0.008), height: box.height * 0.43))
+        (content.date as NSString).draw(in: CGRect(x: box.minX + box.width * 0.44, y: box.minY + box.height * 0.18, width: box.width * 0.25, height: box.height * 0.22),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.13, weight: .semibold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        ((content.address ?? "") as NSString).draw(in: CGRect(x: box.minX, y: box.minY + box.height * 0.67, width: box.width * 0.69, height: box.height * 0.23),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.14, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        let portraitBox = CGRect(x: box.minX + box.width * 0.70, y: box.minY, width: box.width * 0.30, height: box.height * 0.85)
+        if let portrait = snapshot.logo, portrait.size.width > 0, portrait.size.height > 0 {
+            let scale = min(portraitBox.width / portrait.size.width, portraitBox.height / portrait.size.height)
+            let fitted = CGSize(width: portrait.size.width * scale, height: portrait.size.height * scale)
+            portrait.draw(in: CGRect(x: portraitBox.midX - fitted.width / 2, y: portraitBox.maxY - fitted.height, width: fitted.width, height: fitted.height))
+        }
+        if let name = content.customFields["Nome"], !name.isEmpty {
+            let caption = CGRect(x: portraitBox.minX, y: box.minY + box.height * 0.85, width: portraitBox.width, height: box.height * 0.15)
+            context.setFillColor(UIColor.systemBlue.withAlphaComponent(0.9).cgColor); context.fill(caption)
+            let centered = NSMutableParagraphStyle(); centered.alignment = .center; centered.lineBreakMode = .byTruncatingTail
+            (name as NSString).draw(in: caption, withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.10, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: centered])
+        }
+        return true
+    }
     static func drawLargeMap(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -748,6 +777,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .inspection {
                 fits = drawInspection(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .portrait {
+                fits = drawPortrait(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {

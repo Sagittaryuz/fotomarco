@@ -61,7 +61,7 @@ struct StampLayout: Codable, Equatable {
         }
         var usesMap: Bool { [.visit, .largeMap, .map, .delivery].contains(self) }
         var usesLogo: Bool { [.construction, .completed, .portrait, .shopee, .deliveryProof].contains(self) }
-        var hasFixedRenderer: Bool { [.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map, .largeMap, .visit, .delivery, .clean, .checkIn, .patrol, .completed, .deliveryProof, .inspection].contains(self) }
+        var hasFixedRenderer: Bool { [.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map, .largeMap, .visit, .delivery, .clean, .checkIn, .patrol, .completed, .deliveryProof, .inspection, .portrait].contains(self) }
     }
     var mode: Mode = .combined
     var showsMap = true

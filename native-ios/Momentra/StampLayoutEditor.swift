@@ -139,6 +139,7 @@ struct StampLayoutEditor: View {
                 Text("Concluído").tag(StampLayout.Template.completed)
                 Text("Prova de entrega").tag(StampLayout.Template.deliveryProof)
                 Text("Inspeção").tag(StampLayout.Template.inspection)
+                Text("Retrato").tag(StampLayout.Template.portrait)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
@@ -163,7 +164,7 @@ struct StampLayoutEditor: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     if layout.wrappedValue.template.usesLogo {
-                        Menu("Escolher logotipo") {
+                        Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo") {
                             Button { showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
                             Button { importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
                         }.disabled(logoLoading)
