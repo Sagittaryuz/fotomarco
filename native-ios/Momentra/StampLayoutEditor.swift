@@ -105,8 +105,8 @@ struct StampLayoutEditor: View {
                         }
                     }
                     Divider()
-                    Button("Renomear perfil") { draftName = store.selected.name; renameProfile = true }
-                    if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { confirmRemove = true } }
+                    Button("Renomear perfil") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); draftName = store.selected.name; renameProfile = true }
+                    if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); confirmRemove = true } }
                 } label: {
                     Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square")
                         .font(.headline).lineLimit(1)
@@ -115,6 +115,7 @@ struct StampLayoutEditor: View {
                 }
                 Spacer()
                 Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     let wasSingle = store.profiles.count == 1
                     if store.create() { if wasSingle { chooseStartup = true } } else { showLimit = true }
                 } label: {
@@ -279,33 +280,34 @@ struct StampLayoutEditor: View {
             get: { importMessage != nil },
             set: { if !$0 { importMessage = nil } }
         )) {
-            Button("OK", role: .cancel) { importMessage = nil }
+            Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); importMessage = nil }
         } message: { Text(importMessage ?? "") }
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
         .alert("Renomear perfil", isPresented: $renameProfile) {
             TextField("Nome", text: $draftName)
-            Button("Salvar") { store.rename(draftName) }
-            Button("Cancelar", role: .cancel) {}
+            Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.rename(draftName) }
+            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         }
         .alert("Observação na foto", isPresented: $editNote) {
             TextField("Observação", text: $draftNote)
-            Button("Salvar") { store.setNote(draftNote) }
-            Button("Cancelar", role: .cancel) {}
+            Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.setNote(draftNote) }
+            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         }
         .alert("Limite de perfis atingido", isPresented: $showLimit) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         } message: { Text("Você pode criar até cinco perfis de carimbo.") }
         .confirmationDialog("Qual perfil deve abrir com o aplicativo?", isPresented: $chooseStartup, titleVisibility: .visible) {
-            Button("Usar o último perfil") { store.setStartup("last") }
+            Button("Usar o último perfil") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.setStartup("last") }
             ForEach(store.profiles) { item in
                 Button("Sempre abrir com \(item.name.isEmpty ? "Sem nome" : item.name)") {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     store.setStartup(item.id.uuidString)
                 }
             }
         } message: { Text("Você poderá alterar essa escolha nas configurações.") }
         .confirmationDialog("Apagar este perfil?", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Apagar perfil", role: .destructive) { store.removeSelected() }
-            Button("Cancelar", role: .cancel) {}
+            Button("Apagar perfil", role: .destructive) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.removeSelected() }
+            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         } message: { Text("As fotos existentes não serão alteradas.") }
     }
 
@@ -334,14 +336,14 @@ struct StampLayoutEditor: View {
                         Toggle("Texto compacto", isOn: flag(\.compact))
                         Toggle("Incluir endereço", isOn: flag(\.showsAddress))
                         Toggle("Incluir previsão do tempo", isOn: flag(\.showsForecast))
-                        Button("Observação") { draftNote = store.selected.note; editNote = true }
+                        Button("Observação") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); draftNote = store.selected.note; editNote = true }
                     }
                     Toggle("Mostrar informações", isOn: flag(\.showsInformation)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 case .logo:
                     Menu("Escolher") {
-                        Button { showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
-                        Button { importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = 0; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = 0; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
                     }.disabled(logoLoading)
                     Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
