@@ -124,7 +124,7 @@ struct OriginalsView: View {
                 .frame(height: storageBandHeight)
                 .clipped()
             if cloudError, origin != .local {
-                Button { cloudRefresh += 1 } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); cloudRefresh += 1 } label: {
                     Label("Algumas contas estão indisponíveis. Tentar novamente", systemImage: "arrow.clockwise")
                         .font(.caption).lineLimit(2)
                 }
@@ -156,7 +156,7 @@ struct OriginalsView: View {
             if selecting {
                 GallerySelectionBar(count: selected.count, busy: busy,
                                     review: { pane = .selection }, delete: { confirmBatch = true }) {
-                    Button { shareSelection(items) } label: { GalleryShareIcon() }
+                    Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); shareSelection(items) } label: { GalleryShareIcon() }
                 }
             }
         }
@@ -249,7 +249,7 @@ struct OriginalsView: View {
     private func header(total: Int, latest: Date?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Button { closeGallery(toward: .down) } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); closeGallery(toward: .down) } label: {
                     Image(systemName: "chevron.down").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Fechar galeria")
@@ -272,6 +272,7 @@ struct OriginalsView: View {
                 Spacer()
                 if tab != .trash, total > 0 {
                     Button {
+                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                         if selecting { resetSelection() } else { selecting = true }
                     } label: {
                         Text(selecting ? "Cancelar" : "Selecionar").font(.subheadline.weight(.semibold))
@@ -287,9 +288,9 @@ struct OriginalsView: View {
 
     private var originMenu: some View {
         Menu {
-            Button { origin = nil } label: { menuLabel("Todos", active: origin == nil) }
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); origin = nil } label: { menuLabel("Todos", active: origin == nil) }
             ForEach(GalleryOrigin.allCases) { source in
-                Button { origin = source } label: { menuLabel(source.title, active: origin == source) }
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); origin = source } label: { menuLabel(source.title, active: origin == source) }
             }
             if authorization == .notDetermined {
                 Button("Permitir acesso ao Fotos") {
@@ -308,9 +309,9 @@ struct OriginalsView: View {
 
     private var profileMenu: some View {
         Menu {
-            Button { profile = nil } label: { menuLabel("Todos os perfis", active: profile == nil) }
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); profile = nil } label: { menuLabel("Todos os perfis", active: profile == nil) }
             ForEach(stampProfiles.profiles) { item in
-                Button { profile = item.id } label: {
+                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); profile = item.id } label: {
                     menuLabel(item.name.isEmpty ? "Sem nome" : item.name, active: profile == item.id)
                 }
             }
@@ -338,6 +339,7 @@ struct OriginalsView: View {
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { choice in
                     Button {
+                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                         if tab == choice { scrollRequest += 1 }
                         else { tab = choice }
                     } label: {
@@ -355,7 +357,7 @@ struct OriginalsView: View {
                 }
             }
             .padding(5).modifier(GalleryControlSurface(rounded: true, interactive: false))
-            Button { pane = .search } label: {
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); pane = .search } label: {
                 Image(systemName: "magnifyingglass").font(.title3.weight(.medium))
                     .frame(width: 54, height: 54)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
