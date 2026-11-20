@@ -21,15 +21,17 @@ struct SeparateLiveStamp: View {
                     .position(x: rect.midX, y: rect.midY)
                 }
                 if layout.showsInformation {
-                    let lines = (snapshot.addressEnabled && snapshot.location != nil ? [snapshot.cachedAddress ?? "Buscando endereço…"] : []) + snapshot.lines
+                    let lines = snapshot.informationLines(address: snapshot.addressEnabled && snapshot.location != nil ? snapshot.cachedAddress ?? "Buscando endereço…" : nil)
                     let space = StampRenderer.availableSize(size: size, anchor: layout.information, margin: margin)
                     let width = min(space.width, size.width * 0.60 * CGFloat(max(1, layout.informationSize)))
                     let paragraph = NSMutableParagraphStyle()
+                    paragraph.lineBreakMode = .byTruncatingTail
                     let measured = StampRenderer.fitText(lines.joined(separator: "\n") as NSString, width: width,
                         maxHeight: space.height, initialSize: max(8, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(layout.informationSize)),
                         style: snapshot.fontStyle, paragraph: paragraph)
                     let rect = StampRenderer.positionedRect(size: size, element: CGSize(width: width, height: measured?.height ?? 0), centre: layout.information, margin: margin)
                     Text(lines.joined(separator: "\n"))
+                        .lineLimit(5)
                         .font(.system(size: measured?.font.pointSize ?? 8, weight: .medium))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(textAlignment(layout))

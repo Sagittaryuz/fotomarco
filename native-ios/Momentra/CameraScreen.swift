@@ -599,11 +599,11 @@ struct CameraScreen: View {
             refreshAddress()
             modeTransitionTask?.cancel()
             guard !reduceMotion else { modeTransitionBlur = false; return }
-            withAnimation(.easeOut(duration: 0.08)) { modeTransitionBlur = true }
+            withAnimation(.easeOut(duration: 0.25)) { modeTransitionBlur = true }
             modeTransitionTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(120))
+                try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.18)) { modeTransitionBlur = false }
+                withAnimation(.easeOut(duration: 0.5)) { modeTransitionBlur = false }
             }
         }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
@@ -653,7 +653,9 @@ struct CameraScreen: View {
         moreTrackedCamera
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
-        .sheet(item: $cameraShare) { $0.sheet {} }
+        .sheet(item: $cameraShare) { batch in
+            batch.sheet {}.onAppear { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+        }
         .alert("Atualização do Momentra", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -1349,12 +1351,9 @@ private struct LiveStampView: View {
             }
             if snapshot.layout.showsInformation {
             VStack(alignment: snapshot.layout.textAlignment == "right" ? .trailing : snapshot.layout.textAlignment == "center" ? .center : .leading, spacing: 2) {
-                ForEach(snapshot.lines, id: \.self) { line in
-                    Text(line).font(.system(size: (snapshot.compact ? 10 : 12) * snapshot.layout.informationSize * snapshot.layout.combinedSize, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+                ForEach(snapshot.informationLines(address: snapshot.addressEnabled && snapshot.location != nil ? snapshot.cachedAddress ?? "Buscando endereço…" : nil), id: \.self) { line in
+                    Text(line).font(.system(size: (snapshot.compact ? 10 : 12) * snapshot.layout.informationSize * snapshot.layout.combinedSize, weight: .medium)).lineLimit(1).minimumScaleFactor(0.65)
                         .fontDesign(snapshot.fontStyle == "mono" ? .monospaced : snapshot.fontStyle == "serif" ? .serif : .default)
-                }
-                if snapshot.addressEnabled && snapshot.location != nil {
-                    Text(snapshot.cachedAddress ?? "Buscando endereço…").font(.caption2).foregroundStyle(.white.opacity(0.8))
                 }
             }
             }

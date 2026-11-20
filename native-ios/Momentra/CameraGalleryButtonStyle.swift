@@ -7,7 +7,7 @@ struct CameraGalleryButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .gesture(LongPressGesture().exclusively(before: TapGesture())
+            .gesture(LongPressGesture(minimumDuration: 0.3).exclusively(before: TapGesture())
                 .onEnded { result in
                     guard enabled else { return }
                     switch result {

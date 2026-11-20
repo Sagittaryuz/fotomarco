@@ -98,35 +98,37 @@ struct StampSnapshot {
         } else { self.heading = nil }
     }
 
-    var lines: [String] {
+    var lines: [String] { informationLines(address: nil) }
+
+    func informationLines(address: String?) -> [String] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "pt_BR")
         formatter.dateFormat = longDate ? "d 'de' MMMM 'de' yyyy 'às' HH'h'mm'min'ss's' 'GMT'XXXXX" : "dd/MM/yyyy HH:mm:ss 'GMT'XXXXX"
-        var result = [formatter.string(from: capturedAt)]
+        var result: [String] = []
+        let profile = [title, note].filter { !$0.isEmpty }.joined(separator: " · ")
+        if !profile.isEmpty { result.append(profile) }
+        if let address, !address.isEmpty { result.append(address.replacingOccurrences(of: "\n", with: " ")) }
         if let location {
-            result.insert(String(format: "Lat: %.6f  Lon: %.6f", location.coordinate.latitude, location.coordinate.longitude), at: 0)
-            result.append(String(format: "Precisão: ±%.0f m", location.horizontalAccuracy))
-            if location.verticalAccuracy >= 0 { result.append(String(format: "Altitude: %.1f m", location.altitude)) }
+            var geo = String(format: "Lat: %.6f  Lon: %.6f · Precisão: ±%.0f m", location.coordinate.latitude, location.coordinate.longitude, location.horizontalAccuracy)
+            if location.verticalAccuracy >= 0 { geo += String(format: " · Altitude: %.1f m", location.altitude) }
+            if let heading {
+                let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+                if degrees >= 0 { geo += String(format: " · Direção: %.0f°", degrees) }
+            }
+            result.append(geo)
         } else {
-            result.insert(gpsEnabled ? "Localização indisponível" : "Localização desativada", at: 0)
+            result.append(gpsEnabled ? "Localização indisponível" : "Localização desativada")
         }
-        if let heading {
-            let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
-            if degrees >= 0 { result.append(String(format: "Direção: %.0f°", degrees)) }
-        }
-        if let pressure { result.append(String(format: "Pressão local: %.1f hPa", pressure.hectopascals)) }
+        result.append(formatter.string(from: capturedAt))
+        var values: [String] = []
+        if let pressure { values.append(String(format: "Pressão local: %.1f hPa", pressure.hectopascals)) }
         if let forecast {
-            var values: [String] = []
             if let temperature = forecast.temperatureC { values.append(String(format: "%.1f °C", temperature)) }
             if let humidity = forecast.humidityPercent { values.append(String(format: "%.0f%%", humidity)) }
             if let wind = forecast.windMetersPerSecond { values.append(String(format: "%.1f km/h", wind * 3.6)) }
             if let pressure = forecast.seaLevelPressureHpa { values.append(String(format: "%.1f hPa (nível do mar)", pressure)) }
-            if !values.isEmpty {
-                result.append("Previsão válida em " + formatter.string(from: forecast.validAt) + ": " + values.joined(separator: " · "))
-            }
         }
-        if !note.isEmpty { result.insert(note, at: 0) }
-        if !title.isEmpty { result.insert(title, at: 0) }
+        if !values.isEmpty { result.append(values.joined(separator: " · ")) }
         return result
     }
 }
@@ -260,10 +262,10 @@ enum StampRenderer {
             context.setLineWidth(max(1, side * 0.012))
             context.strokeEllipse(in: marker)
         }
-        let lines = (address.map { [$0] } ?? []) + snapshot.lines
+        let lines = snapshot.informationLines(address: address)
         let text = lines.joined(separator: "\n") as NSString
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineBreakMode = .byTruncatingTail
         switch layout.textAlignment {
         case "left": paragraph.alignment = .left
         case "center": paragraph.alignment = .center
@@ -322,13 +324,13 @@ enum StampRenderer {
             let margin = unit * 0.035
             let fontSize = max(12, unit * (snapshot.compact ? 0.021 : 0.027) * CGFloat(snapshot.layout.informationSize * snapshot.layout.combinedSize))
             let paragraph = NSMutableParagraphStyle()
-            paragraph.lineBreakMode = .byWordWrapping
+            paragraph.lineBreakMode = .byTruncatingTail
             switch snapshot.layout.textAlignment {
             case "center": paragraph.alignment = .center
             case "right": paragraph.alignment = .right
             default: paragraph.alignment = .left
             }
-            let lines = snapshot.layout.showsInformation ? (address.map { [$0] } ?? []) + snapshot.lines : []
+            let lines = snapshot.layout.showsInformation ? snapshot.informationLines(address: address) : []
             let text = lines.joined(separator: "\n") as NSString
             let mapFraction: CGFloat = snapshot.mapScale == "small" ? 0.14 : snapshot.mapScale == "large" ? 0.27 : 0.20
             let mapSide = map == nil ? 0 : min(unit * 0.4, unit * mapFraction * CGFloat(snapshot.layout.mapSize * snapshot.layout.combinedSize))

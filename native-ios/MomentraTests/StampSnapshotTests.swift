@@ -36,7 +36,24 @@ final class StampSnapshotTests: XCTestCase {
         let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, title: String(repeating: "A", count: 45), note: "nota\nseguinte", location: nil, heading: nil)
         XCTAssertEqual(snapshot.title.count, 40)
         XCTAssertEqual(snapshot.note, "nota seguinte")
-        XCTAssertEqual(snapshot.lines.first, snapshot.title)
+        XCTAssertEqual(snapshot.lines.first, snapshot.title + " · " + snapshot.note)
+    }
+
+    func testInformationIncludesAddressAndWeatherInAtMostFiveLines() {
+        let now = Date()
+        let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: -17.9, longitude: -51.7), altitude: 700,
+                                  horizontalAccuracy: 8, verticalAccuracy: 5, timestamp: now)
+        let forecast = Forecast(validAt: now, updatedAt: now, temperatureC: 27, humidityPercent: 60,
+                                windMetersPerSecond: 2, seaLevelPressureHpa: 1012)
+        let snapshot = StampSnapshot(capturedAt: now, gpsEnabled: true, addressEnabled: true,
+                                     title: "Obra", note: "Pavimento", forecast: forecast, location: location, heading: nil)
+        let lines = snapshot.informationLines(address: "Rua Exemplo, 123")
+        XCTAssertLessThanOrEqual(lines.count, 5)
+        XCTAssertTrue(lines.contains { $0.contains("Rua Exemplo") })
+        XCTAssertTrue(lines.contains { $0.contains("27.0 °C") })
+        XCTAssertTrue(lines.contains { $0.contains("Altitude:") })
+        XCTAssertFalse(lines.joined().contains("Previsão válida em"))
+        XCTAssertFalse(lines.contains { $0.contains("\n") })
     }
 
     func testStampPositionHasSafeDefault() {
