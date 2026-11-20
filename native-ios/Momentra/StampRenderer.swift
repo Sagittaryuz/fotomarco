@@ -219,6 +219,14 @@ enum StampRenderer {
             if style == "mono" { font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .medium) }
             else if style == "serif", let descriptor = system.fontDescriptor.withDesign(.serif) { font = UIFont(descriptor: descriptor, size: fontSize) }
             else { font = system }
+            if paragraph.lineBreakMode == .byTruncatingTail, fontSize > 4 {
+                let longest = (text as String).components(separatedBy: "\n")
+                    .map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+                if longest > width {
+                    fontSize = max(4, floor(fontSize * min(0.9, width / longest)))
+                    continue
+                }
+            }
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
             let measured = text.boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
                 options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes, context: nil)

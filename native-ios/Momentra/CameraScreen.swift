@@ -1352,7 +1352,7 @@ private struct LiveStampView: View {
             if snapshot.layout.showsInformation {
             VStack(alignment: snapshot.layout.textAlignment == "right" ? .trailing : snapshot.layout.textAlignment == "center" ? .center : .leading, spacing: 2) {
                 ForEach(snapshot.informationLines(address: snapshot.addressEnabled && snapshot.location != nil ? snapshot.cachedAddress ?? "Buscando endereço…" : nil), id: \.self) { line in
-                    Text(line).font(.system(size: (snapshot.compact ? 10 : 12) * snapshot.layout.informationSize * snapshot.layout.combinedSize, weight: .medium)).lineLimit(1).minimumScaleFactor(0.65)
+                    Text(line).font(.system(size: (snapshot.compact ? 10 : 12) * snapshot.layout.informationSize * snapshot.layout.combinedSize, weight: .medium)).lineLimit(1).minimumScaleFactor(0.35)
                         .fontDesign(snapshot.fontStyle == "mono" ? .monospaced : snapshot.fontStyle == "serif" ? .serif : .default)
                 }
             }
