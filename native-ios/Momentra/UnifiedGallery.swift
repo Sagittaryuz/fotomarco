@@ -43,6 +43,7 @@ struct OriginalsView: View {
     @State private var cloudError = false
     @State private var authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     @State private var reloadVersion = 0
+    @State private var loadedLocalVersion: Int?
     @State private var scrollRequest = 0
     @State private var galleryVisible = false
     @State private var galleryDrag = CGSize.zero
@@ -161,7 +162,10 @@ struct OriginalsView: View {
         }
         .background(.black)
         .preferredColorScheme(.dark)
-        .task(id: reloadVersion) { await reloadLocal() }
+        .task(id: reloadVersion) {
+            guard loadedLocalVersion != reloadVersion else { return }
+            await reloadLocal(version: reloadVersion)
+        }
         .task(id: CatalogRequest(trash: tab == .trash, destinations: archive.accounts.map(\.id),
                                  refresh: cloudRefresh, activation: cloudActivation)) {
             await reloadCloud(trash: tab == .trash)
@@ -196,7 +200,7 @@ struct OriginalsView: View {
         .onChange(of: profile) { _, _ in resetSelection(); scrollRequest += 1; updateProjection() }
         .onChange(of: captureFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
-        .fullScreenCover(item: $detail, onDismiss: { reloadVersion += 1 }) { item in
+        .fullScreenCover(item: $detail) { item in
             MomentraGalleryDetail(items: detailItems(fallback: item), initial: item,
                                   profiles: stampProfiles.profiles, activeProfileID: stampProfiles.selected.id,
                                   isFavorite: isFavorite, favorite: toggleFavorite,
@@ -494,7 +498,7 @@ struct OriginalsView: View {
         let activation: Int
     }
 
-    private func reloadLocal() async {
+    private func reloadLocal(version: Int) async {
         loading = true
         defer { if !Task.isCancelled { loading = false } }
         let activeTab = tab
@@ -526,7 +530,7 @@ struct OriginalsView: View {
             let favorites = galleryItems(PHAsset.fetchAssets(with: options))
             return (items, tracked, favorites)
         }.value
-        guard !Task.isCancelled, activeTab == tab, let source else { return }
+        guard !Task.isCancelled, activeTab == tab, version == reloadVersion, let source else { return }
         authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         let wasEmpty = projection.items.isEmpty
         if activeTab == .trash {
@@ -537,6 +541,7 @@ struct OriginalsView: View {
             if activeTab == .favorites { favoritePhotos = source.favorites }
         }
         updateProjection()
+        loadedLocalVersion = version
         if wasEmpty { scrollRequest += 1 }
     }
 

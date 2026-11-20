@@ -73,11 +73,16 @@ struct MomentraGalleryDetail: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 if let current, !current.isVideo, !fullscreen {
-                    button("text.viewfinder", label: "Ler texto da foto") { panel = .text }.padding(12)
+                    button("text.viewfinder", label: "Ler texto da foto") { panel = .text }
+                        .padding(.trailing, 12).padding(.bottom, 62)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if !fullscreen {
+                    GalleryFilmstrip(items: items, selection: $selection, overlayBackground: true) { $0.thumbnail() }
                 }
             }
             if !fullscreen {
-                GalleryFilmstrip(items: items, selection: $selection) { $0.thumbnail() }
                 if let current { footer(current) }
             }
         }

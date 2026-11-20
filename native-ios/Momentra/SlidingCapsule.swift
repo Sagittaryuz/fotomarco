@@ -11,6 +11,8 @@ struct SlidingCapsule<Labels: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
     @GestureState private var drag: CGFloat?
+    @State private var changing = false
+    @State private var changeTask: Task<Void, Never>?
     private let swipeThreshold: CGFloat = 6
 
     var body: some View {
@@ -37,13 +39,14 @@ struct SlidingCapsule<Labels: View>: View {
                             .frame(width: knob, height: knobHeight)
                     }
                 }
-                .scaleEffect(x: drag == nil || reduceMotion ? 1 : 1.08,
-                             y: drag == nil || reduceMotion ? 1 : 1.15)
+                .scaleEffect(x: (drag != nil || changing) && !reduceMotion ? 1.08 : 1,
+                             y: (drag != nil || changing) && !reduceMotion ? 1.15 : 1)
                 .offset(x: offset + inset)
                 labels(proposed)
                     .padding(.horizontal, inset)
             }
             .animation(reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.84), value: drag != nil)
+            .animation(reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.84), value: changing)
             .animation(reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.84), value: selectedRight)
             .contentShape(Capsule())
             .simultaneousGesture(DragGesture(minimumDistance: swipeThreshold)
@@ -62,5 +65,16 @@ struct SlidingCapsule<Labels: View>: View {
                 })
         }
         .frame(height: height)
+        .onChange(of: selectedRight) { _, _ in
+            changeTask?.cancel()
+            guard !reduceMotion else { changing = false; return }
+            changing = true
+            changeTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(160))
+                guard !Task.isCancelled else { return }
+                changing = false
+            }
+        }
+        .onDisappear { changeTask?.cancel(); changing = false }
     }
 }

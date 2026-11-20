@@ -69,6 +69,8 @@ struct CameraScreen: View {
     @State private var showSettingsImport = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
+    @State private var modeTransitionBlur = false
+    @State private var modeTransitionTask: Task<Void, Never>?
     @State private var timerSeconds = 0
     @State private var countdown = 0
     @State private var countdownTask: Task<Void, Never>?
@@ -254,6 +256,12 @@ struct CameraScreen: View {
                             }
                             .allowsHitTesting(false)
                         }
+                    }
+                    .overlay {
+                        Rectangle().fill(.ultraThinMaterial)
+                            .environment(\.colorScheme, .dark)
+                            .opacity(modeTransitionBlur ? 1 : 0)
+                            .allowsHitTesting(false)
                     }
                     .position(x: previewFrame.midX, y: previewFrame.midY)
                     .animation(.easeInOut(duration: 0.2), value: photoAspect)
@@ -543,7 +551,7 @@ struct CameraScreen: View {
             refreshAddress()
             publishCaptureContext()
         }
-        .onDisappear { finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onDisappear { modeTransitionTask?.cancel(); modeTransitionBlur = false; finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures() }
             else { finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
@@ -587,7 +595,17 @@ struct CameraScreen: View {
         .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
-        .onChange(of: mode) { _, _ in refreshAddress() }
+        .onChange(of: mode) { _, _ in
+            refreshAddress()
+            modeTransitionTask?.cancel()
+            guard !reduceMotion else { modeTransitionBlur = false; return }
+            withAnimation(.easeOut(duration: 0.08)) { modeTransitionBlur = true }
+            modeTransitionTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.18)) { modeTransitionBlur = false }
+            }
+        }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
         .onChange(of: camera.isRecording) { _, recording in

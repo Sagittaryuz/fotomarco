@@ -124,6 +124,7 @@ struct GalleryDetailGrid<Item: Identifiable, Tile: View>: View {
 struct GalleryFilmstrip<Item: Identifiable, Tile: View>: View {
     let items: [Item]
     @Binding var selection: Item.ID
+    var overlayBackground = false
     @ViewBuilder let tile: (Item) -> Tile
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -156,6 +157,6 @@ struct GalleryFilmstrip<Item: Identifiable, Tile: View>: View {
             }
         }
         .frame(height: 54)
-        .background(.black)
+        .background(overlayBackground ? Color.clear : Color.black)
     }
 }
