@@ -66,7 +66,7 @@ struct StampSnapshot {
         self.capturedAt = capturedAt
         self.layout = layout
         self.gpsEnabled = gpsEnabled
-        self.mapEnabled = gpsEnabled && mapEnabled
+        self.mapEnabled = gpsEnabled && mapEnabled && (layout.template == .original || layout.template.usesMap)
         self.addressEnabled = gpsEnabled && addressEnabled
         func clean(_ text: String, limit: Int) -> String {
             let singleLine = text.components(separatedBy: .newlines).joined(separator: " ").replacingOccurrences(of: "\t", with: " ")

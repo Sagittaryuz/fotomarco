@@ -4,6 +4,17 @@ import UIKit
 @testable import Momentra
 
 final class StampSnapshotTests: XCTestCase {
+    func testMapLoadingOnlyRunsForTemplatesThatUseMap() {
+        var layout = StampLayout()
+        layout.template = .workReport
+        let report = StampSnapshot(capturedAt: Date(), gpsEnabled: true, mapEnabled: true, location: nil, heading: nil, layout: layout)
+        XCTAssertFalse(report.mapEnabled)
+        layout.template = .map
+        let mapped = StampSnapshot(capturedAt: Date(), gpsEnabled: true, mapEnabled: true, location: nil, heading: nil, layout: layout)
+        XCTAssertTrue(mapped.mapEnabled)
+        let disabled = StampSnapshot(capturedAt: Date(), gpsEnabled: false, mapEnabled: true, location: nil, heading: nil, layout: layout)
+        XCTAssertFalse(disabled.mapEnabled)
+    }
     func testWorkReportProducesOverlayAndRejectsInsufficientSpace() throws {
         var layout = StampLayout()
         layout.template = .workReport
