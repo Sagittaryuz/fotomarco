@@ -15,12 +15,17 @@ final class MapMarkerTests: XCTestCase {
                                                bytesPerRow: 80 * 4, space: CGColorSpaceCreateDeviceRGB(),
                                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 80, height: 80))
-        let yellow = stride(from: 0, to: pixels.count, by: 4).filter {
-            pixels[$0] > 180 && pixels[$0 + 1] > 140 && pixels[$0 + 2] < 120 && pixels[$0 + 3] > 200
-        }.count
-        let dark = stride(from: 0, to: pixels.count, by: 4).filter {
-            pixels[$0] < 60 && pixels[$0 + 1] < 60 && pixels[$0 + 2] < 60 && pixels[$0 + 3] > 200
-        }.count
+        var yellow = 0
+        var dark = 0
+        for offset in stride(from: 0, to: pixels.count, by: 4) {
+            let red = pixels[offset]
+            let green = pixels[offset + 1]
+            let blue = pixels[offset + 2]
+            let alpha = pixels[offset + 3]
+            guard alpha > 200 else { continue }
+            if red > 180 && green > 140 && blue < 120 { yellow += 1 }
+            if red < 60 && green < 60 && blue < 60 { dark += 1 }
+        }
         XCTAssertGreaterThan(yellow, 500)
         XCTAssertGreaterThan(dark, 20)
     }
