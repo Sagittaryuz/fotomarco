@@ -117,7 +117,7 @@ struct GalleryDetailGrid<Item: Identifiable, Tile: View>: View {
             })
             .navigationTitle("Nesta galeria")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Concluído") { dismiss() } }
+            .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } }
         }
     }
 }
@@ -134,7 +134,7 @@ struct GalleryFilmstrip<Item: Identifiable, Tile: View>: View {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 5) {
                     ForEach(items) { item in
-                        Button { selection = item.id } label: {
+                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); selection = item.id } label: {
                             tile(item)
                                 .frame(width: 40, height: 44).clipped()
                                 .clipShape(RoundedRectangle(cornerRadius: 5))

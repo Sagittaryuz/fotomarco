@@ -287,7 +287,7 @@ private struct DevicePhotoPager: View {
     private func controls(_ item: DeviceAsset) -> some View {
         let favorite = favorites[item.id] ?? item.asset.isFavorite
         return HStack(spacing: 10) {
-            Button { panel = .share } label: { GalleryShareIcon() }
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); panel = .share } label: { GalleryShareIcon() }
                 .accessibilityLabel("Compartilhar")
             Spacer(minLength: 4)
             HStack(spacing: 2) {
@@ -313,7 +313,7 @@ private struct DevicePhotoPager: View {
     }
 
     private func button(_ icon: String, label: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); action() }) {
             Image(systemName: icon).font(.body.weight(.semibold)).foregroundStyle(tint)
                 .frame(width: 44, height: 44).contentShape(Rectangle())
         }.accessibilityLabel(label)
