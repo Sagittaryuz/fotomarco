@@ -208,6 +208,34 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawPatrol(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let yellow = UIColor(red: 1, green: 0.84, blue: 0.16, alpha: 1)
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        context.saveGState(); defer { context.restoreGState() }
+        context.setFillColor(UIColor(red: 0.20, green: 0.29, blue: 0.72, alpha: 0.97).cgColor); context.fill(box)
+        let header = CGRect(x: box.minX, y: box.minY, width: box.width, height: box.height * 0.40)
+        context.setFillColor(UIColor(red: 0.16, green: 0.20, blue: 0.42, alpha: 1).cgColor); context.fill(header)
+        context.setFillColor(yellow.cgColor)
+        context.fill(CGRect(x: header.minX, y: header.maxY - max(1, box.height * 0.018), width: header.width, height: max(1, box.height * 0.018)))
+        let shield = CGRect(x: box.minX + box.width * 0.05, y: box.minY + box.height * 0.06, width: box.height * 0.27, height: box.height * 0.27)
+        if let icon = UIImage(systemName: "checkmark.shield")?.withTintColor(yellow, renderingMode: .alwaysOriginal) { icon.draw(in: shield) }
+        let title = content.customFields["Título"] ?? "Segurança"
+        (title as NSString).draw(in: CGRect(x: shield.maxX + box.width * 0.04, y: box.minY + box.height * 0.07, width: box.maxX - shield.maxX - box.width * 0.07, height: box.height * 0.27),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.21, weight: .bold), .foregroundColor: yellow, .paragraphStyle: paragraph])
+        (content.time as NSString).draw(in: CGRect(x: box.minX + box.width * 0.06, y: box.minY + box.height * 0.44, width: box.width * 0.30, height: box.height * 0.27),
+            withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.22, weight: .medium), sample: "88:88", width: box.width * 0.30), .foregroundColor: yellow, .paragraphStyle: paragraph])
+        (content.date as NSString).draw(in: CGRect(x: box.minX + box.width * 0.39, y: box.minY + box.height * 0.48, width: box.width * 0.56, height: box.height * 0.20),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.14, weight: .semibold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        context.setFillColor(UIColor.systemRed.cgColor)
+        context.fill(CGRect(x: box.minX + box.width * 0.06, y: box.minY + box.height * 0.76, width: max(1, box.width * 0.012), height: box.height * 0.15))
+        ((content.address ?? "") as NSString).draw(in: CGRect(x: box.minX + box.width * 0.09, y: box.minY + box.height * 0.73, width: box.width * 0.87, height: box.height * 0.22),
+            withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.14, weight: .bold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        return true
+    }
     static func fittedFixedFont(_ font: UIFont, sample: String, width: CGFloat) -> UIFont {
         let measured = (sample as NSString).size(withAttributes: [.font: font]).width
         guard measured > 0, width > 0, measured > width else { return font }
@@ -409,9 +437,16 @@ enum StampRenderer {
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         (content.time as NSString).draw(in: CGRect(x: logoBox.maxX + banner.height * 0.12, y: banner.minY + banner.height * 0.06, width: banner.width * 0.42, height: banner.height * 0.84),
             withAttributes: [.font: fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.68, weight: .medium), sample: "88:88", width: banner.width * 0.42), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
-        let symbol = delivery ? "✓" : "●"
-        (symbol as NSString).draw(in: CGRect(x: banner.maxX - banner.height * 0.7, y: banner.minY + banner.height * 0.08, width: banner.height * 0.6, height: banner.height * 0.8),
-            withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.55, weight: .bold), .foregroundColor: delivery ? UIColor.white : UIColor.systemYellow, .paragraphStyle: paragraph])
+        let badge = CGRect(x: banner.maxX - banner.height * 0.72, y: banner.minY + banner.height * 0.16, width: banner.height * 0.62, height: banner.height * 0.62)
+        if !delivery {
+            context.setFillColor(UIColor.systemYellow.cgColor)
+            context.fillEllipse(in: badge)
+        }
+        let iconName = delivery ? "shippingbox.fill" : "checkmark"
+        let iconColor: UIColor = delivery ? .white : .black
+        if let icon = UIImage(systemName: iconName)?.withTintColor(iconColor, renderingMode: .alwaysOriginal) {
+            icon.draw(in: badge.insetBy(dx: badge.width * 0.22, dy: badge.height * 0.22))
+        }
         let bodyY = banner.maxY + box.height * 0.07
         context.setFillColor((delivery ? UIColor.systemRed : UIColor.systemYellow).cgColor)
         context.fill(CGRect(x: box.minX, y: bodyY, width: max(1, box.width * 0.008), height: box.maxY - bodyY))
@@ -857,7 +892,11 @@ enum StampRenderer {
                 fits = drawLargeMap(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
                 return
             }
-            if [.clean, .checkIn, .patrol].contains(snapshot.layout.template) {
+            if snapshot.layout.template == .patrol {
+                fits = drawPatrol(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if [.clean, .checkIn].contains(snapshot.layout.template) {
                 fits = drawBannerTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
