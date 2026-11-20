@@ -47,7 +47,7 @@ struct GalleryVideoStampEditor: View {
                             Text(profile.name).tag(Optional(profile.id))
                         }
                     }.disabled(saving)
-                    Button("Salvar cópia com carimbo", action: save)
+                    Button("Salvar cópia com carimbo") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); save() }
                         .buttonStyle(.borderedProminent)
                         .disabled(saving)
                     if saving { ProgressView("Aplicando carimbo…") }
@@ -59,7 +59,7 @@ struct GalleryVideoStampEditor: View {
             .padding()
             .navigationTitle("Carimbo do vídeo")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Fechar") { dismiss() }.disabled(saving) }
+            .toolbar { Button("Fechar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() }.disabled(saving) }
         }
         .interactiveDismissDisabled(saving)
         .task(id: selectedProfile) { await preparePreview() }

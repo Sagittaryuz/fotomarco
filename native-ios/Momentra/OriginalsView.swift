@@ -112,7 +112,7 @@ struct CaptureTextPanel: View {
                     ContentUnavailableView("Nenhum texto reconhecido", systemImage: "text.viewfinder")
                 } else {
                     ScrollView { Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding() }
-                    Button("Copiar texto") { UIPasteboard.general.string = text }.padding()
+                    Button("Copiar texto") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); UIPasteboard.general.string = text }.padding()
                 }
             } else {
                 ProgressView("Lendo texto…")
