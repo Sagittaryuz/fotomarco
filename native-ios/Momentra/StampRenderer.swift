@@ -206,6 +206,47 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawSpreadsheet(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        let unit = min(size.width, size.height)
+        guard unit >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let green = UIColor(red: 0.38, green: 0.87, blue: 0.66, alpha: 1)
+        let header = box.height * 0.35
+        let separator = box.width * 0.28
+        let rowHeight = (box.height - header) / 2
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setFillColor(UIColor(white: 0.18, alpha: 0.76).cgColor)
+        context.fill(box)
+        context.setStrokeColor(green.cgColor)
+        context.setLineWidth(max(1, box.width * 0.003))
+        context.stroke(box)
+        context.move(to: CGPoint(x: box.minX, y: box.minY + header))
+        context.addLine(to: CGPoint(x: box.maxX, y: box.minY + header))
+        context.move(to: CGPoint(x: box.minX, y: box.minY + header + rowHeight))
+        context.addLine(to: CGPoint(x: box.maxX, y: box.minY + header + rowHeight))
+        context.move(to: CGPoint(x: box.minX + separator, y: box.minY + header))
+        context.addLine(to: CGPoint(x: box.minX + separator, y: box.maxY))
+        context.strokePath()
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let inset = box.width * 0.025
+        let title = content.customFields["Título"] ?? "Registro de Trabalho"
+        (title as NSString).draw(in: CGRect(x: box.minX + inset, y: box.minY + header * 0.16, width: box.width - inset * 2, height: header * 0.75),
+            withAttributes: [.font: UIFont.systemFont(ofSize: header * 0.52, weight: .bold), .foregroundColor: green, .paragraphStyle: paragraph])
+        let labels = ["Hora", "Endereço"]
+        let values = [content.date + " " + content.time, content.address ?? ""]
+        for index in 0..<2 {
+            let y = box.minY + header + CGFloat(index) * rowHeight + rowHeight * 0.18
+            (labels[index] as NSString).draw(in: CGRect(x: box.minX + inset, y: y, width: separator - inset * 2, height: rowHeight * 0.8),
+                withAttributes: [.font: UIFont.systemFont(ofSize: rowHeight * 0.42, weight: .bold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+            (values[index] as NSString).draw(in: CGRect(x: box.minX + separator + inset, y: y, width: box.width - separator - inset * 2, height: rowHeight * 0.8),
+                withAttributes: [.font: UIFont.systemFont(ofSize: rowHeight * 0.40, weight: .regular), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func workReportRect(in size: CGSize) -> CGRect {
         let unit = min(size.width, size.height)
         let width = unit * 0.78
@@ -399,6 +440,10 @@ enum StampRenderer {
             let address = snapshot.addressEnabled && snapshot.location != nil ? address : nil
             if snapshot.layout.template == .workReport {
                 fits = drawWorkReport(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .spreadsheet {
+                fits = drawSpreadsheet(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {

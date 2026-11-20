@@ -254,7 +254,7 @@ struct CameraScreen: View {
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
                     .overlay {
-                        if stampEnabled && stampProfiles.selected.layout.template == .workReport {
+                        if stampEnabled && stampProfiles.selected.layout.template.hasFixedRenderer {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 GeometryReader { geometry in
                                     let snapshot = makeSnapshot(at: timeline.date)
@@ -264,7 +264,7 @@ struct CameraScreen: View {
                                         Button { showStampEditor = true } label: { Color.clear.contentShape(Rectangle()) }
                                             .frame(width: box.width, height: box.height)
                                             .position(x: box.midX, y: box.midY)
-                                            .accessibilityLabel("Personalizar relatório de trabalho")
+                                            .accessibilityLabel("Personalizar carimbo")
                                     }
                                 }
                             }

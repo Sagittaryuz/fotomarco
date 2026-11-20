@@ -124,6 +124,7 @@ struct StampLayoutEditor: View {
             Picker("Modelo", selection: layout.template) {
                 Text("Atual").tag(StampLayout.Template.original)
                 Text("Relatório de trabalho").tag(StampLayout.Template.workReport)
+                Text("Planilha").tag(StampLayout.Template.spreadsheet)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
@@ -318,7 +319,7 @@ private struct StampLayoutPreview: View {
             ZStack {
                 Image("StampPreview").resizable().scaledToFill()
                     .frame(width: size.width, height: size.height).clipped()
-                if layout.template == .workReport {
+                if layout.template.hasFixedRenderer {
                     let date = Date()
                     let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665), altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: date)
                     let sample = StampSnapshot(capturedAt: date, gpsEnabled: true, addressEnabled: true,
