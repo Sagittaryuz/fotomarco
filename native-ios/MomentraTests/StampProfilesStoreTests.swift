@@ -19,6 +19,19 @@ final class StampProfilesStoreTests: XCTestCase {
         super.tearDown()
     }
 
+    func testDraftChangesPersistOnlyAfterSaving() {
+        let original = StampProfilesStore(defaults: defaults)
+        let initial = original.selected
+        let draft = StampProfilesStore(draftOf: original)
+        draft.rename("Obra")
+        draft.setLogo("obra.png", for: draft.selectedID)
+        XCTAssertEqual(original.selected, initial)
+        XCTAssertEqual(StampProfilesStore(defaults: defaults).selected, initial)
+        original.applyDraft(draft)
+        XCTAssertEqual(original.selected.name, "Obra")
+        XCTAssertEqual(StampProfilesStore(defaults: defaults).selected.logoName, "obra.png")
+    }
+
     func testMigrationCreatesOneNamedProfileAndRetainsLegacyKeys() {
         defaults.set("PIRESCO", forKey: "native.profile")
         defaults.set("Nota existente", forKey: "native.profile.piresco.note")

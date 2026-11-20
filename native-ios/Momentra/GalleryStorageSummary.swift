@@ -14,6 +14,8 @@ struct GalleryCapacitySummary: View {
     @State private var quotas: [CloudDeliveryPlan.Destination: CloudQuota] = [:]
     @State private var loading = Set<CloudDeliveryPlan.Destination>()
     @State private var failed = Set<CloudDeliveryPlan.Destination>()
+    @State private var folderError: String?
+    @Environment(\.openURL) private var openURL
 
     private struct RefreshRequest: Equatable {
         let destinations: [CloudDeliveryPlan.Destination]
@@ -87,6 +89,11 @@ struct GalleryCapacitySummary: View {
             }
         }
         .onChange(of: loading.isEmpty, initial: true) { _, idle in syncingQuota = !idle }
+        .alert("Não foi possível abrir a pasta", isPresented: Binding(
+            get: { folderError != nil }, set: { if !$0 { folderError = nil } }
+        )) {
+            Button("OK", role: .cancel) { folderError = nil }
+        } message: { Text(folderError ?? "") }
     }
 
     @ViewBuilder
@@ -94,9 +101,13 @@ struct GalleryCapacitySummary: View {
         if section != 2 {
             let name = section == 0 && !compact ? "Capturas no iPhone" : "Armazenamento do iPhone"
             let value = local.map { CloudQuota(total: $0.total, used: section == 0 && !compact ? $0.primary : $0.used) }
-            row(name: name, shortName: "iPhone", quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
-                GalleryOriginMark(origin: .local, size: compact ? 15 : 25)
-            }.frame(width: width)
+            Button {
+                if let url = URL(string: "photos-redirect://") { openURL(url) }
+            } label: {
+                row(name: name, shortName: "iPhone", quota: value, unavailable: "Capacidade do iPhone indisponível", tint: .mint) {
+                    GalleryOriginMark(origin: .local, size: compact ? 15 : 25)
+                }
+            }.buttonStyle(.plain).frame(width: width)
         }
         if section != 1 {
             ForEach(accounts) { account in
@@ -104,16 +115,54 @@ struct GalleryCapacitySummary: View {
                 let name = (google ? "Google Drive" : "OneDrive") + " · " + account.label
                 let duplicateProvider = accounts.lazy.filter { $0.id.provider == account.id.provider }.dropFirst().first != nil
                 let shortName = duplicateProvider ? account.label : google ? "Drive" : "OneDrive"
-                row(name: name, shortName: shortName, quota: quotas[account.id],
-                    unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Capacidade indisponível",
-                    status: status(for: account.id),
-                    tint: google ? .green : .blue) {
-                    GalleryOriginMark(origin: google ? .google : .oneDrive, size: compact ? 15 : 24)
-                }.frame(width: width)
+                Button {
+                    openFolder(for: account.id, accountLabel: account.label)
+                } label: {
+                    row(name: name, shortName: shortName, quota: quotas[account.id],
+                        unavailable: loading.contains(account.id) ? "Consultando capacidade…" : "Capacidade indisponível",
+                        status: status(for: account.id), tint: google ? .green : .blue) {
+                        GalleryOriginMark(origin: google ? .google : .oneDrive, size: compact ? 15 : 24)
+                    }
+                }.buttonStyle(.plain).frame(width: width)
             }
             if section == 2 && accounts.isEmpty {
                 Text("Conecte uma conta para consultar a capacidade da nuvem.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func openFolder(for destination: CloudDeliveryPlan.Destination, accountLabel: String) {
+        Task {
+            do {
+                let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+                let url: URL
+                if destination.provider == .googleDrive {
+                    let id = try await GoogleDriveArchive().folder(accessToken: token)
+                    var components = URLComponents(string: "https://drive.google.com/drive/folders/\(id)")!
+                    if accountLabel.contains("@") {
+                        components.queryItems = [URLQueryItem(name: "authuser", value: accountLabel)]
+                    }
+                    guard let folder = components.url else { throw URLError(.badURL) }
+                    url = folder
+                } else {
+                    struct Folder: Decodable { let webUrl: String }
+                    var request = URLRequest(url: URL(string: "https://graph.microsoft.com/v1.0/me/drive/special/approot?$select=webUrl")!)
+                    request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard (response as? HTTPURLResponse)?.statusCode == 200,
+                          let folder = URL(string: try JSONDecoder().decode(Folder.self, from: data).webUrl),
+                          folder.scheme == "https", let host = folder.host?.lowercased(),
+                          host == "onedrive.live.com" || host.hasSuffix(".sharepoint.com") else {
+                        throw URLError(.badServerResponse)
+                    }
+                    url = folder
+                }
+                openURL(url) { accepted in
+                    if !accepted { folderError = "Não foi possível abrir o aplicativo ou navegador." }
+                }
+            } catch {
+                folderError = "Confira a conexão e o acesso à conta selecionada."
             }
         }
     }

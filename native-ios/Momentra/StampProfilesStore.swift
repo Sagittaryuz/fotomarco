@@ -14,21 +14,23 @@ struct StampProfile: Identifiable, Codable, Equatable {
 final class StampProfilesStore: ObservableObject {
     static let maximumProfiles = 5
     private let defaults: UserDefaults
+    private let isDraft: Bool
     private let profilesKey = "native.stamp.layoutProfiles.v1"
     private let selectedKey = "native.stamp.selectedLayoutProfile.v1"
     private let startupKey = "native.stamp.startupProfile.v1"
 
     @Published private(set) var profiles: [StampProfile] { didSet { persist() } }
     @Published private(set) var selectedID: UUID {
-        didSet { defaults.set(selectedID.uuidString, forKey: selectedKey) }
+        didSet { if !isDraft { defaults.set(selectedID.uuidString, forKey: selectedKey) } }
     }
     /// "last" or a profile UUID; only applied on a new app launch.
     @Published private(set) var startupSelection: String {
-        didSet { defaults.set(startupSelection, forKey: startupKey) }
+        didSet { if !isDraft { defaults.set(startupSelection, forKey: startupKey) } }
     }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        isDraft = false
         let profileKey = "native.stamp.layoutProfiles.v1"
         let selectionKey = "native.stamp.selectedLayoutProfile.v1"
         let startupKey = "native.stamp.startupProfile.v1"
@@ -62,6 +64,20 @@ final class StampProfilesStore: ObservableObject {
         defaults.set(try? JSONEncoder().encode(loaded), forKey: profileKey)
         defaults.set(self.selectedID.uuidString, forKey: selectionKey)
         defaults.set(self.startupSelection, forKey: startupKey)
+    }
+
+    init(draftOf source: StampProfilesStore) {
+        defaults = source.defaults
+        isDraft = true
+        profiles = source.profiles
+        selectedID = source.selectedID
+        startupSelection = source.startupSelection
+    }
+
+    func applyDraft(_ draft: StampProfilesStore) {
+        profiles = draft.profiles
+        selectedID = draft.selectedID
+        startupSelection = draft.startupSelection
     }
 
     var selected: StampProfile { profiles.first(where: { $0.id == selectedID }) ?? profiles[0] }
@@ -108,6 +124,7 @@ final class StampProfilesStore: ObservableObject {
         change(&profiles[index])
     }
     private func persist() {
+        guard !isDraft else { return }
         guard let data = try? JSONEncoder().encode(profiles) else { return }
         defaults.set(data, forKey: profilesKey)
     }

@@ -64,16 +64,14 @@ struct CameraScreen: View {
     @State private var showSupportPanel = false
     @State private var showOriginals = false
     @State private var showMap = false
+    @State private var mapAppearance: StampLayout.MapAppearance = .map
     @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
-    @State private var showLogoImport = false
     @State private var importMessage: String?
     @State private var mode: CaptureMode = .photo
     @State private var timerSeconds = 0
     @State private var countdown = 0
     @State private var countdownTask: Task<Void, Never>?
-    @State private var selectedLogo: PhotosPickerItem?
-    @State private var logoLoading = false
     @State private var logo: UIImage?
     @State private var galleryThumbnail: CameraService.CapturePreview?
     @State private var cameraShareTask: Task<Void, Never>?
@@ -169,7 +167,7 @@ struct CameraScreen: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel.toggle() }
                 } label: {
-                    Text(photoAspect).font(.caption.bold()).frame(width: 44, height: 44)
+                    Text(photoAspect).font(.system(size: 17, weight: .semibold)).monospacedDigit().frame(width: 44, height: 44)
                 }
                 .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                 .accessibilityLabel("Proporção da foto")
@@ -416,7 +414,10 @@ struct CameraScreen: View {
                                     .accessibilityLabel(quickRecordingLocked ? "Gravação bloqueada" : "Deslize à direita para bloquear")
                             }
                         }
-                    }.padding(.horizontal, max(28, geometry.size.width * 0.08)).padding(.bottom, 16)
+                    }
+                    .padding(.horizontal, max(28, geometry.size.width * 0.08))
+                    .padding(.bottom, 16)
+                    .offset(y: 6)
                     }
                     .background {
                         if showingZoomDial {
@@ -518,7 +519,7 @@ struct CameraScreen: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showLogoImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active { Task { await updates.check() } }
         }
@@ -571,7 +572,6 @@ struct CameraScreen: View {
             cameraShare = nil
             showMap = false
             showSettingsImport = false
-            showLogoImport = false
             showAspectPanel = false
             selectedRecognizedText = nil
             camera.start()
@@ -628,22 +628,7 @@ struct CameraScreen: View {
             retryCloudCaptures()
         }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
-        .onChange(of: selectedLogo) { _, item in
-            guard let item else { return }
-            let targetProfile = stampProfiles.selectedID
-            logoLoading = true
-            Task { @MainActor in
-                defer { logoLoading = false; selectedLogo = nil }
-                do {
-                    guard let data = try await item.loadTransferable(type: Data.self) else { throw ProfileLogoStore.LogoError.invalid }
-                    let name = try await Task.detached(priority: .utility) { try ProfileLogoStore.save(data) }.value
-                    setLogo(name, for: targetProfile)
-                    if stampProfiles.selectedID == targetProfile { refreshLogo() }
-                } catch {
-                    importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível salvar o logotipo. A imagem anterior foi preservada."
-                }
-            }
-        }
+
     }
 
     var body: some View {
@@ -667,6 +652,29 @@ struct CameraScreen: View {
                     if let coordinate = mapLocation?.coordinate {
                         Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350))) {
                             Marker("Localização", coordinate: coordinate)
+                        }
+                        .mapStyle(mapAppearance == .satellite ? .imagery : .standard)
+                        .overlay(alignment: .topLeading) {
+                            HStack(spacing: 6) {
+                                ForEach(StampLayout.MapAppearance.allCases, id: \.self) { appearance in
+                                    Button {
+                                        mapAppearance = appearance
+                                    } label: {
+                                        Text(appearance == .map ? "Mapa" : "Satélite")
+                                            .font(.subheadline.weight(.semibold))
+                                            .padding(.horizontal, 14)
+                                            .frame(minHeight: 44)
+                                            .background(
+                                                appearance == mapAppearance ? Color.white.opacity(0.25) : .clear,
+                                                in: Capsule()
+                                            )
+                                            .background(.ultraThinMaterial, in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityAddTraits(appearance == mapAppearance ? .isSelected : [])
+                                }
+                            }
+                            .padding(12)
                         }
                     } else {
                         ContentUnavailableView("Localização indisponível", systemImage: "location.slash", description: Text("Ative o GPS nas configurações e aguarde uma localização recente."))
@@ -801,29 +809,6 @@ struct CameraScreen: View {
         }
     }
 
-    private func importProfileLogo(_ result: Result<URL, Error>) {
-        guard let url = try? result.get() else { return }
-        let targetProfile = stampProfiles.selectedID
-        logoLoading = true
-        Task { @MainActor in
-            defer { logoLoading = false }
-            do {
-                let name = try await Task.detached(priority: .utility) {
-                    let scoped = url.startAccessingSecurityScopedResource()
-                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                    let file = try FileHandle(forReadingFrom: url)
-                    defer { try? file.close() }
-                    let data = try file.read(upToCount: 20_000_001) ?? Data()
-                    return try ProfileLogoStore.save(data)
-                }.value
-                setLogo(name, for: targetProfile)
-                if stampProfiles.selectedID == targetProfile { refreshLogo() }
-            } catch {
-                importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o logotipo. A imagem anterior foi preservada."
-            }
-        }
-    }
-
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
@@ -847,8 +832,7 @@ struct CameraScreen: View {
                     }
                     Section("Carimbo") {
                         NavigationLink("Layout e perfis") {
-                            StampLayoutEditor(store: stampProfiles, selectedLogo: $selectedLogo, logoLoading: logoLoading,
-                                              importLogo: $showLogoImport, importLogoResult: importProfileLogo)
+                            StampLayoutEditor(store: stampProfiles)
                         }
                         if stampProfiles.profiles.count > 1 {
                             Picker("Perfil ao abrir o app", selection: Binding(
@@ -1190,7 +1174,7 @@ struct CameraScreen: View {
 
     private var cameraSurfaceVisible: Bool {
         scenePhase == .active && !showSettings && !showOriginals && !showMap && !showSupportPanel &&
-            !showAspectPanel && !showSettingsImport && !showLogoImport && selectedRecognizedText == nil && cameraShare == nil
+            !showAspectPanel && !showSettingsImport && selectedRecognizedText == nil && cameraShare == nil
     }
 
     private struct RecognitionDemand: Equatable {

@@ -2,11 +2,13 @@ import SwiftUI
 import PhotosUI
 
 struct StampLayoutEditor: View {
-    @ObservedObject var store: StampProfilesStore
-    @Binding var selectedLogo: PhotosPickerItem?
-    let logoLoading: Bool
-    @Binding var importLogo: Bool
-    let importLogoResult: (Result<URL, Error>) -> Void
+    @ObservedObject private var originalStore: StampProfilesStore
+    @StateObject private var store: StampProfilesStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedLogo: PhotosPickerItem?
+    @State private var logoLoading = false
+    @State private var importLogo = false
+    @State private var importMessage: String?
     @State private var showPhotoPicker = false
     @State private var showLimit = false
     @State private var chooseStartup = false
@@ -16,7 +18,12 @@ struct StampLayoutEditor: View {
     @State private var draftName = ""
     @State private var draftNote = ""
     @State private var editingElement: Element = .map
-    private enum Element: String, CaseIterable { case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo" }
+    fileprivate enum Element: String, CaseIterable { case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo" }
+
+    init(store: StampProfilesStore) {
+        originalStore = store
+        _store = StateObject(wrappedValue: StampProfilesStore(draftOf: store))
+    }
 
     private var layout: Binding<StampLayout> {
         Binding(get: { store.selected.layout }, set: { store.setLayout($0) })
@@ -99,7 +106,7 @@ struct StampLayoutEditor: View {
                 Text("Carimbo único").tag(StampLayout.Mode.combined)
                 Text("Elementos separados").tag(StampLayout.Mode.separate)
             }.pickerStyle(.segmented)
-            StampLayoutPreview(layout: layout)
+            StampLayoutPreview(layout: layout, selectedElement: editingElement)
                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -125,9 +132,58 @@ struct StampLayoutEditor: View {
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
         }.padding(.horizontal, 12).padding(.vertical, 6)
         .photosPicker(isPresented: $showPhotoPicker, selection: $selectedLogo, matching: .images)
-        .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image], onCompletion: importLogoResult)
+        .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image]) { result in
+            guard let url = try? result.get() else { return }
+            let profileID = store.selectedID
+            logoLoading = true
+            Task {
+                defer { logoLoading = false }
+                do {
+                    let name = try await Task.detached(priority: .utility) {
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        let file = try FileHandle(forReadingFrom: url)
+                        defer { try? file.close() }
+                        return try ProfileLogoStore.save(file.read(upToCount: 20_000_001) ?? Data())
+                    }.value
+                    store.setLogo(name, for: profileID)
+                } catch {
+                    importMessage = "Não foi possível importar o logotipo."
+                }
+            }
+        }
+        .onChange(of: selectedLogo) { _, item in
+            guard let item else { return }
+            let profileID = store.selectedID
+            logoLoading = true
+            Task {
+                defer { logoLoading = false; selectedLogo = nil }
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else { throw ProfileLogoStore.LogoError.invalid }
+                    let name = try await Task.detached(priority: .utility) { try ProfileLogoStore.save(data) }.value
+                    store.setLogo(name, for: profileID)
+                } catch {
+                    importMessage = "Não foi possível importar o logotipo."
+                }
+            }
+        }
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Voltar") { dismiss() }.disabled(logoLoading)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Salvar") { originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
+            }
+        }
+        .alert("Momentra", isPresented: Binding(
+            get: { importMessage != nil },
+            set: { if !$0 { importMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { importMessage = nil }
+        } message: { Text(importMessage ?? "") }
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
         .alert("Renomear perfil", isPresented: $renameProfile) {
             TextField("Nome", text: $draftName)
@@ -214,6 +270,14 @@ struct StampLayoutEditor: View {
 
 private struct StampLayoutPreview: View {
     @Binding var layout: StampLayout
+    let selectedElement: StampLayoutEditor.Element
+
+    private func highlight(_ element: StampLayoutEditor.Element) -> some View {
+        RoundedRectangle(cornerRadius: 5)
+            .strokeBorder(.white.opacity(selectedElement == element ? 0.9 : 0), lineWidth: 1.5)
+            .shadow(color: .black.opacity(selectedElement == element ? 0.8 : 0), radius: 4)
+            .allowsHitTesting(false)
+    }
 
     private func rect(_ keyPath: WritableKeyPath<StampLayout, StampPoint>, in size: CGSize, element: CGSize) -> CGRect {
         StampRenderer.positionedRect(size: size, element: element, centre: layout[keyPath: keyPath],
@@ -230,17 +294,20 @@ private struct StampLayoutPreview: View {
                         if layout.showsMap {
                             previewMap.frame(width: min(size.width * 0.4, size.width * previewMapFraction * layout.mapSize * layout.combinedSize),
                                              height: min(size.width * 0.4, size.width * previewMapFraction * layout.mapSize * layout.combinedSize))
+                                .overlay { highlight(.map) }
                         }
-                        if layout.showsInformation { previewText }
+                        if layout.showsInformation { previewText.overlay { highlight(.information) } }
                         Spacer(minLength: 0)
                         if layout.showsLogo {
                             previewLogo
                                 .frame(width: min(size.width * 0.35, size.width * 0.15 * layout.logoSize * layout.combinedSize))
+                                .overlay { highlight(.logo) }
                         }
                     }
                     .padding(10)
                     .frame(maxWidth: layout.horizontal == "auto" ? .infinity : size.width * 0.75, alignment: .leading)
                     .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay { highlight(.combined) }
                     .padding(10)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: combinedAlignment)
                 } else {
@@ -250,6 +317,7 @@ private struct StampLayoutPreview: View {
                         let side = min(space.width, space.height, size.width * 0.5, size.width * previewMapFraction * layout.mapSize)
                         let box = rect(\.map, in: size, element: CGSize(width: side, height: side))
                         previewMap.frame(width: box.width, height: box.height)
+                            .overlay { highlight(.map) }
                             .position(x: box.midX, y: box.midY)
                     }
                     if layout.showsInformation {
@@ -261,6 +329,7 @@ private struct StampLayoutPreview: View {
                             initialSize: 10 * layout.informationSize, style: layout.fontStyle, paragraph: paragraph)
                         let box = rect(\.information, in: size, element: CGSize(width: width, height: measured?.height ?? 0))
                         previewText(size: measured?.font.pointSize).frame(width: box.width, height: box.height, alignment: layout.information.x >= 0.5 ? .topTrailing : .topLeading)
+                            .overlay { highlight(.information) }
                             .position(x: box.midX, y: box.midY)
                     }
                     if layout.showsLogo {
@@ -268,6 +337,7 @@ private struct StampLayoutPreview: View {
                         let side = min(space.width, space.height, size.width * 0.35, size.width * 0.15 * layout.logoSize)
                         let box = rect(\.logo, in: size, element: CGSize(width: side, height: side))
                         previewLogo.frame(width: box.width, height: box.height)
+                            .overlay { highlight(.logo) }
                             .position(x: box.midX, y: box.midY)
                     }
                 }
