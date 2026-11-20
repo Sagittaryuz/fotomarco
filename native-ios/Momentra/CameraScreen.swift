@@ -259,13 +259,19 @@ struct CameraScreen: View {
                                 GeometryReader { geometry in
                                     let snapshot = makeSnapshot(at: timeline.date)
                                     if let image = StampRenderer.overlay(size: geometry.size, snapshot: snapshot, map: nil, address: snapshot.cachedAddress) {
+                                        if snapshot.layout.template == .largeMap && snapshot.mapEnabled && snapshot.location != nil {
+                                            let mapBox = StampRenderer.workReportRect(in: geometry.size)
+                                            StampMapPreview(snapshot: snapshot, markerSize: max(5, mapBox.height * 0.09), fillsFrame: true)
+                                                .frame(width: mapBox.width, height: mapBox.height)
+                                                .position(x: mapBox.midX, y: mapBox.midY)
+                                        }
                                         Image(uiImage: image).resizable().frame(width: geometry.size.width, height: geometry.size.height).allowsHitTesting(false)
                                         let box = StampRenderer.workReportRect(in: geometry.size)
                                         Button { showStampEditor = true } label: { Color.clear.contentShape(Rectangle()) }
                                             .frame(width: box.width, height: box.height)
                                             .position(x: box.midX, y: box.midY)
                                             .accessibilityLabel("Personalizar carimbo")
-                                        if snapshot.layout.template.usesMap && snapshot.mapEnabled && snapshot.location != nil {
+                                        if snapshot.layout.template.usesMap && snapshot.layout.template != .largeMap && snapshot.mapEnabled && snapshot.location != nil {
                                             let mapBox = StampRenderer.fixedMapRect(in: geometry.size)
                                             StampMapPreview(snapshot: snapshot, markerSize: max(5, mapBox.width * 0.12))
                                                 .frame(width: mapBox.width, height: mapBox.height)
@@ -273,6 +279,13 @@ struct CameraScreen: View {
                                             Button { showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
                                                 .frame(width: mapBox.width, height: mapBox.height)
                                                 .position(x: mapBox.midX, y: mapBox.midY)
+                                                .accessibilityLabel("Escolher mapa ou satélite")
+                                        }
+                                        if snapshot.layout.template == .largeMap && snapshot.mapEnabled && snapshot.location != nil {
+                                            let mapBox = StampRenderer.workReportRect(in: geometry.size)
+                                            Button { showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
+                                                .frame(width: mapBox.width, height: mapBox.height * 0.64)
+                                                .position(x: mapBox.midX, y: mapBox.minY + mapBox.height * 0.32)
                                                 .accessibilityLabel("Escolher mapa ou satélite")
                                         }
                                     }

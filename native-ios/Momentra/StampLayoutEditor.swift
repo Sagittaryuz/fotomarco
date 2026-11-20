@@ -130,6 +130,7 @@ struct StampLayoutEditor: View {
                 Text("Hora e localização").tag(StampLayout.Template.timeLocation)
                 Text("Personalizado").tag(StampLayout.Template.custom)
                 Text("Mapa").tag(StampLayout.Template.map)
+                Text("Mapa grande").tag(StampLayout.Template.largeMap)
                 Text("Registro de visita").tag(StampLayout.Template.visit)
                 Text("Entrega").tag(StampLayout.Template.delivery)
                 Text("Limpo").tag(StampLayout.Template.clean)

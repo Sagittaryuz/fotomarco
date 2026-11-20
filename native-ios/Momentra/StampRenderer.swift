@@ -206,6 +206,36 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawLargeMap(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        context.saveGState()
+        defer { context.restoreGState() }
+        if snapshot.mapEnabled, let map {
+            map.draw(in: box)
+            let marker = box.height * 0.09
+            context.setFillColor(UIColor.systemBlue.cgColor)
+            context.fillEllipse(in: CGRect(x: box.midX - marker / 2, y: box.midY - marker / 2, width: marker, height: marker))
+            context.setStrokeColor(UIColor.white.cgColor); context.setLineWidth(max(1, marker * 0.12))
+            context.strokeEllipse(in: CGRect(x: box.midX - marker / 2, y: box.midY - marker / 2, width: marker, height: marker))
+        }
+        let strip = CGRect(x: box.minX, y: box.minY + box.height * 0.64, width: box.width, height: box.height * 0.36)
+        context.setFillColor(UIColor.black.withAlphaComponent(0.55).cgColor); context.fill(strip)
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        let lines = [content.coordinate ?? "", content.date + " " + content.time]
+        for index in lines.indices {
+            (lines[index] as NSString).draw(in: CGRect(x: strip.minX + box.width * 0.04, y: strip.minY + CGFloat(index) * strip.height * 0.5, width: strip.width * 0.67, height: strip.height * 0.48),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        if let temperature = snapshot.forecast?.temperatureC {
+            let right = NSMutableParagraphStyle(); right.alignment = .right
+            (String(format: "%.0f °C", temperature) as NSString).draw(in: CGRect(x: strip.midX, y: strip.minY + strip.height * 0.5, width: strip.width * 0.46, height: strip.height * 0.48),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.12), .foregroundColor: UIColor.white, .paragraphStyle: right])
+        }
+        return true
+    }
     static func drawInspection(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -702,6 +732,10 @@ enum StampRenderer {
             }
             if [.map, .visit, .delivery].contains(snapshot.layout.template) {
                 fits = drawMapTemplate(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .largeMap {
+                fits = drawLargeMap(snapshot: snapshot, map: map, address: address, size: size, context: context.cgContext)
                 return
             }
             if [.clean, .checkIn, .patrol].contains(snapshot.layout.template) {

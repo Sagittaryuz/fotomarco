@@ -5,6 +5,7 @@ import SwiftUI
 struct StampMapPreview: View {
     let snapshot: StampSnapshot
     let markerSize: CGFloat
+    var fillsFrame = false
     @State private var image: UIImage?
     private static let queue = DispatchQueue(label: "br.com.momentra.stamp-map-preview", qos: .utility)
 
@@ -17,7 +18,8 @@ struct StampMapPreview: View {
         GeometryReader { proxy in
             ZStack {
                 if let image {
-                    Image(uiImage: image).resizable().scaledToFit()
+                    Image(uiImage: image).resizable().aspectRatio(contentMode: fillsFrame ? .fill : .fit)
+                        .frame(width: proxy.size.width, height: proxy.size.height).clipped()
                     Circle().fill(.blue).frame(width: markerSize, height: markerSize)
                         .overlay(Circle().stroke(.white, lineWidth: 2))
                 } else {
