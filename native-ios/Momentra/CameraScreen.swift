@@ -209,7 +209,7 @@ struct CameraScreen: View {
             if let version = updates.availableVersion {
                 Button {
                     if directUpdate.ready { requestUpdate(version, fromBanner: true) }
-                    else { showSettings = true }
+                    else { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showSettings = true }
                 } label: {
                     Text(directUpdate.busy ? "Preparando atualização…" : "Atualização \(version) disponível")
                         .font(.caption.bold()).padding(.horizontal, 12).frame(minHeight: 44)
@@ -230,7 +230,10 @@ struct CameraScreen: View {
             height: 48) { proposedRight in
             HStack(spacing: 0) {
                 ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
-                    Button { mode = value } label: {
+                    Button {
+                        if mode == value { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+                        mode = value
+                    } label: {
                         Text(value.rawValue).font(.subheadline.weight(.medium))
                             .foregroundStyle(proposedRight == (value == .photo) ? Color.white : Color.white.opacity(0.65))
                             .frame(maxWidth: .infinity).frame(height: 42)
