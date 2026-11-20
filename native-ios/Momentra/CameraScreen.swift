@@ -79,6 +79,7 @@ struct CameraScreen: View {
     @State private var countdownTask: Task<Void, Never>?
     @State private var logo: UIImage?
     @State private var extraLogos: [UIImage?] = []
+    @State private var loadedLogoNames: [String] = []
     @State private var galleryThumbnail: CameraService.CapturePreview?
     @State private var cameraShareTask: Task<Void, Never>?
     @State private var cameraShare: GalleryShareBatch?
@@ -1290,15 +1291,19 @@ struct CameraScreen: View {
     }
 
     private func makeSnapshot(at date: Date) -> StampSnapshot {
-        StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled,
-            mapEnabled: stampProfiles.selected.layout.showsMap, addressEnabled: stampProfiles.selected.layout.showsAddress,
-            cachedAddress: addressPreview.current(for: location.location, at: date), title: "", note: stampProfiles.selected.note,
-            logo: logo, extraLogos: extraLogos, logoCorner: "auto", compact: stampProfiles.selected.layout.compact,
-            position: stampProfiles.selected.layout.position, horizontal: stampProfiles.selected.layout.horizontal,
-            longDate: stampProfiles.selected.layout.dateFormat == "long", fontStyle: stampProfiles.selected.layout.fontStyle,
-            mapScale: stampProfiles.selected.layout.mapScale, mapCorner: "auto",
+        let profile = stampProfiles.selected
+        let names = [profile.effectiveLogoName] + profile.additionalLogoNames
+        let mainLogo = names == loadedLogoNames ? logo : ProfileLogoStore.load(profile.effectiveLogoName)
+        let additional = names == loadedLogoNames ? extraLogos : profile.additionalLogoNames.map { ProfileLogoStore.load($0) }
+        return StampSnapshot(capturedAt: date, gpsEnabled: gpsEnabled,
+            mapEnabled: profile.layout.showsMap, addressEnabled: profile.layout.showsAddress,
+            cachedAddress: addressPreview.current(for: location.location, at: date), title: "", note: profile.note,
+            logo: mainLogo, extraLogos: additional, logoCorner: "auto", compact: profile.layout.compact,
+            position: profile.layout.position, horizontal: profile.layout.horizontal,
+            longDate: profile.layout.dateFormat == "long", fontStyle: profile.layout.fontStyle,
+            mapScale: profile.layout.mapScale, mapCorner: "auto",
             pressure: pressure.sample, forecast: canConsultForecast ? weather.current(location: location.location, at: date) : nil,
-            location: location.location, heading: location.heading, layout: stampProfiles.selected.layout)
+            location: location.location, heading: location.heading, layout: profile.layout)
     }
 
     @discardableResult
@@ -1358,8 +1363,10 @@ struct CameraScreen: View {
     }
 
     private func refreshLogo() {
-        logo = ProfileLogoStore.load(stampProfiles.selected.effectiveLogoName)
-        extraLogos = stampProfiles.selected.additionalLogoNames.map { ProfileLogoStore.load($0) }
+        let profile = stampProfiles.selected
+        logo = ProfileLogoStore.load(profile.effectiveLogoName)
+        extraLogos = profile.additionalLogoNames.map { ProfileLogoStore.load($0) }
+        loadedLogoNames = [profile.effectiveLogoName] + profile.additionalLogoNames
     }
 
     private func apply(_ transfer: SettingsTransfer) {
