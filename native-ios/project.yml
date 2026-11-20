@@ -68,6 +68,8 @@ targets:
     info:
       path: MomentraCaptureExtension/Info.plist
       properties:
+        CFBundleShortVersionString: '$(MARKETING_VERSION)'
+        CFBundleVersion: '$(CURRENT_PROJECT_VERSION)'
         NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS.'
         NSPhotoLibraryAddUsageDescription: 'Permite salvar fotos na biblioteca.'
         EXAppExtensionAttributes:
@@ -88,6 +90,8 @@ targets:
     info:
       path: MomentraCameraControl/Info.plist
       properties:
+        CFBundleShortVersionString: '$(MARKETING_VERSION)'
+        CFBundleVersion: '$(CURRENT_PROJECT_VERSION)'
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

@@ -54,6 +54,11 @@ jobs:
             test -f "$CONTROL/MomentraCameraControl"
             test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CAPTURE/Info.plist")" = 'br.com.momentra.camera.capture'
             test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CONTROL/Info.plist")" = 'br.com.momentra.camera.control'
+            for version in CFBundleVersion CFBundleShortVersionString; do
+              APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :$version" "$APP/Info.plist")
+              test "$(/usr/libexec/PlistBuddy -c "Print :$version" "$CAPTURE/Info.plist")" = "$APP_VERSION"
+              test "$(/usr/libexec/PlistBuddy -c "Print :$version" "$CONTROL/Info.plist")" = "$APP_VERSION"
+            done
             test "$(/usr/libexec/PlistBuddy -c 'Print :EXAppExtensionAttributes:EXExtensionPointIdentifier' "$CAPTURE/Info.plist")" = 'com.apple.securecapture'
             test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$CONTROL/Info.plist")" = 'com.apple.widgetkit-extension'
           fi
