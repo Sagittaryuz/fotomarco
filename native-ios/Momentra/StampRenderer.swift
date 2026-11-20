@@ -206,6 +206,40 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawProofTemplate(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        let delivery = snapshot.layout.template == .deliveryProof
+        let color = delivery ? UIColor(red: 0.88, green: 0.04, blue: 0.04, alpha: 1) : UIColor(red: 0.23, green: 0.10, blue: 0.07, alpha: 1)
+        let banner = CGRect(x: box.minX, y: box.minY, width: box.width * 0.82, height: box.height * 0.37)
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setFillColor(color.cgColor)
+        context.fill(banner)
+        let logoBox = CGRect(x: banner.minX + banner.height * 0.08, y: banner.minY + banner.height * 0.08, width: banner.height * 0.84, height: banner.height * 0.84)
+        if let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 {
+            let factor = min(logoBox.width / logo.size.width, logoBox.height / logo.size.height)
+            let fitted = CGSize(width: logo.size.width * factor, height: logo.size.height * factor)
+            logo.draw(in: CGRect(x: logoBox.midX - fitted.width / 2, y: logoBox.midY - fitted.height / 2, width: fitted.width, height: fitted.height))
+        }
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        (content.time as NSString).draw(in: CGRect(x: logoBox.maxX + banner.height * 0.12, y: banner.minY + banner.height * 0.06, width: banner.width * 0.42, height: banner.height * 0.84),
+            withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: banner.height * 0.68, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        let symbol = delivery ? "✓" : "●"
+        (symbol as NSString).draw(in: CGRect(x: banner.maxX - banner.height * 0.7, y: banner.minY + banner.height * 0.08, width: banner.height * 0.6, height: banner.height * 0.8),
+            withAttributes: [.font: UIFont.systemFont(ofSize: banner.height * 0.55, weight: .bold), .foregroundColor: delivery ? UIColor.white : UIColor.systemYellow, .paragraphStyle: paragraph])
+        let bodyY = banner.maxY + box.height * 0.07
+        context.setFillColor((delivery ? UIColor.systemRed : UIColor.systemYellow).cgColor)
+        context.fill(CGRect(x: box.minX, y: bodyY, width: max(1, box.width * 0.008), height: box.maxY - bodyY))
+        let lines = [content.date, content.address ?? ""]
+        for index in lines.indices {
+            (lines[index] as NSString).draw(in: CGRect(x: box.minX + box.width * 0.04, y: bodyY + CGFloat(index) * box.height * 0.22, width: box.width * 0.94, height: box.height * 0.21),
+                withAttributes: [.font: UIFont.systemFont(ofSize: box.height * 0.14, weight: .medium), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        return true
+    }
     static func drawBannerTemplate(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -612,6 +646,10 @@ enum StampRenderer {
             }
             if [.clean, .checkIn, .patrol].contains(snapshot.layout.template) {
                 fits = drawBannerTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .completed || snapshot.layout.template == .deliveryProof {
+                fits = drawProofTemplate(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {

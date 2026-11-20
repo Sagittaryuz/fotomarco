@@ -52,18 +52,16 @@ struct StampLayout: Codable, Equatable {
             case .patrol: ["Título"]
             case .checkIn: ["Título"]
             case .construction: ["Título", "Descrição"]
-            case .completed: ["Título"]
             case .portrait: ["Nome"]
             case .delivery: ["Veículo", "Encomenda"]
             case .inspection: ["Título"]
             case .shopee: ["Código", "Previsão de entrega"]
-            case .deliveryProof: ["Título"]
-            case .original, .locationWeather, .largeMap, .timeLocation, .map: []
+            case .original, .locationWeather, .largeMap, .timeLocation, .map, .completed, .deliveryProof: []
             }
         }
         var usesMap: Bool { [.visit, .largeMap, .map, .delivery].contains(self) }
         var usesLogo: Bool { [.construction, .completed, .portrait, .shopee, .deliveryProof].contains(self) }
-        var hasFixedRenderer: Bool { [.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map, .clean, .checkIn, .patrol].contains(self) }
+        var hasFixedRenderer: Bool { [.workReport, .spreadsheet, .locationWeather, .timeLocation, .custom, .map, .clean, .checkIn, .patrol, .completed, .deliveryProof].contains(self) }
     }
     var mode: Mode = .combined
     var showsMap = true

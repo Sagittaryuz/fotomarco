@@ -11,6 +11,7 @@ struct StampLayoutEditor: View {
     @State private var importLogo = false
     @State private var importMessage: String?
     @State private var showPhotoPicker = false
+    @State private var previewLogo: UIImage?
     @State private var showLimit = false
     @State private var chooseStartup = false
     @State private var confirmRemove = false
@@ -132,6 +133,8 @@ struct StampLayoutEditor: View {
                 Text("Limpo").tag(StampLayout.Template.clean)
                 Text("Registrar entrada").tag(StampLayout.Template.checkIn)
                 Text("Patrulha").tag(StampLayout.Template.patrol)
+                Text("Concluído").tag(StampLayout.Template.completed)
+                Text("Prova de entrega").tag(StampLayout.Template.deliveryProof)
             }
             if layout.wrappedValue.template == .original {
             Picker("Composição", selection: layout.mode) {
@@ -139,7 +142,7 @@ struct StampLayoutEditor: View {
                 Text("Elementos separados").tag(StampLayout.Mode.separate)
             }.pickerStyle(.segmented)
             }
-            StampLayoutPreview(layout: layout, selectedElement: editingElement)
+            StampLayoutPreview(layout: layout, selectedElement: editingElement, logo: previewLogo)
                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -155,6 +158,12 @@ struct StampLayoutEditor: View {
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
             } else {
                 VStack(alignment: .leading, spacing: 8) {
+                    if layout.wrappedValue.template.usesLogo {
+                        Menu("Escolher logotipo") {
+                            Button { showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                            Button { importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                        }.disabled(logoLoading)
+                    }
                     if layout.wrappedValue.template.usesMap {
                         Picker("Visualização do mapa", selection: layout.mapStyle) {
                             Text("Mapa").tag(StampLayout.MapAppearance.map)
@@ -175,6 +184,12 @@ struct StampLayoutEditor: View {
 
     var body: some View {
         editorContent
+        .task(id: store.selected.logoName) {
+            let name = store.selected.logoName
+            let image = await Task.detached(priority: .utility) { ProfileLogoStore.load(name) }.value
+            guard !Task.isCancelled else { return }
+            previewLogo = image
+        }
         .photosPicker(isPresented: $showPhotoPicker, selection: $selectedLogo, matching: .images)
         .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image]) { result in
             guard let url = try? result.get() else { return }
@@ -315,6 +330,7 @@ struct StampLayoutEditor: View {
 private struct StampLayoutPreview: View {
     @Binding var layout: StampLayout
     let selectedElement: StampLayoutEditor.Element
+    let logo: UIImage?
 
     private func highlight(_ element: StampLayoutEditor.Element) -> some View {
         RoundedRectangle(cornerRadius: 5)
@@ -337,7 +353,7 @@ private struct StampLayoutPreview: View {
                     let date = Date()
                     let location = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665), altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: date)
                     let sample = StampSnapshot(capturedAt: date, gpsEnabled: true, addressEnabled: true,
-                                               location: location, heading: nil, layout: layout)
+                                               logo: logo, location: location, heading: nil, layout: layout)
                     let map = layout.showsMap ? UIImage(named: layout.mapStyle == .satellite ? "StampSampleAerial" : "StampSampleMap") : nil
                     if let overlay = StampRenderer.overlay(size: size, snapshot: sample, map: map, address: "Central Park · Nova York") {
                         Image(uiImage: overlay).resizable().frame(width: size.width, height: size.height)
