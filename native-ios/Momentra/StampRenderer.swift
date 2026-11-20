@@ -110,6 +110,12 @@ struct StampSnapshot {
         let time = DateFormatter()
         time.locale = date.locale
         time.dateFormat = "HH:mm"
+        let shortDate = DateFormatter()
+        shortDate.locale = date.locale
+        shortDate.dateFormat = "dd MMM"
+        let year = DateFormatter()
+        year.locale = date.locale
+        year.dateFormat = "yyyy"
         let address = addressEnabled && location != nil ? address : nil
         let coordinate = location.map { String(format: "%.6f, %.6f", $0.coordinate.latitude, $0.coordinate.longitude) }
         var values: [String: String] = [:]
@@ -118,7 +124,8 @@ struct StampSnapshot {
             if !value.isEmpty { values[field] = value }
         }
         return StampTemplateContent(template: layout.template, date: date.string(from: capturedAt),
-                                    time: time.string(from: capturedAt), address: address,
+                                    time: time.string(from: capturedAt), dayMonth: shortDate.string(from: capturedAt),
+                                    year: year.string(from: capturedAt), address: address,
                                     coordinate: coordinate, customFields: values)
     }
 
@@ -159,6 +166,8 @@ struct StampTemplateContent {
     let template: StampLayout.Template
     let date: String
     let time: String
+    let dayMonth: String
+    let year: String
     let address: String?
     let coordinate: String?
     let customFields: [String: String]
@@ -527,9 +536,19 @@ enum StampRenderer {
             context.setFillColor(UIColor.white.withAlphaComponent(0.9).cgColor)
             context.fill(top)
             if delivery {
+                context.setStrokeColor(UIColor.black.cgColor)
+                context.setLineWidth(max(1, top.width * 0.008))
+                context.stroke(top.insetBy(dx: top.width * 0.004, dy: top.width * 0.004))
                 let lines = [content.customFields["Veículo"] ?? "", content.customFields["Encomenda"] ?? ""]
+                let symbols = ["truck.box.fill", "shippingbox.fill"]
                 for index in lines.indices {
-                    (lines[index] as NSString).draw(in: CGRect(x: top.minX + top.width * 0.04, y: top.minY + CGFloat(index) * top.height * 0.5, width: top.width * 0.92, height: top.height * 0.48),
+                    let rowY = top.minY + CGFloat(index) * top.height * 0.5
+                    let side = top.height * 0.32
+                    let tint: UIColor = index == 0 ? .systemOrange : .systemBrown
+                    if let icon = UIImage(systemName: symbols[index])?.withTintColor(tint, renderingMode: .alwaysOriginal) {
+                        icon.draw(in: CGRect(x: top.minX + top.width * 0.035, y: rowY + top.height * 0.08, width: side, height: side))
+                    }
+                    (lines[index] as NSString).draw(in: CGRect(x: top.minX + top.width * 0.05 + side, y: rowY, width: top.width * 0.9 - side, height: top.height * 0.48),
                         withAttributes: [.font: UIFont.systemFont(ofSize: top.height * 0.30, weight: .bold), .foregroundColor: UIColor.black, .paragraphStyle: paragraph])
                 }
             } else {
@@ -578,8 +597,9 @@ enum StampRenderer {
                  fittedFixedFont(UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.52, weight: .medium), sample: "88:88", width: box.width * 0.57))
             context.setFillColor(yellow.cgColor)
             context.fill(CGRect(x: box.minX + box.width * 0.58, y: box.minY + box.height * 0.04, width: max(1, box.width * 0.008), height: box.height * 0.50))
-            text(content.date, CGRect(x: box.minX + box.width * 0.62, y: box.minY + box.height * 0.13, width: box.width * 0.37, height: box.height * 0.24),
-                 fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold), sample: "88/88/8888", width: box.width * 0.37))
+            let dayFont = fittedFixedFont(UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold), sample: "88 set.", width: box.width * 0.37)
+            text(content.dayMonth, CGRect(x: box.minX + box.width * 0.62, y: box.minY + box.height * 0.06, width: box.width * 0.37, height: box.height * 0.22), dayFont)
+            text(content.year, CGRect(x: box.minX + box.width * 0.62, y: box.minY + box.height * 0.30, width: box.width * 0.37, height: box.height * 0.22), dayFont)
             text(content.address ?? "", CGRect(x: box.minX, y: box.minY + box.height * 0.67, width: box.width, height: box.height * 0.26),
                  UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold))
         } else {
