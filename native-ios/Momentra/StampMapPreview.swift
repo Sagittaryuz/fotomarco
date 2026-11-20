@@ -18,8 +18,12 @@ struct StampMapPreview: View {
         GeometryReader { proxy in
             ZStack {
                 if let image {
-                    Image(uiImage: image).resizable().aspectRatio(contentMode: fillsFrame ? .fill : .fit)
-                        .frame(width: proxy.size.width, height: proxy.size.height).clipped()
+                    if fillsFrame {
+                        Image(uiImage: image).resizable().frame(width: proxy.size.width, height: proxy.size.height)
+                    } else {
+                        Image(uiImage: image).resizable().scaledToFit()
+                            .frame(width: proxy.size.width, height: proxy.size.height).clipped()
+                    }
                     Circle().fill(.blue).frame(width: markerSize, height: markerSize)
                         .overlay(Circle().stroke(.white, lineWidth: 2))
                 } else {

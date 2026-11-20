@@ -850,14 +850,14 @@ struct CameraScreen: View {
 
     private var archiveSettingsSection: some View {
         Section("Armazenamento e contas") {
-            Button { connectArchive(.googleDrive) } label: {
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); connectArchive(.googleDrive) } label: {
                 Label {
                     Text("Adicionar conta Google Drive")
                 } icon: {
                     Image("GoogleDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
                 }
             }.disabled(connectingArchive)
-            Button { connectArchive(.oneDrive) } label: {
+            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); connectArchive(.oneDrive) } label: {
                 Label {
                     Text("Adicionar OneDrive ou Microsoft 365")
                 } icon: {
@@ -952,6 +952,7 @@ struct CameraScreen: View {
                             }
                         }
                         Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
+                            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                             Task { await updates.check() }
                         }.disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
@@ -966,7 +967,7 @@ struct CameraScreen: View {
                 }
                 .toggleStyle(DirectionalSwitchStyle())
                 .navigationTitle("Configurações")
-                .toolbar { Button("Concluído") { showSettings = false } }
+                .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
                     get: { archiveConnectionError != nil },
                     set: { if !$0 { archiveConnectionError = nil } }
