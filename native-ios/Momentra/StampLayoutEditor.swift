@@ -72,7 +72,25 @@ struct StampLayoutEditor: View {
         }
     }
 
-    var body: some View {
+    private func elementButton(_ element: Element) -> some View {
+        Button(element.rawValue) { editingElement = element }
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 44)
+            .contentShape(Capsule())
+            .modifier(GalleryControlSurface(rounded: true))
+            .overlay {
+                if editingElement == element {
+                    Capsule().strokeBorder(.yellow, lineWidth: 1.5).allowsHitTesting(false)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(editingElement == element ? .isSelected : [])
+    }
+
+    private var editorContent: some View {
         VStack(spacing: 8) {
             HStack {
                 Menu {
@@ -114,23 +132,16 @@ struct StampLayoutEditor: View {
             HStack(spacing: 4) {
                 ForEach(Element.allCases, id: \.self) { element in
                     if element != .combined || layout.wrappedValue.mode == .combined {
-                        Button(element.rawValue) { editingElement = element }
-                            .font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity).frame(minHeight: 44)
-                            .contentShape(Capsule())
-                            .modifier(GalleryControlSurface(rounded: true))
-                            .overlay {
-                                if editingElement == element {
-                                    Capsule().strokeBorder(.yellow, lineWidth: 1.5).allowsHitTesting(false)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(editingElement == element ? .isSelected : [])
+                        elementButton(element)
                     }
                 }
             }
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
         }.padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    var body: some View {
+        editorContent
         .photosPicker(isPresented: $showPhotoPicker, selection: $selectedLogo, matching: .images)
         .fileImporter(isPresented: $importLogo, allowedContentTypes: [.image]) { result in
             guard let url = try? result.get() else { return }
