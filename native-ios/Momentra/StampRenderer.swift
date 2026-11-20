@@ -206,6 +206,41 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func drawTimeOrCustom(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
+        guard min(size.width, size.height) >= 40 else { return false }
+        let box = workReportRect(in: size)
+        guard CGRect(origin: .zero, size: size).contains(box) else { return false }
+        let content = snapshot.templateContent(address: address)
+        context.saveGState()
+        defer { context.restoreGState() }
+        let yellow = UIColor(red: 1, green: 0.73, blue: 0.13, alpha: 1)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        func text(_ value: String, _ rect: CGRect, _ font: UIFont) {
+            (value as NSString).draw(in: rect, withAttributes: [.font: font, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+        }
+        if snapshot.layout.template == .timeLocation {
+            text(content.time, CGRect(x: box.minX, y: box.minY, width: box.width * 0.57, height: box.height * 0.59),
+                 UIFont.monospacedDigitSystemFont(ofSize: box.height * 0.52, weight: .medium))
+            context.setFillColor(yellow.cgColor)
+            context.fill(CGRect(x: box.minX + box.width * 0.58, y: box.minY + box.height * 0.04, width: max(1, box.width * 0.008), height: box.height * 0.50))
+            text(content.date, CGRect(x: box.minX + box.width * 0.62, y: box.minY + box.height * 0.13, width: box.width * 0.37, height: box.height * 0.24),
+                 UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold))
+            text(content.address ?? "", CGRect(x: box.minX, y: box.minY + box.height * 0.67, width: box.width, height: box.height * 0.26),
+                 UIFont.systemFont(ofSize: box.height * 0.16, weight: .semibold))
+        } else {
+            text(content.customFields["Título"] ?? "Seu Título", CGRect(x: box.minX, y: box.minY, width: box.width, height: box.height * 0.26),
+                 UIFont.systemFont(ofSize: box.height * 0.17, weight: .bold))
+            context.setFillColor(yellow.cgColor)
+            context.fill(CGRect(x: box.minX, y: box.minY + box.height * 0.3, width: max(1, box.width * 0.008), height: box.height * 0.68))
+            let lines = [content.date + " " + content.time, content.address ?? "", content.coordinate ?? ""]
+            for index in lines.indices {
+                text(lines[index], CGRect(x: box.minX + box.width * 0.04, y: box.minY + box.height * (0.31 + CGFloat(index) * 0.21), width: box.width * 0.95, height: box.height * 0.20),
+                     UIFont.systemFont(ofSize: box.height * 0.13, weight: .medium))
+            }
+        }
+        return true
+    }
     static func drawLocationWeather(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         let unit = min(size.width, size.height)
         guard unit >= 40 else { return false }
@@ -489,6 +524,10 @@ enum StampRenderer {
             }
             if snapshot.layout.template == .locationWeather {
                 fits = drawLocationWeather(snapshot: snapshot, address: address, size: size, context: context.cgContext)
+                return
+            }
+            if snapshot.layout.template == .timeLocation || snapshot.layout.template == .custom {
+                fits = drawTimeOrCustom(snapshot: snapshot, address: address, size: size, context: context.cgContext)
                 return
             }
             if snapshot.layout.mode == .separate {
