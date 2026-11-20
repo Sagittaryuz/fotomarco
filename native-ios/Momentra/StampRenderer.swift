@@ -220,6 +220,10 @@ enum PhotoAspect: String, CaseIterable {
 }
 
 enum StampRenderer {
+    static func condensedStampFont(size: CGFloat, bold: Bool = false) -> UIFont {
+        UIFont(name: bold ? "AvenirNextCondensed-DemiBold" : "AvenirNextCondensed-Regular", size: size)
+            ?? UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+    }
     static func drawPatrol(snapshot: StampSnapshot, address: String?, size: CGSize, context: CGContext) -> Bool {
         guard min(size.width, size.height) >= 40 else { return false }
         let box = workReportRect(in: size)
@@ -700,15 +704,15 @@ enum StampRenderer {
         let inset = box.width * 0.025
         let title = content.customFields["Título"] ?? "Registro de Trabalho"
         (title as NSString).draw(in: CGRect(x: box.minX + inset, y: box.minY + header * 0.16, width: box.width - inset * 2, height: header * 0.75),
-            withAttributes: [.font: UIFont.systemFont(ofSize: header * 0.52, weight: .bold), .foregroundColor: green, .paragraphStyle: paragraph])
+            withAttributes: [.font: condensedStampFont(size: header * 0.52, bold: true), .foregroundColor: green, .paragraphStyle: paragraph])
         let labels = ["Hora", "Endereço"]
         let values = [content.date + " " + content.time, content.address ?? ""]
         for index in 0..<2 {
             let y = box.minY + header + CGFloat(index) * rowHeight + rowHeight * 0.18
             (labels[index] as NSString).draw(in: CGRect(x: box.minX + inset, y: y, width: separator - inset * 2, height: rowHeight * 0.8),
-                withAttributes: [.font: UIFont.systemFont(ofSize: rowHeight * 0.42, weight: .bold), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+                withAttributes: [.font: condensedStampFont(size: rowHeight * 0.42, bold: true), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
             (values[index] as NSString).draw(in: CGRect(x: box.minX + separator + inset, y: y, width: box.width - separator - inset * 2, height: rowHeight * 0.8),
-                withAttributes: [.font: UIFont.systemFont(ofSize: rowHeight * 0.40, weight: .regular), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
+                withAttributes: [.font: condensedStampFont(size: rowHeight * 0.40), .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         }
         return true
     }
@@ -739,14 +743,14 @@ enum StampRenderer {
         let padding = width * 0.035
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
-        let titleFont = UIFont.systemFont(ofSize: height * 0.16, weight: .bold)
+        let titleFont = condensedStampFont(size: height * 0.16, bold: true)
         ("Relatório de trabalho" as NSString).draw(in: CGRect(x: box.minX + padding, y: box.minY + height * 0.055, width: width - padding * 2, height: headerHeight * 0.8),
             withAttributes: [.font: titleFont, .foregroundColor: UIColor.white, .paragraphStyle: paragraph])
         let rowHeight = (height - headerHeight) / 3
         let labels = ["Projeto", "Inspeção", "Endereço"]
         let values = [content.customFields["Projeto"] ?? "", content.customFields["Inspeção"] ?? "", content.address ?? ""]
-        let font = UIFont.systemFont(ofSize: height * 0.105, weight: .medium)
-        let bold = UIFont.systemFont(ofSize: height * 0.105, weight: .bold)
+        let font = condensedStampFont(size: height * 0.105)
+        let bold = condensedStampFont(size: height * 0.105, bold: true)
         for index in 0..<3 {
             let y = box.minY + headerHeight + CGFloat(index) * rowHeight + rowHeight * 0.2
             (labels[index] as NSString).draw(in: CGRect(x: box.minX + padding, y: y, width: width * 0.28, height: rowHeight * 0.8),
