@@ -204,7 +204,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
                 }
             }
             .alert("Não foi possível preparar os itens", isPresented: $failed) {
-                Button("OK", role: .cancel) {}
+                Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
             }
         }
         .preferredColorScheme(.dark)

@@ -95,7 +95,7 @@ struct MomentraGalleryDetail: View {
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
                                                 set: { if !$0, panel == nil { message = nil } })) {
-            Button("OK") { message = nil }
+            Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
         } message: { Text(message ?? "") }
     }
 
@@ -165,7 +165,7 @@ struct MomentraGalleryDetail: View {
                 GalleryItemInformation(item: item)
                     .navigationTitle("Informações")
                     .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button("Concluído") { panel = nil } }
+                    .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); panel = nil } }
             }
         case .edit:
             if item.isVideo {
@@ -200,7 +200,7 @@ struct MomentraGalleryDetail: View {
             NavigationStack {
                 GalleryLoadedText(item: item)
                     .navigationTitle("Texto da foto").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button("Concluído") { panel = nil } }
+                    .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); panel = nil } }
             }
         }
     }
@@ -315,17 +315,17 @@ private struct GalleryItemStamp: View {
                     Text(profile.name.isEmpty ? "Sem nome" : profile.name).tag(Optional(profile.id))
                 }
             }
-            Button("Adicionar carimbo em uma cópia", action: save)
+            Button("Adicionar carimbo em uma cópia") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); save() }
                 .disabled(saving || item.date == nil || profileID == nil)
             if saving { ProgressView("Aplicando carimbo…") }
             if item.date == nil { Text("A data da foto não está disponível.").font(.footnote) }
         }
         .onAppear { profileID = item.profile?.id ?? profiles.first?.id }
         .navigationTitle("Adicionar carimbo").navigationBarTitleDisplayMode(.inline)
-        .toolbar { Button("Cancelar") { dismiss() }.disabled(saving) }
+        .toolbar { Button("Cancelar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() }.disabled(saving) }
         .interactiveDismissDisabled(saving)
         .alert("Não foi possível criar a cópia com carimbo", isPresented: $failed) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         }
     }
 

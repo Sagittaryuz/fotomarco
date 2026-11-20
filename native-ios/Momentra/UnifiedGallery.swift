@@ -234,13 +234,13 @@ struct OriginalsView: View {
             }
         }
         .confirmationDialog("Mover a seleção para a lixeira?", isPresented: $confirmBatch, titleVisibility: .visible) {
-            Button("Mover para a lixeira", role: .destructive) { trashSelection(items) }
-            Button("Cancelar", role: .cancel) {}
+            Button("Mover para a lixeira", role: .destructive) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); trashSelection(items) }
+            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
         } message: {
             Text("A cópia exibida de cada foto vai para a lixeira da sua origem. As demais cópias continuam disponíveis.")
         }
         .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-            Button("OK") { message = nil }
+            Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
         } message: { Text(message ?? "") }
     }
 
@@ -294,6 +294,7 @@ struct OriginalsView: View {
             }
             if authorization == .notDetermined {
                 Button("Permitir acesso ao Fotos") {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     Task { _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite); reloadVersion += 1 }
                 }
             } else if authorization == .denied || authorization == .restricted {
@@ -416,15 +417,15 @@ struct OriginalsView: View {
                         .font(.footnote)
                 } else { Text("Consulte o prazo na lixeira do provedor.").font(.footnote) }
                 if item.canRestore {
-                    Button("Restaurar") { restore(item) }.buttonStyle(.borderedProminent)
+                    Button("Restaurar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); restore(item) }.buttonStyle(.borderedProminent)
                         .tint(.yellow).foregroundStyle(.black).disabled(busy)
                 }
             }.padding()
                 .navigationTitle("Lixeira")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { Button("Concluído") { trashItem = nil }.disabled(busy) }
+                .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); trashItem = nil }.disabled(busy) }
                 .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-                    Button("OK") { message = nil }
+                    Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
                 } message: { Text(message ?? "") }
         }
         .interactiveDismissDisabled(busy)
