@@ -67,6 +67,7 @@ struct CloudUploadIndicator: View {
     let value: Double
     @State private var flash = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var percent: Int { Int((value * 100).rounded()) }
     var body: some View {
         GeometryReader { _ in
             ZStack {
@@ -74,7 +75,7 @@ struct CloudUploadIndicator: View {
                     .mask {
                         CloudUploadRemainingMask(progress: value)
                     }
-                Text("\(Int(value * 100))%")
+                Text("\(percent)%")
                     .font(.caption.bold()).foregroundStyle(.white)
                     .padding(5).background(.black.opacity(0.65), in: Capsule())
                 if value >= 1 { Color.white.opacity(flash ? 0.55 : 0) }
@@ -85,7 +86,7 @@ struct CloudUploadIndicator: View {
             }
             .onAppear { if value >= 1 { blink() } }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Envio à nuvem: \(Int(value * 100)) por cento")
+            .accessibilityLabel("Envio à nuvem: \(percent) por cento")
             .allowsHitTesting(false)
         }
     }
