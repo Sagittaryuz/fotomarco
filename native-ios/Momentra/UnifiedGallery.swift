@@ -13,7 +13,6 @@ struct OriginalsView: View {
     @State private var deviceFavorites: [String: Bool] = [:]
     @State private var local: [GalleryItem] = []
     @State private var trackedPhotos: [GalleryItem] = []
-    @State private var favoritePhotos: [GalleryItem] = []
     @State private var localTrash: [GalleryItem] = []
     @State private var remote: [GalleryItem] = []
     @State private var remoteTrash: [GalleryItem] = []
@@ -75,8 +74,7 @@ struct OriginalsView: View {
     }
 
     private func updateProjection() {
-        let photos = tab == .favorites ? trackedPhotos + favoritePhotos : trackedPhotos
-        let source = tab == .trash ? localTrash + remoteTrash : local + photos + remote
+        let source = tab == .trash ? localTrash + remoteTrash : local + trackedPhotos + remote
         let captures = tab == .favorites ? Self.decode(captureFavorites) : []
         let cloud = tab == .favorites ? Self.decode(cloudFavorites) : []
         let items = GalleryItem.grouped(source, origin: origin, profile: profile).filter {
@@ -209,7 +207,6 @@ struct OriginalsView: View {
                                   onTrash: { item in
                                       local.removeAll { $0.storageID == item.storageID }
                                       trackedPhotos.removeAll { $0.storageID == item.storageID }
-                                      favoritePhotos.removeAll { $0.storageID == item.storageID }
                                       remote.removeAll { $0.storageID == item.storageID }
                                       updateProjection()
                                       if item.origin != .local { cloudRefresh += 1 }
@@ -508,13 +505,13 @@ struct OriginalsView: View {
         loading = true
         defer { if !Task.isCancelled { loading = false } }
         let activeTab = tab
-        let source = await Task.detached(priority: .utility) { () -> (files: [GalleryItem], tracked: [GalleryItem], favorites: [GalleryItem])? in
+        let source = await Task.detached(priority: .utility) { () -> (files: [GalleryItem], tracked: [GalleryItem])? in
             let lookup = PhotoProfileIndex.load()
             guard let files = try? OriginalStore.files(inTrash: activeTab == .trash) else { return nil }
             let items = files.map { Self.capture($0, lookup: lookup) }
-            if activeTab == .trash { return (items, [], []) }
+            if activeTab == .trash { return (items, []) }
             let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            guard status == .authorized || status == .limited else { return (items, [], []) }
+            guard status == .authorized || status == .limited else { return (items, []) }
             let imageTypes = [PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue]
             func galleryItems(_ assets: PHFetchResult<PHAsset>) -> [GalleryItem] {
                 var photos: [GalleryItem] = []
@@ -531,10 +528,7 @@ struct OriginalsView: View {
             options.predicate = NSPredicate(format: "mediaType IN %@", imageTypes)
             let ids = Array(lookup.assets.keys)
             let tracked = ids.isEmpty ? [] : galleryItems(PHAsset.fetchAssets(withLocalIdentifiers: ids, options: options))
-            guard activeTab == .favorites else { return (items, tracked, []) }
-            options.predicate = NSPredicate(format: "favorite == YES AND mediaType IN %@", imageTypes)
-            let favorites = galleryItems(PHAsset.fetchAssets(with: options))
-            return (items, tracked, favorites)
+            return (items, tracked)
         }.value
         guard !Task.isCancelled, activeTab == tab, version == reloadVersion, let source else { return }
         authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -543,7 +537,6 @@ struct OriginalsView: View {
         } else {
             local = source.files
             trackedPhotos = source.tracked
-            if activeTab == .favorites { favoritePhotos = source.favorites }
         }
         updateProjection()
         loadedLocalVersion = version
@@ -754,7 +747,6 @@ struct OriginalsView: View {
             if !deleted.isEmpty {
                 local.removeAll { deleted.contains($0.storageID) }
                 trackedPhotos.removeAll { deleted.contains($0.storageID) }
-                favoritePhotos.removeAll { deleted.contains($0.storageID) }
                 remote.removeAll { deleted.contains($0.storageID) }
                 resetSelection()
                 updateProjection()
