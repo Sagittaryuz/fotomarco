@@ -117,9 +117,12 @@ struct StampSnapshot {
         }
         var weather: [String] = []
         if let value = forecast?.temperatureC { weather.append(String(format: "%.1f °C", value)) }
+        else { weather.append("Temperatura indisponível") }
         if let pressure { weather.append(String(format: "%.1f hPa", pressure.hectopascals)) }
         else if let value = forecast?.seaLevelPressureHpa { weather.append(String(format: "%.1f hPa (nível do mar)", value)) }
+        else { weather.append("Pressão indisponível") }
         if let value = forecast?.windMetersPerSecond { weather.append(String(format: "%.1f km/h", value * 3.6)) }
+        else { weather.append("Vento indisponível") }
         return SeparateStampInformation(time: time, date: date, address: place, coordinate: coordinate,
                                         weather: weather.isEmpty ? nil : weather.joined(separator: " | "), note: note)
     }
@@ -194,6 +197,16 @@ struct SeparateStampInformation {
     let coordinate: String?
     let weather: String?
     let note: String
+
+    var rows: [String] {
+        func value(_ string: String?, fallback: String) -> String {
+            guard let string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return fallback }
+            return string
+        }
+        return [date, value(address, fallback: "Endereço indeterminado"),
+                value(coordinate, fallback: "Coordenadas indeterminadas"),
+                value(weather, fallback: "Clima indisponível")]
+    }
 }
 
 struct StampTemplateContent {
@@ -957,7 +970,7 @@ enum StampRenderer {
         let width = min(space.width, size.width * 0.60 * CGFloat(max(1, snapshot.layout.informationSize)))
         guard width >= 20, space.height >= 12 else { return nil }
         let content = snapshot.separateInformation(address: address)
-        let rows = [content.date, content.address, content.coordinate, content.weather].compactMap { $0 }.filter { !$0.isEmpty }
+        let rows = content.rows
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
         let dividerX = width * 0.285
@@ -972,11 +985,7 @@ enum StampRenderer {
             let dateFont = UIFont(name: "AvenirNextCondensed-Bold", size: pointSize * 1.15)
                 ?? UIFont.systemFont(ofSize: pointSize * 1.15, weight: .bold)
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
-            let rowHeights = rows.enumerated().map { index, row in
-                let rowAttrs: [NSAttributedString.Key: Any] = [.font: index == 0 ? dateFont : font, .paragraphStyle: paragraph]
-                return ceil((row as NSString).boundingRect(with: CGSize(width: rightWidth, height: .greatestFiniteMagnitude),
-                    options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: rowAttrs, context: nil).height)
-            }
+            let rowHeights = rows.indices.map { index in ceil((index == 0 ? dateFont : font).lineHeight) }
             let lineGap = pointSize * 0.10
             let contentHeight = rowHeights.reduce(0, +) + CGFloat(max(0, rows.count - 1)) * lineGap
             let prototype = UIFont(name: "DINCondensed-Bold", size: 100) ?? UIFont.systemFont(ofSize: 100, weight: .bold)
@@ -1005,19 +1014,20 @@ enum StampRenderer {
                     let glyphBounds = CTLineGetBoundsWithOptions(clockLine, .useGlyphPathBounds)
                     let clockArea = max(1, dividerX - dividerGap)
                     let horizontalScale = min(1, clockArea / max(1, glyphBounds.width))
-                    let glyphTop = (topHeight - glyphBounds.height) / 2
+                    let verticalScale = topHeight / max(1, glyphBounds.height)
                     context.saveGState()
-                    context.translateBy(x: clockArea - glyphBounds.maxX * horizontalScale, y: glyphTop + glyphBounds.maxY)
-                    context.scaleBy(x: horizontalScale, y: -1)
+                    context.translateBy(x: clockArea - glyphBounds.maxX * horizontalScale, y: glyphBounds.maxY * verticalScale)
+                    context.scaleBy(x: horizontalScale, y: -verticalScale)
                     context.textMatrix = .identity
                     CTLineDraw(clockLine, context)
                     context.restoreGState()
                     context.setFillColor(UIColor.systemYellow.cgColor)
-                    context.fill(CGRect(x: dividerX, y: glyphTop, width: dividerWidth, height: glyphBounds.height))
+                    context.fill(CGRect(x: dividerX, y: 0, width: dividerWidth, height: topHeight))
                     var y: CGFloat = 0
                     for (index, row) in rows.enumerated() {
                         var rowAttributes = white
-                        if index == 0 { rowAttributes[.font] = dateFont }
+                        let baseFont = index == 0 ? dateFont : font
+                        rowAttributes[.font] = fittedFixedFont(baseFont, sample: row, width: rightWidth)
                         (row as NSString).draw(in: CGRect(x: rightX, y: y, width: rightWidth, height: rowHeights[index] + 1), withAttributes: rowAttributes)
                         y += rowHeights[index] + lineGap
                     }

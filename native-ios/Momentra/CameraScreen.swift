@@ -6,6 +6,12 @@ import UniformTypeIdentifiers
 import PhotosUI
 import ImageIO
 
+enum CameraGallerySwipe {
+    static func qualifies(_ translation: CGSize) -> Bool {
+        translation.width >= 82 && translation.width > abs(translation.height) * 1.35
+    }
+}
+
 /// Keeps the stamp upright relative to the phone, even when interface rotation is locked.
 enum StampOrientation {
     static func angle(device: UIDeviceOrientation, interface: UIInterfaceOrientation) -> Double {
@@ -128,6 +134,7 @@ struct CameraScreen: View {
     @State private var cameraShareFailed = false
     @State private var galleryThumbnailRevision = UUID()
     @State private var galleryThumbnailFrame: CGRect = .zero
+    @State private var gallerySwipeProgress: CGFloat = 0
     @State private var wordmarkBottom: CGFloat = 0
     @State private var shutterTop: CGFloat = 0
     @State private var shutterCenterX: CGFloat?
@@ -368,9 +375,27 @@ struct CameraScreen: View {
                     .overlay {
                         Rectangle().fill(.ultraThinMaterial)
                             .environment(\.colorScheme, .dark)
-                            .opacity(modeTransitionBlur ? 1 : 0)
+                            .opacity(modeTransitionBlur ? 1 : Double(gallerySwipeProgress) * 0.45)
                             .allowsHitTesting(false)
                     }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 18)
+                            .onChanged { gesture in
+                                guard cameraSurfaceVisible, !showingZoomDial, pinchZoom == nil,
+                                      !camera.isRecording, !camera.isFinishingRecording, !camera.isCapturing,
+                                      countdown == 0 else { return }
+                                let movement = gesture.translation
+                                guard movement.width > 0, movement.width > abs(movement.height) * 1.35 else { return }
+                                if !reduceMotion { gallerySwipeProgress = min(1, movement.width / 180) }
+                            }
+                            .onEnded { gesture in
+                                let shouldOpen = cameraSurfaceVisible && !showingZoomDial && pinchZoom == nil &&
+                                    !camera.isRecording && !camera.isFinishingRecording && !camera.isCapturing &&
+                                    countdown == 0 && CameraGallerySwipe.qualifies(gesture.translation)
+                                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { gallerySwipeProgress = 0 }
+                                if shouldOpen { FotomarcoHaptics.play(.gallery); openGallery() }
+                            }
+                    )
                     .position(x: previewFrame.midX, y: previewFrame.midY)
                     .animation(.easeInOut(duration: 0.2), value: photoAspect)
                 if showGrid {

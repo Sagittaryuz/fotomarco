@@ -32,7 +32,12 @@ final class StampSnapshotTests: XCTestCase {
             .separateInformation(address: "Não deve aparecer")
         XCTAssertNil(unavailable.address)
         XCTAssertNil(unavailable.coordinate)
-        XCTAssertNil(unavailable.weather)
+        XCTAssertEqual(unavailable.rows.count, 4)
+        XCTAssertEqual(unavailable.rows[1], "Endereço indeterminado")
+        XCTAssertEqual(unavailable.rows[2], "Coordenadas indeterminadas")
+        XCTAssertTrue(unavailable.rows[3].contains("Temperatura indisponível"))
+        XCTAssertTrue(unavailable.rows[3].contains("Pressão indisponível"))
+        XCTAssertTrue(unavailable.rows[3].contains("Vento indisponível"))
     }
 
     func testFixedFontFitsClockAndDateWithoutTruncation() {

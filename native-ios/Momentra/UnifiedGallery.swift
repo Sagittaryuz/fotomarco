@@ -97,7 +97,7 @@ struct OriginalsView: View {
             galleryContent
                 .blur(radius: reduceMotion ? 0 : !galleryVisible || galleryExit != nil ? 16 : min(9, distance / 20))
                 .opacity(reduceMotion ? 1 : !galleryVisible || galleryExit != nil ? 0 : dragOpacity)
-                .offset(x: galleryExit == .left ? -geometry.size.width - 30 : galleryDrag.width,
+                .offset(x: galleryExit == .left || (!galleryVisible && !reduceMotion) ? -geometry.size.width - 30 : galleryDrag.width,
                         y: galleryExit == .down ? geometry.size.height + 30 : galleryDrag.height)
                 .allowsHitTesting(galleryExit == nil)
         }

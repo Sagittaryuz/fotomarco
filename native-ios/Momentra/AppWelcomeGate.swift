@@ -7,7 +7,9 @@ enum ReleaseNews {
     static let items = [
         "Favoritos mostra apenas capturas feitas no Fotomarco.",
         "As novidades de cada atualização aparecem em uma lista numerada.",
-        "A mensagem de apoio foi simplificada para ‘Gostou do app?’ com a chave Pix abaixo."
+        "A mensagem de apoio foi simplificada para ‘Gostou do app?’ com a chave Pix abaixo.",
+        "Deslize o visor da câmera para a direita para abrir a galeria.",
+        "O carimbo mantém quatro linhas e informa quando algum dado está indisponível."
     ]
 
     static func items(for version: String) -> [String] {
