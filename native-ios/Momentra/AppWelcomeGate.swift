@@ -2,6 +2,19 @@ import SwiftUI
 import GoogleSignIn
 import AVFoundation
 
+enum ReleaseNews {
+    static let version = "0.1.38"
+    static let items = [
+        "Favoritos mostra apenas capturas feitas no Fotomarco.",
+        "As novidades de cada atualização aparecem em uma lista numerada.",
+        "A mensagem de apoio foi simplificada para ‘Gostou do app?’ com a chave Pix abaixo."
+    ]
+
+    static func items(for version: String) -> [String] {
+        version == Self.version ? items : []
+    }
+}
+
 /// The welcome is only for new installations. Existing users keep their access.
 struct AppWelcomeGate: View {
     @AppStorage("welcomeCompletedV1") private var completed = false
@@ -86,16 +99,29 @@ struct AppWelcomeGate: View {
         let version = currentVersion
         let updated = !version.isEmpty && lastPresentedVersion != version
         completed = true
-        if updated { lastPresentedVersion = version; showNews = true }
+        if updated {
+            lastPresentedVersion = version
+            showNews = !ReleaseNews.items(for: version).isEmpty
+        }
     }
 
     private var news: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 Image(systemName: "sparkles").font(.system(size: 48)).accessibilityHidden(true)
                 Text("Novidades do Fotomarco").font(.title.bold())
-                Text("Deslize a foto para baixo para voltar à galeria. O WhatsApp abre após um compartilhamento concluído por ele. A galeria reaproveita a lista de fotos da nuvem.")
-                    .multilineTextAlignment(.center).foregroundStyle(.secondary)
+                Text("Versão \(currentVersion)").font(.subheadline).foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(ReleaseNews.items(for: currentVersion).enumerated()), id: \.offset) { index, item in
+                            HStack(alignment: .top, spacing: 8) {
+                                Text("\(index + 1). ").fontWeight(.semibold)
+                                Text(item).fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }.foregroundStyle(.secondary)
+                }
                 Button("Continuar") { welcomeTap(); showNews = false }.buttonStyle(.borderedProminent)
             }.padding(30)
         }.presentationDetents([.medium, .large])

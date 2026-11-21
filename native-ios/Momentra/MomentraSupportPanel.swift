@@ -23,7 +23,7 @@ struct MomentraSupportPanel: View {
                     .offset(y: appeared || reduceMotion ? 0 : -130)
                     .opacity(appeared || reduceMotion ? 1 : 0)
                     .accessibilityLabel("Marcos sorrindo com capacete de engenheiro")
-                Text("Gosta tanto desse aplicativo?\nManda um Pix.")
+                Text("Gostou do app?")
                     .font(.system(.callout, design: .rounded).weight(.heavy))
                     .foregroundStyle(ink)
                     .multilineTextAlignment(.center)
