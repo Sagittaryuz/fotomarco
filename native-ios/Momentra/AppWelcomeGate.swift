@@ -71,7 +71,7 @@ struct AppWelcomeGate: View {
         }
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
-        .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+        .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { message = nil }
         } message: { Text(message ?? "") }
     }
@@ -93,7 +93,7 @@ struct AppWelcomeGate: View {
         NavigationStack {
             VStack(spacing: 20) {
                 Image(systemName: "sparkles").font(.system(size: 48)).accessibilityHidden(true)
-                Text("Novidades do Momentra").font(.title.bold())
+                Text("Novidades do Fotomarco").font(.title.bold())
                 Text("Deslize a foto para baixo para voltar à galeria. O WhatsApp abre após um compartilhamento concluído por ele. A galeria reaproveita a lista de fotos da nuvem.")
                     .multilineTextAlignment(.center).foregroundStyle(.secondary)
                 Button("Continuar") { welcomeTap(); showNews = false }.buttonStyle(.borderedProminent)
@@ -102,7 +102,7 @@ struct AppWelcomeGate: View {
     }
 
     private var icon: String { ["person.crop.circle", "camera.aperture", "location.viewfinder", "photo.on.rectangle.angled"][page] }
-    private var title: String { ["Bem-vindo ao Momentra", "Registre seus momentos", "Localização no carimbo", "Suas fotos, do seu jeito"][page] }
+    private var title: String { ["Bem-vindo ao Fotomarco", "Registre seus momentos", "Localização no carimbo", "Suas fotos, do seu jeito"][page] }
     private var description: String {
         ["Entre com sua conta Google se desejar. Escolha nas configurações onde guardar as novas capturas e ative cada destino que quiser usar.",
          "Use a câmera para fotografar e gravar. O iPhone pedirá acesso à câmera; o microfone será solicitado ao gravar vídeos.",

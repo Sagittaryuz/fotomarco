@@ -32,7 +32,7 @@ struct PickedCloudPhotoView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } }
             .onAppear { load() }
-            .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+            .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }
             } message: { Text(message ?? "") }
         }

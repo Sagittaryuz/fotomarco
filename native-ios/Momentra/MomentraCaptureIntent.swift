@@ -25,8 +25,8 @@ struct MomentraCaptureContext: Codable, Equatable, Sendable {
 @available(iOS 18.0, *)
 struct MomentraCaptureIntent: CameraCaptureIntent {
     typealias AppContext = MomentraCaptureContext
-    static let title: LocalizedStringResource = "Abrir câmera do Momentra"
-    static let description = IntentDescription("Abrir o Momentra para capturar fotos.")
+    static let title: LocalizedStringResource = "Abrir câmera do Fotomarco"
+    static let description = IntentDescription("Abrir o Fotomarco para capturar fotos.")
 
     @MainActor
     func perform() async throws -> some IntentResult {

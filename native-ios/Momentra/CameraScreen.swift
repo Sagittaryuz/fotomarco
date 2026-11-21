@@ -50,7 +50,7 @@ struct CameraScreen: View {
     @AppStorage("native.profile.hamoa.note") private var hamoaNote = ""
     @AppStorage("native.profile.piresco.title") private var pirescoTitle = "PIRESCO ENGENHARIA"
     @AppStorage("native.profile.piresco.note") private var pirescoNote = ""
-    @AppStorage("native.profile.pessoal.title") private var pessoalTitle = "MOMENTRA"
+    @AppStorage("native.profile.pessoal.title") private var pessoalTitle = "FOTOMARCO"
     @AppStorage("native.profile.pessoal.note") private var pessoalNote = ""
     @AppStorage("native.profile.hamoa.logo") private var hamoaLogo = ""
     @AppStorage("native.profile.piresco.logo") private var pirescoLogo = ""

@@ -195,7 +195,7 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
         guard context?.saveToPhotos == true else { return }
         let authorization = PHPhotoLibrary.authorizationStatus(for: .addOnly)
         guard authorization == .authorized || authorization == .limited else {
-            DispatchQueue.main.async { self.error = "A foto está em Capturas. Abra o Momentra e permita salvar no Fotos para usar essa opção." }
+            DispatchQueue.main.async { self.error = "A foto está em Capturas. Abra o Fotomarco e permita salvar no Fotos para usar essa opção." }
             return
         }
         PHPhotoLibrary.shared().performChanges({

@@ -1,24 +1,37 @@
 import SwiftUI
 import UIKit
 
-/// Vector-based wordmark, sized for the live camera header.
+/// The mark divides two equal-width text runs on a shared baseline.
 struct MomentraWordmark: View {
-    private let fontName = "SnellRoundhand-Bold"
-    private let fontSize: CGFloat = 25
+    private let size: CGFloat = 23
 
     var body: some View {
-        let letterHeight = UIFont(name: fontName, size: fontSize)?.xHeight ?? 10
+        let uiFont = UIFont.boldSystemFont(ofSize: size)
+        let attributes: [NSAttributedString.Key: Any] = [.font: uiFont]
+        let leadingWidth = ["F", "o", "t"].reduce(CGFloat.zero) { $0 + ($1 as NSString).size(withAttributes: attributes).width }
+        let trailingWidth = ("marco" as NSString).size(withAttributes: attributes).width
+        let letterSpacing = max(0, (trailingWidth - leadingWidth) / 2)
+        let markSize = uiFont.xHeight
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("Fot")
-            Image(systemName: "location.circle.fill")
-                .font(.system(size: letterHeight, weight: .semibold))
-                .foregroundStyle(.yellow)
-                .alignmentGuide(.firstTextBaseline) { dimensions in
-                    (dimensions.height + letterHeight) / 2
-                }
+            HStack(alignment: .firstTextBaseline, spacing: letterSpacing) {
+                Text("F")
+                Text("o")
+                Text("t")
+            }
+            ZStack {
+                Circle().fill(Color.yellow)
+                Image(systemName: "location.north.fill")
+                    .font(.system(size: markSize * 0.55, weight: .bold))
+                    .rotationEffect(.degrees(45))
+                    .foregroundStyle(.black)
+            }
+            .frame(width: markSize, height: markSize)
+            .alignmentGuide(.firstTextBaseline) { dimensions in
+                (dimensions.height + markSize) / 2
+            }
             Text("marco")
         }
-        .font(.custom(fontName, fixedSize: fontSize))
+        .font(.system(size: size, weight: .bold))
         .foregroundStyle(.white)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Fotomarco")

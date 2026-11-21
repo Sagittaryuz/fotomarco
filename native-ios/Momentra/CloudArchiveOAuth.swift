@@ -18,12 +18,12 @@ final class CloudArchiveOAuth {
             case .busy: return "Conclua a conexão em andamento."
             case .cancelled: return "A conexão foi cancelada."
             case .invalidResponse: return "Não foi possível confirmar a conta com o serviço de armazenamento."
-            case .denied: return "A permissão para armazenar arquivos do Momentra não foi concedida."
+            case .denied: return "A permissão para armazenar arquivos do Fotomarco não foi concedida."
             case .disconnected, .expired: return "Conecte novamente a mesma conta para retomar seus envios."
             case .wrongAccount: return "A conta retornada não corresponde ao destino escolhido."
             case .keychain: return "Não foi possível acessar as credenciais. Desbloqueie o iPhone e tente novamente."
             case .random: return "Não foi possível iniciar uma conexão segura."
-            case .oneDriveFolderUnavailable: return "A Microsoft autenticou a conta, mas a pasta do Momentra não está acessível no OneDrive. Confira se o OneDrive está ativo nessa conta e tente de novo."
+            case .oneDriveFolderUnavailable: return "A Microsoft autenticou a conta, mas a pasta do aplicativo não está acessível no OneDrive. Confira se o OneDrive está ativo nessa conta e tente de novo."
             case .microsoftToken(let status, let code):
                 let reference = code.map { " Código Microsoft AADSTS\($0)." } ?? ""
                 return "A Microsoft recusou a confirmação do login (HTTP \(status))." + reference

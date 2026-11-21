@@ -68,7 +68,7 @@ final class GooglePhotosManager: ObservableObject {
         cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false; cloudError = nil
         pendingCloudCaptures = 0; cloudNeedsAttention = false
         objectWillChange.send()
-        message = "Conta desconectada do Momentra. Fotos e permissões na conta Google não foram apagadas."
+        message = "Conta desconectada do Fotomarco. Fotos e permissões na conta Google não foram apagadas."
     }
 
     func loadCloudPhotos(nextPage: Bool = false) {
@@ -260,7 +260,7 @@ final class GooglePhotosManager: ObservableObject {
                         directory: documents.appendingPathComponent("GooglePhotoAlbums", isDirectory: true),
                         owner: owner, transport: GooglePersonalPhotoTransport(token: token), accountIsCurrent: isCurrent)
                 } catch {
-                    message = "Não foi possível confirmar o álbum Momentra. A foto continua no aparelho."
+                    message = "Não foi possível confirmar o álbum do aplicativo. A foto continua no aparelho."
                     return
                 }
                 guard await isCurrent(owner) else {

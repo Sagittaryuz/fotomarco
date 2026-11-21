@@ -89,7 +89,7 @@ struct MomentraGalleryDetail: View {
         .sheet(item: $panel) { route in
             if let current { sheet(route, item: current) }
         }
-        .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
+        .alert("Fotomarco", isPresented: Binding(get: { message != nil && panel == nil },
                                                 set: { if !$0, panel == nil { message = nil } })) {
             Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
         } message: { Text(message ?? "") }

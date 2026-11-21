@@ -240,7 +240,7 @@ struct OriginalsView: View {
         } message: {
             Text("A cópia exibida de cada foto vai para a lixeira da sua origem. As demais cópias continuam disponíveis.")
         }
-        .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+        .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
         } message: { Text(message ?? "") }
     }
@@ -425,7 +425,7 @@ struct OriginalsView: View {
                 .navigationTitle("Lixeira")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); trashItem = nil }.disabled(busy) }
-                .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+                .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                     Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
                 } message: { Text(message ?? "") }
         }

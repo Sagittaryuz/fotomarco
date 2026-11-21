@@ -11,8 +11,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    MARKETING_VERSION: '0.1.33'
-    CURRENT_PROJECT_VERSION: '54'
+    MARKETING_VERSION: '0.1.34'
+    CURRENT_PROJECT_VERSION: '55'
 targets:
   Momentra:
     type: application
@@ -44,7 +44,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSCameraUsageDescription: 'A câmera é necessária para fotografar e gravar vídeos.'
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 'O microfone é necessário para gravar áudio nos vídeos.'
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS. Para a previsão, o Momentra consulta a MET Norway com coordenadas aproximadas.'
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS. Para a previsão, o Fotomarco consulta a MET Norway com coordenadas aproximadas.'
         INFOPLIST_KEY_NSMotionUsageDescription: 'O sensor de pressão é usado no carimbo quando você ativa essa opção.'
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: 'Permite salvar fotos e vídeos na biblioteca.'
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 'Permite visualizar as fotos escolhidas e criar cópias com carimbo.'

@@ -31,7 +31,7 @@ private struct LockedCameraScreen: View {
                 .frame(width: previewSize.width, height: previewSize.height).clipped()
             VStack {
                 HStack {
-                    Text("Momentra").font(.headline)
+                    Text("Fotomarco").font(.headline)
                     Spacer()
                     if camera.capturing || !contextLoaded { ProgressView().tint(.white) }
                 }.padding()
@@ -67,14 +67,14 @@ private struct LockedCameraScreen: View {
             camera.start()
         }
         .onDisappear { camera.stop(); location.stop() }
-        .alert("Momentra", isPresented: Binding(get: { camera.error != nil }, set: { if !$0 { camera.error = nil } })) {
+        .alert("Fotomarco", isPresented: Binding(get: { camera.error != nil }, set: { if !$0 { camera.error = nil } })) {
             Button("OK", role: .cancel) { camera.error = nil }
         } message: { Text(camera.error ?? "") }
     }
 
     private var lockedStampLimitation: String? {
         guard contextLoaded else { return nil }
-        guard let context else { return "Configuração do carimbo indisponível. Abra o Momentra." }
+        guard let context else { return "Configuração do carimbo indisponível. Abra o Fotomarco." }
         guard context.stampEnabled else { return nil }
         let layout = context.layoutData.flatMap { data in
             data.count <= 2000 ? try? JSONDecoder().decode(StampLayout.self, from: data) : nil

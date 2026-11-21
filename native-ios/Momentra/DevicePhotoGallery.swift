@@ -127,7 +127,7 @@ struct DevicePhotoGallery: View {
             Button("Mover \(selectedIDs.count) itens para Apagados", role: .destructive, action: deleteSelection)
             Button("Cancelar", role: .cancel) {}
         } message: { Text("Você pode recuperar os itens no álbum Apagados do app Fotos.") }
-        .alert("Momentra", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+        .alert("Fotomarco", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
             Button("OK") { actionError = nil }
         } message: { Text(actionError ?? "") }
     }
@@ -278,7 +278,7 @@ private struct DevicePhotoPager: View {
         .sheet(item: $panel) { route in
             if let current { sheet(route, current: current) }
         }
-        .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
+        .alert("Fotomarco", isPresented: Binding(get: { message != nil && panel == nil },
                                                 set: { if !$0 && panel == nil { message = nil } })) {
             Button("OK") { message = nil }
         } message: { Text(message ?? "") }
@@ -447,7 +447,7 @@ struct DevicePhotoDetail: View {
             }
             .onAppear { load() }
             .onDisappear { if let requestID { PHImageManager.default().cancelImageRequest(requestID) } }
-            .alert("Momentra", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+            .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }
             } message: { Text(message ?? "") }
     }

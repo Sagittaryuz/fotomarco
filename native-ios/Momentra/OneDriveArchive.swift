@@ -27,7 +27,7 @@ struct OneDriveArchive {
             case .invalidResponse: return "Resposta inválida do OneDrive."
             case .invalidName: return "Nome de arquivo inválido para o OneDrive."
             case .integrity: return "O arquivo no OneDrive não pôde ser confirmado. A cópia local foi preservada."
-            case .http(401), .http(403): return "A conta precisa autorizar o acesso à pasta do Momentra no OneDrive."
+            case .http(401), .http(403): return "A conta precisa autorizar o acesso à pasta do aplicativo no OneDrive."
             case .http(404): return "Pasta ou arquivo indisponível no OneDrive."
             case .http(507): return "Sem espaço disponível no OneDrive."
             case .http(429): return "O OneDrive limitou temporariamente os envios. Tente novamente mais tarde."

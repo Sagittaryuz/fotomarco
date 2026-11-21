@@ -39,7 +39,7 @@ struct CloudArchiveGallery: View {
                     .id(destination)
             case .none:
                 ContentUnavailableView("Nenhuma conta de armazenamento", systemImage: "cloud",
-                    description: Text("Adicione uma conta Google Drive ou OneDrive nos Ajustes do Momentra."))
+                    description: Text("Adicione uma conta Google Drive ou OneDrive nos Ajustes do Fotomarco."))
             }
         }
 
@@ -268,7 +268,7 @@ private struct ArchiveAccountGallery: View {
             if busy && photos.isEmpty {
                 ProgressView("Carregando fotos…").frame(maxHeight: .infinity)
             } else if loaded && photos.isEmpty && nextPage == nil && errorMessage == nil {
-                ContentUnavailableView("Nenhuma foto do Momentra", systemImage: "photo.on.rectangle")
+                ContentUnavailableView("Nenhuma foto do Fotomarco", systemImage: "photo.on.rectangle")
             } else if !photos.isEmpty {
                 GalleryGrid(groups: groups, selecting: $selecting, selected: $selectedIDs, columns: $columns,
                             refreshKey: images.revision.hashValue, tile: { photo in
@@ -358,7 +358,7 @@ private struct ArchiveAccountGallery: View {
             Button("Excluir \(selectedIDs.count) itens", role: .destructive, action: deleteSelection)
             Button("Cancelar", role: .cancel) {}
         } message: { Text("Os arquivos vão para a lixeira desta conta. As outras cópias ficam disponíveis.") }
-        .alert("Momentra", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+        .alert("Fotomarco", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
             Button("OK") { actionError = nil }
         } message: { Text(actionError ?? "") }
     }
@@ -796,7 +796,7 @@ private struct ArchiveGalleryPager: View {
         .sheet(item: $panel) { route in
             if let current { sheet(route, current: current) }
         }
-        .alert("Momentra", isPresented: Binding(get: { message != nil && panel == nil },
+        .alert("Fotomarco", isPresented: Binding(get: { message != nil && panel == nil },
                                                 set: { if !$0 && panel == nil { message = nil } })) {
             Button("OK") { message = nil }
         } message: { Text(message ?? "") }

@@ -117,7 +117,7 @@ struct GalleryItem: Identifiable {
             let badge: StorageBadge
             switch source {
             case .capture:
-                badge = .init(id: "local/momentra", origin: .local, label: "No iPhone · Momentra",
+                badge = .init(id: "local/momentra", origin: .local, label: "No iPhone · Fotomarco",
                               usesInternalDrive: hasPhotosCopy)
             case .device:
                 badge = .init(id: "local/photos", origin: .local, label: "No iPhone · Fotos")
@@ -144,7 +144,7 @@ struct GalleryItem: Identifiable {
 
     var displaySource: String {
         switch source {
-        case .capture: "Capturas do Momentra"
+        case .capture: "Capturas do Fotomarco"
         case .device: "Fotos do iPhone"
         case .cloud(let item): "\(origin.title) · \(item.accountLabel)"
         }
@@ -189,7 +189,7 @@ struct GalleryItem: Identifiable {
 
     var trashMessage: String {
         let message = switch source {
-        case .capture: "Restaure pela Lixeira do Momentra em até 30 dias."
+        case .capture: "Restaure pela Lixeira do Fotomarco em até 30 dias."
         case .device: "O item vai para o álbum Apagados do app Fotos, onde pode ser recuperado por até 30 dias."
         case .cloud: "O arquivo vai para a lixeira da conta \(origin.title)."
         }
