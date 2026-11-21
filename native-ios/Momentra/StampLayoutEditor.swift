@@ -41,6 +41,15 @@ struct StampLayoutEditor: View {
                 set: { value in var next = store.selected.layout; next[keyPath: keyPath] = value; store.setLayout(next) })
     }
 
+    private var importAlertPresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { importMessage != nil },
+            set: { isPresented in
+                if !isPresented { importMessage = nil }
+            }
+        )
+    }
+
     private func sizeControl(_ title: String, value: Binding<Double>) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
@@ -237,7 +246,7 @@ struct StampLayoutEditor: View {
         }.padding(.horizontal, 12).padding(.vertical, 6)
     }
 
-    var body: some View {
+    private var editorWithImporters: some View {
         editorContent
         .onChange(of: store.selectedID) { _, _ in
             let template = layout.wrappedValue.template
@@ -292,6 +301,10 @@ struct StampLayoutEditor: View {
                 }
             }
         }
+    }
+
+    private var editorWithToolbar: some View {
+        editorWithImporters
         .navigationTitle("Carimbos")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
@@ -303,10 +316,11 @@ struct StampLayoutEditor: View {
                 Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
             }
         }
-        .alert("Momentra", isPresented: Binding(
-            get: { importMessage != nil },
-            set: { if !$0 { importMessage = nil } }
-        )) {
+    }
+
+    var body: some View {
+        editorWithToolbar
+        .alert("Fotomarco", isPresented: importAlertPresented) {
             Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); importMessage = nil }
         } message: { Text(importMessage ?? "") }
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }

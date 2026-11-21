@@ -743,7 +743,7 @@ struct CameraScreen: View {
         .sheet(item: $cameraShare) { batch in
             batch.sheet {}
         }
-        .alert("Atualização do Momentra", isPresented: $showUpdateMessage) {
+        .alert("Atualização do Fotomarco", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(directUpdate.message ?? "")
@@ -801,7 +801,7 @@ struct CameraScreen: View {
                 .presentationDetents([.fraction(0.55), .large])
                 .presentationDragIndicator(.visible)
         }
-        .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
+        .alert("Fotomarco", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
     }
@@ -1019,7 +1019,7 @@ struct CameraScreen: View {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
                 }
-                .alert("Momentra", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                .alert("Fotomarco", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
                     Button("OK") { importMessage = nil }
                 } message: { Text(importMessage ?? "") }
             }
