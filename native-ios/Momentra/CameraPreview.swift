@@ -8,6 +8,7 @@ struct CameraPreview: View {
     let focus: (CGPoint, AVCaptureDevice, @escaping (Bool) -> Void) -> Void
     var onTap: () -> Void = {}
     var onPinch: ((CGFloat?) -> Void)?
+    var focusHapticIntensity: Double? = nil
     @GestureState private var pinching = false
     @State private var bridge = CameraPreviewBridge()
     @State private var marker: FocusMarker?
@@ -66,7 +67,11 @@ struct CameraPreview: View {
         focusRequest = request
         focus(point, device) { accepted in
             guard accepted, focusRequest == request else { return }
-            FotomarcoHaptics.play(.focus)
+            if let focusHapticIntensity {
+                FotomarcoHaptics.play(.focus, intensity: focusHapticIntensity)
+            } else {
+                FotomarcoHaptics.play(.focus)
+            }
             marker = FocusMarker(point: position)
         }
     }

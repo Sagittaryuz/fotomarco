@@ -27,7 +27,8 @@ private struct LockedCameraScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             CameraPreview(session: camera.session, device: camera.activeDevice,
-                          onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus)
+                          onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus,
+                          focusHapticIntensity: context?.hapticFocusIntensity)
                 .frame(width: previewSize.width, height: previewSize.height).clipped()
             VStack {
                 HStack {

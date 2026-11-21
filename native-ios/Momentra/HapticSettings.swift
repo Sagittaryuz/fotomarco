@@ -38,6 +38,7 @@ enum FotomarcoHaptics {
 }
 
 struct HapticSettingsView: View {
+    var onSave: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     @State private var draft: [HapticEvent: Double] = Dictionary(uniqueKeysWithValues: HapticEvent.allCases.map { ($0, FotomarcoHaptics.intensity($0)) })
 
@@ -70,6 +71,7 @@ struct HapticSettingsView: View {
                 Button("Salvar") {
                     for event in HapticEvent.allCases { UserDefaults.standard.set(draft[event] ?? event.defaultIntensity, forKey: event.storageKey) }
                     FotomarcoHaptics.play(.buttons)
+                    onSave()
                     dismiss()
                 }
             }

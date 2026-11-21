@@ -19,6 +19,7 @@ struct MomentraCaptureContext: Codable, Equatable, Sendable {
     var layoutData: Data? = nil
     var hasLogo: Bool? = nil
     var archivePlan: CloudDeliveryPlan? = nil
+    var hapticFocusIntensity: Double? = nil
 }
 
 /// Shared by the app, capture extension, and control widget targets.

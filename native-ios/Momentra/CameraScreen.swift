@@ -943,7 +943,7 @@ struct CameraScreen: View {
                         }
                     }
                     Section("Preferências") {
-                        NavigationLink("Vibrações") { HapticSettingsView() }
+                        NavigationLink("Vibrações") { HapticSettingsView { publishCaptureContext() } }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     Section("Composição") {
@@ -1359,7 +1359,7 @@ struct CameraScreen: View {
             cloudOwnerHash: nil,
             layoutData: (try? JSONEncoder().encode(stampProfiles.selected.layout.lockedCaptureLayout())).flatMap { $0.count <= 2000 ? $0 : nil },
             hasLogo: !stampProfiles.selected.effectiveLogoName.isEmpty || stampProfiles.selected.additionalLogoNames.contains(where: { !$0.isEmpty }),
-            archivePlan: plan)
+            archivePlan: plan, hapticFocusIntensity: FotomarcoHaptics.intensity(.focus))
         let previous = captureContextTask
         let publish = Task { @MainActor in
             if let previous { _ = await previous.value }
