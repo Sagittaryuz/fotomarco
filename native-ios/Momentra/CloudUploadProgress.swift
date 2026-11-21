@@ -40,18 +40,39 @@ final class CloudUploadDelegate: NSObject, URLSessionTaskDelegate {
                     completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
 }
 
+/// The remaining dark sector shrinks clockwise from the top of the thumbnail.
+struct CloudUploadRemainingMask: Shape {
+    var progress: Double
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let value = progress.isFinite ? min(1, max(0, progress)) : 0
+        guard value > 0 else { return Path(rect) }
+        guard value < 1 else { return Path() }
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = hypot(rect.width, rect.height)
+        var path = Path()
+        path.move(to: center)
+        path.addArc(center: center, radius: radius,
+                    startAngle: .degrees(-90 + value * 360), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct CloudUploadIndicator: View {
     let value: Double
     @State private var flash = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ZStack {
-                Circle().fill(.black.opacity(0.65))
+                Rectangle().fill(.black.opacity(0.65))
                     .mask {
-                        Circle().trim(from: CGFloat(value), to: 1)
-                            .stroke(style: StrokeStyle(lineWidth: max(geometry.size.width, geometry.size.height) * 1.5))
-                            .rotationEffect(.degrees(-90))
+                        CloudUploadRemainingMask(progress: value)
                     }
                 Text("\(Int(value * 100))%")
                     .font(.caption.bold()).foregroundStyle(.white)
