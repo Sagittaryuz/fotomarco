@@ -80,7 +80,7 @@ struct OneDriveArchive {
     /// Reconcile by deterministic path on all retries, including after an ambiguous PUT.
     /// Only return the ID after verifying the server's file bytes.
     func upload(_ file: URL, name: String, fingerprint: CloudFileFingerprint,
-                accessToken: String) async throws -> String {
+                accessToken: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> String {
         guard Self.validName(name) else { throw Failure.invalidName }
         guard try CloudFileFingerprint.read(file) == fingerprint else { throw Failure.integrity }
         let folder = try await folderID(accessToken: accessToken)
@@ -94,7 +94,8 @@ struct OneDriveArchive {
         var request = try authorizedRequest(url, accessToken: accessToken)
         request.httpMethod = "PUT"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await Self.session.upload(for: request, fromFile: file)
+        let delegate = progress.map { CloudUploadDelegate(progress: $0) }
+        let (data, response) = try await Self.session.upload(for: request, fromFile: file, delegate: delegate)
         let status = try Self.status(response)
         let uploadedID: String?
         switch status {

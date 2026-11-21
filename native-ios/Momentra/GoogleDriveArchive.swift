@@ -109,7 +109,7 @@ final class GoogleDriveArchive {
 
     func upload(file: URL, id: String, folderID: String, name: String, mimeType: String,
                 fingerprint: CloudFileFingerprint,
-                accessToken: String) async throws -> String {
+                accessToken: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> String {
         guard Self.validID(id), Self.validID(folderID), !name.isEmpty, name.utf8.count <= 255,
               ["image/jpeg", "image/heic", "image/heif"].contains(mimeType) else {
             throw ArchiveError.invalidRequest
@@ -134,7 +134,8 @@ final class GoogleDriveArchive {
         var request = try request(path: "/upload/drive/v3/files", query: ["uploadType": "multipart", "fields": "id"],
                                   method: "POST", accessToken: accessToken)
         request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await session.upload(for: request, fromFile: multipart)
+        let delegate = progress.map { CloudUploadDelegate(progress: $0) }
+        let (data, response) = try await session.upload(for: request, fromFile: multipart, delegate: delegate)
         do { try Self.check(response, body: data) }
         catch ArchiveError.http(409) {
             // A prior attempt can have reached Drive even though its response was lost.

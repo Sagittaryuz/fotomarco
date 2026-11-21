@@ -396,6 +396,7 @@ struct OriginalsView: View {
 
     private func tile(_ item: GalleryItem) -> some View {
         item.thumbnail()
+            .overlay { CloudUploadTile(captureID: item.captureIDForUpload) }
             .overlay(alignment: .topTrailing) {
                 GalleryStorageBadges(badges: item.storageBadges)
             }

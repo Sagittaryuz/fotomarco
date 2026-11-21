@@ -30,8 +30,11 @@ actor CloudArchiveDelivery {
                         try journal.markReady(id: id)
                         item = try journal.read(id)
                     }
+                    await MainActor.run { CloudUploadProgress.shared.start(id) }
                     try await send(&item, journal: journal, changedDestinations: &changedDestinations)
+                    await MainActor.run { CloudUploadProgress.shared.finish(id) }
                 } catch {
+                    await MainActor.run { CloudUploadProgress.shared.stop(id) }
                     summary.pending += 1
                     if (error as? URLError)?.code != .notConnectedToInternet {
                         summary.needsAttention = true
@@ -67,11 +70,29 @@ actor CloudArchiveDelivery {
         }
 
         var failures: [Error] = []
+        let originalBytes = item.plan.keepsOriginal ? Double(original.byteCount) : 0
+        let stampedBytes = Double(stamped.byteCount)
+        let bytesPerDestination = originalBytes + stampedBytes
+        let totalBytes = max(1, bytesPerDestination * Double(item.plan.deliveries.count))
+        let captureID = item.id
+        var completedBytes = 0.0
         for delivery in item.plan.deliveries {
+            let base = completedBytes
+            let originalProgress: @Sendable (Double) -> Void = { value in
+                let fraction = (base + value * originalBytes) / totalBytes
+                Task { @MainActor in CloudUploadProgress.shared.set(captureID, fraction: fraction) }
+            }
+            let stampedProgress: @Sendable (Double) -> Void = { value in
+                let fraction = (base + originalBytes + value * stampedBytes) / totalBytes
+                Task { @MainActor in CloudUploadProgress.shared.set(captureID, fraction: fraction) }
+            }
             let destination = delivery.destination
             do {
                 try Task.checkCancellation()
-                if delivery.phase == .verified, item.plan.keepLocal { continue }
+                if delivery.phase == .verified, item.plan.keepLocal {
+                    completedBytes += bytesPerDestination
+                    continue
+                }
                 let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
                 switch destination.provider {
                 case .googleDrive:
@@ -101,9 +122,9 @@ actor CloudArchiveDelivery {
                     } else {
                         let first: String?
                         if let id = reservation.original {
-                            first = try await google.upload(file: originalURL, id: id, folderID: reservation.folder, name: originalName, mimeType: mime, fingerprint: original, accessToken: token)
+                            first = try await google.upload(file: originalURL, id: id, folderID: reservation.folder, name: originalName, mimeType: mime, fingerprint: original, accessToken: token, progress: originalProgress)
                         } else { first = nil }
-                        let second = try await google.upload(file: stampedURL, id: reservation.stamped, folderID: reservation.folder, name: stampedName, mimeType: "image/jpeg", fingerprint: stamped, accessToken: token)
+                        let second = try await google.upload(file: stampedURL, id: reservation.stamped, folderID: reservation.folder, name: stampedName, mimeType: "image/jpeg", fingerprint: stamped, accessToken: token, progress: stampedProgress)
                         try confirm(&item, destination: destination, original: first, stamped: second, journal: journal)
                         changedDestinations.insert(destination)
                     }
@@ -119,12 +140,13 @@ actor CloudArchiveDelivery {
                         try await microsoft.verify(id: second, name: stampedName, fingerprint: stamped, accessToken: token)
                     } else {
                         let first = item.plan.keepsOriginal
-                            ? try await microsoft.upload(originalURL, name: originalName, fingerprint: original, accessToken: token) : nil
-                        let second = try await microsoft.upload(stampedURL, name: stampedName, fingerprint: stamped, accessToken: token)
+                            ? try await microsoft.upload(originalURL, name: originalName, fingerprint: original, accessToken: token, progress: originalProgress) : nil
+                        let second = try await microsoft.upload(stampedURL, name: stampedName, fingerprint: stamped, accessToken: token, progress: stampedProgress)
                         try confirm(&item, destination: destination, original: first, stamped: second, journal: journal)
                         changedDestinations.insert(destination)
                     }
                 }
+                completedBytes += bytesPerDestination
             } catch { failures.append(error) }
         }
         if !failures.isEmpty {

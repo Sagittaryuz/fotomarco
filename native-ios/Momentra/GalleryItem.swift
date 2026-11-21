@@ -73,6 +73,14 @@ struct GalleryItem: Identifiable {
 
     var id: String { photoIdentity ?? storageID }
 
+    var captureIDForUpload: UUID? {
+        switch source {
+        case .capture(let item): return UUID(uuidString: item.url.deletingPathExtension().lastPathComponent)
+        case .device: return deviceCaptureID
+        case .cloud(let item): return item.captureID
+        }
+    }
+
     /// An unchanged cloud listing need not rebuild the visible gallery.
     /// Compare all metadata used by the gallery, including remote revision and account.
     static func sameCloudSnapshot(_ left: [GalleryItem], _ right: [GalleryItem]) -> Bool {
