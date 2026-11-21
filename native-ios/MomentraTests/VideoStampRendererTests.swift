@@ -5,6 +5,41 @@ import CoreVideo
 @testable import Momentra
 
 final class VideoStampRendererTests: XCTestCase {
+    func testBothLandscapeDirectionsPreserveFrameAndStamp() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let source = root.appendingPathComponent("source.mov")
+        try await makeVideo(at: source)
+        let input = AVURLAsset(url: source)
+        let tracks = try await input.loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(tracks.first)
+        let duration = try await input.load(.duration)
+        let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil)
+        for (index, transform) in [CGAffineTransform.identity,
+                                   CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: 160, ty: 120)].enumerated() {
+            let composition = AVMutableComposition()
+            let video = try XCTUnwrap(composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid))
+            try video.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: track, at: .zero)
+            video.preferredTransform = transform
+            let oriented = root.appendingPathComponent("oriented-\(index).mov")
+            let exporter = try XCTUnwrap(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
+            exporter.outputURL = oriented
+            exporter.outputFileType = .mov
+            await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+            guard exporter.status == .completed else { throw exporter.error ?? NSError(domain: "VideoOrientationTest", code: 3) }
+            let output = root.appendingPathComponent("stamped-\(index).mov")
+            try await VideoStampRenderer.export(source: oriented, destination: output, snapshot: snapshot, map: nil, address: nil)
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: output))
+            generator.appliesPreferredTrackTransform = true
+            let frame = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
+            XCTAssertEqual(frame.width, 160)
+            XCTAssertEqual(frame.height, 120)
+            XCTAssertGreaterThan(try brightPixels(in: frame), 15, "O quadro deve conter o carimbo nos dois sentidos.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: oriented.path))
+        }
+    }
+
     func testExportStampsVideoAndPreservesOriginal() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
