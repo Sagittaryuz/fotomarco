@@ -40,6 +40,7 @@ final class CloudUploadDelegate: NSObject, URLSessionTaskDelegate {
 struct CloudUploadIndicator: View {
     let value: Double
     @State private var flash = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -56,13 +57,20 @@ struct CloudUploadIndicator: View {
             }
             .animation(.linear(duration: 0.12), value: value)
             .onChange(of: value) { _, newValue in
-                guard newValue >= 1 else { return }
-                withAnimation(.easeOut(duration: 0.12)) { flash = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation(.easeOut(duration: 0.25)) { flash = false }
-                }
+                if newValue >= 1 { blink() }
             }
+            .onAppear { if value >= 1 { blink() } }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Envio à nuvem: \(Int(value * 100)) por cento")
             .allowsHitTesting(false)
+        }
+    }
+
+    private func blink() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeOut(duration: 0.12)) { flash = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeOut(duration: 0.25)) { flash = false }
         }
     }
 }
