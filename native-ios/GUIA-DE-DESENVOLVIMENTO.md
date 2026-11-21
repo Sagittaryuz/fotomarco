@@ -67,6 +67,12 @@ O nome do simulador pode variar. Consulte `xcrun simctl list devices available` 
 - Pause reconhecimento quando a superfície da câmera estiver oculta ou a gravação estiver em andamento. Ative sensores quando a função que os usa estiver visível e habilitada.
 - Compilação para simulador, testes nativos e testes de interface são verificações distintas. Para analisar desempenho, compare a mesma versão de simulador, o mesmo lote de mídias e o mesmo gesto. Use Instruments em aparelho para medir memória, quadros atrasados, CPU e rede. Registre o que foi realmente observado.
 
+## Marca e vibrações
+
+A marca no cabeçalho centraliza o símbolo entre as partes do nome, usando a mesma fonte e linha de base; o espaçamento compensa a diferença de largura. Textos visíveis usam Fotomarco. Identificadores, chaves de sessão, diretórios e formatos históricos permanecem compatíveis com dados existentes.
+
+Em Configurações > Vibrações, os controles agrupam os retornos por ação. Zero desativa o retorno e Salvar aplica os valores; sair sem salvar descarta a edição. O foco da captura com a tela bloqueada recebe a preferência pelo contexto da câmera, sem alterar os grupos de armazenamento. Confirme no iPhone as intensidades percebidas e a prévia ao ajustar.
+
 ## Distribuição e recuperação
 
 1. Gere o IPA no workflow `Validate native iOS draft` com `signing_candidate=true`. Valide a revisão, a versão, o build, o identificador, as extensões e as configurações de provedores.
