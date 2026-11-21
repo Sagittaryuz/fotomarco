@@ -5,6 +5,7 @@ struct SeparateLiveStamp: View {
     let snapshot: StampSnapshot
     var editMap: () -> Void = {}
     var editInformation: () -> Void = {}
+    var editLogo: () -> Void = {}
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
@@ -39,7 +40,8 @@ struct SeparateLiveStamp: View {
                     let logoSize = CGSize(width: logo.size.width * factor, height: logo.size.height * factor)
                     let rect = StampRenderer.positionedRect(size: size, element: logoSize, centre: layout.logo, margin: margin)
                     Image(uiImage: logo).resizable().scaledToFit().frame(width: logoSize.width, height: logoSize.height)
-                        .onTapGesture(perform: editInformation)
+                        .contentShape(Rectangle()).onTapGesture(perform: editLogo)
+                        .accessibilityLabel("Editar logotipo")
                         .position(x: rect.midX, y: rect.midY)
                 }
             }.frame(width: size.width, height: size.height)

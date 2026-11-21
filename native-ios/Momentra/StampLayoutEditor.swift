@@ -21,11 +21,15 @@ struct StampLayoutEditor: View {
     @State private var editNote = false
     @State private var draftName = ""
     @State private var draftNote = ""
-    @State private var editingElement: Element = .map
-    fileprivate enum Element: String, CaseIterable { case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo" }
+    @State private var editingElement: Element
+    enum Element: String, CaseIterable, Identifiable {
+        case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo"
+        var id: Self { self }
+    }
 
-    init(store: StampProfilesStore) {
+    init(store: StampProfilesStore, initialElement: Element? = nil) {
         originalStore = store
+        _editingElement = State(initialValue: initialElement ?? (store.selected.layout.template == .original ? .map : .combined))
         _store = StateObject(wrappedValue: StampProfilesStore(draftOf: store))
     }
 
@@ -130,6 +134,7 @@ struct StampLayoutEditor: View {
                 set: { value in
                     UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
                     var next = layout.wrappedValue; next.selectTemplate(value); layout.wrappedValue = next
+                    editingElement = value == .original ? .map : .combined
                 }
             )) {
                 Text("Atual").tag(StampLayout.Template.original)
@@ -179,9 +184,16 @@ struct StampLayoutEditor: View {
             }
             elementEditor.padding(10).modifier(GalleryControlSurface(interactive: false))
             } else {
+                let template = layout.wrappedValue.template
+                HStack(spacing: 4) {
+                    elementButton(.combined)
+                    if template.usesMap { elementButton(.map) }
+                    elementButton(.information)
+                    if template.usesLogo { elementButton(.logo) }
+                }
                 ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    if layout.wrappedValue.template.usesLogo {
+                    if template.usesLogo && (editingElement == .combined || editingElement == .logo) {
                         ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
                             Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo \(slot + 1)") {
                                 Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = slot; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
@@ -189,7 +201,7 @@ struct StampLayoutEditor: View {
                             }.disabled(logoLoading)
                         }
                     }
-                    if layout.wrappedValue.template.usesMap {
+                    if template.usesMap && (editingElement == .combined || editingElement == .map) {
                         Picker("Visualização do mapa", selection: Binding(
                             get: { layout.wrappedValue.mapStyle },
                             set: { value in
@@ -202,7 +214,12 @@ struct StampLayoutEditor: View {
                         }.pickerStyle(.segmented)
                         Toggle("Mostrar mapa", isOn: flag(\.showsMap)).toggleStyle(DirectionalSwitchStyle())
                     }
-                    ForEach(layout.wrappedValue.template.fields, id: \.self) { field in
+                    if editingElement == .combined || editingElement == .information {
+                    if template.fields.isEmpty {
+                        Text("Este modelo usa as informações da captura automaticamente.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(template.fields, id: \.self) { field in
                         TextField(field, text: Binding(
                             get: { layout.wrappedValue.templateValue(field) },
                             set: { value in var next = layout.wrappedValue; next.setTemplateValue(value, for: field); layout.wrappedValue = next }
@@ -211,6 +228,7 @@ struct StampLayoutEditor: View {
                             Text("O texto é maior que o espaço deste modelo e será abreviado na imagem. Encurte-o para exibi-lo inteiro.")
                                 .font(.caption).foregroundStyle(.yellow)
                         }
+                    }
                     }
                 }.padding(10).modifier(GalleryControlSurface(interactive: false))
                 }.frame(maxHeight: 220)
@@ -221,6 +239,11 @@ struct StampLayoutEditor: View {
 
     var body: some View {
         editorContent
+        .onChange(of: store.selectedID) { _, _ in
+            let template = layout.wrappedValue.template
+            if template != .original, (editingElement == .map && !template.usesMap) ||
+                (editingElement == .logo && !template.usesLogo) { editingElement = .combined }
+        }
         .task(id: ([store.selected.effectiveLogoName] + store.selected.additionalLogoNames).joined(separator: "|")) {
             let name = store.selected.effectiveLogoName
             let extraNames = store.selected.additionalLogoNames

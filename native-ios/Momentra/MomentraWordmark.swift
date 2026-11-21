@@ -9,18 +9,18 @@ struct MomentraWordmark: View {
     var body: some View {
         let letterHeight = UIFont(name: fontName, size: fontSize)?.xHeight ?? 10
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("M")
+            Text("Fot")
             Image(systemName: "location.circle.fill")
                 .font(.system(size: letterHeight, weight: .semibold))
                 .foregroundStyle(.yellow)
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     (dimensions.height + letterHeight) / 2
                 }
-            Text("mentra")
+            Text("marco")
         }
         .font(.custom(fontName, fixedSize: fontSize))
         .foregroundStyle(.white)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Momentra")
+        .accessibilityLabel("Fotomarco")
     }
 }

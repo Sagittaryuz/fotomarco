@@ -60,8 +60,7 @@ struct CameraScreen: View {
     @State private var flashNoticeTask: Task<Void, Never>?
     @State private var selectedRecognizedText: RecognizedTextSelection?
     @State private var showSettings = false
-    @State private var showStampEditor = false
-    @State private var showStampMapOptions = false
+    @State private var stampEditorSection: StampLayoutEditor.Element?
     @State private var showUpdateMessage = false
     @State private var showSupportPanel = false
     @State private var showOriginals = false
@@ -274,26 +273,33 @@ struct CameraScreen: View {
                                         }
                                         Image(uiImage: image).resizable().frame(width: geometry.size.width, height: geometry.size.height).allowsHitTesting(false)
                                         let box = StampRenderer.workReportRect(in: geometry.size)
-                                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampEditor = true } label: { Color.clear.contentShape(Rectangle()) }
+                                        Button { openStampEditor(.information) } label: { Color.clear.contentShape(Rectangle()) }
                                             .frame(width: box.width, height: box.height)
                                             .position(x: box.midX, y: box.midY)
                                             .accessibilityLabel("Personalizar carimbo")
+                                        ForEach(Array(StampRenderer.fixedLogoHitRects(snapshot: snapshot, in: geometry.size).enumerated()), id: \.offset) { entry in
+                                            let logoBox = entry.element
+                                            Button { openStampEditor(.logo) } label: { Color.clear.contentShape(Rectangle()) }
+                                                .frame(width: logoBox.width, height: logoBox.height)
+                                                .position(x: logoBox.midX, y: logoBox.midY)
+                                                .accessibilityLabel("Editar logotipo")
+                                        }
                                         if snapshot.layout.template.usesMap && snapshot.layout.template != .largeMap && snapshot.mapEnabled && snapshot.location != nil {
                                             let mapBox = StampRenderer.fixedMapRect(in: geometry.size)
                                             StampMapPreview(snapshot: snapshot, markerSize: max(5, mapBox.width * 0.12))
                                                 .frame(width: mapBox.width, height: mapBox.height)
                                                 .position(x: mapBox.midX, y: mapBox.midY)
-                                            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
+                                            Button { openStampEditor(.map) } label: { Color.clear.contentShape(Rectangle()) }
                                                 .frame(width: mapBox.width, height: mapBox.height)
                                                 .position(x: mapBox.midX, y: mapBox.midY)
-                                                .accessibilityLabel("Escolher mapa ou satélite")
+                                                .accessibilityLabel("Editar mapa")
                                         }
                                         if snapshot.layout.template == .largeMap && snapshot.mapEnabled && snapshot.location != nil {
                                             let mapBox = StampRenderer.workReportRect(in: geometry.size)
-                                            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true } label: { Color.clear.contentShape(Rectangle()) }
+                                            Button { openStampEditor(.map) } label: { Color.clear.contentShape(Rectangle()) }
                                                 .frame(width: mapBox.width, height: mapBox.height * 0.64)
                                                 .position(x: mapBox.midX, y: mapBox.minY + mapBox.height * 0.32)
-                                                .accessibilityLabel("Escolher mapa ou satélite")
+                                                .accessibilityLabel("Editar mapa")
                                         }
                                     }
                                 }
@@ -301,8 +307,9 @@ struct CameraScreen: View {
                         } else if stampEnabled && stampProfiles.selected.layout.mode == .separate {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 SeparateLiveStamp(snapshot: makeSnapshot(at: timeline.date),
-                                                  editMap: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true },
-                                                  editInformation: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampEditor = true })
+                                                  editMap: { openStampEditor(.map) },
+                                                  editInformation: { openStampEditor(.information) },
+                                                  editLogo: { openStampEditor(.logo) })
                             }
                         }
                     }
@@ -577,7 +584,7 @@ struct CameraScreen: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showStampEditor && !showStampMapOptions && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && stampEditorSection == nil && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active { Task { await updates.check() } }
         }
@@ -641,8 +648,7 @@ struct CameraScreen: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             showSettings = false
-            showStampEditor = false
-            showStampMapOptions = false
+            stampEditorSection = nil
             showSupportPanel = false
             showOriginals = false
             cameraShareTask?.cancel()
@@ -726,7 +732,7 @@ struct CameraScreen: View {
             retryCloudCaptures()
         }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
-        .onChange(of: showStampEditor) { _, showing in if !showing { publishCaptureContext() } }
+        .onChange(of: stampEditorSection) { _, section in if section == nil { publishCaptureContext() } }
 
     }
 
@@ -790,16 +796,10 @@ struct CameraScreen: View {
             }
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
-        .sheet(isPresented: $showStampEditor) {
-            NavigationStack { StampLayoutEditor(store: stampProfiles) }
+        .sheet(item: $stampEditorSection) { section in
+            NavigationStack { StampLayoutEditor(store: stampProfiles, initialElement: section) }
                 .presentationDetents([.fraction(0.55), .large])
                 .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showStampMapOptions) {
-            StampMapOptionsPopup(store: stampProfiles)
-                .presentationDetents([.height(330)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.ultraThinMaterial)
         }
         .alert("Momentra", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
@@ -1274,13 +1274,19 @@ struct CameraScreen: View {
         }
     }
 
+    private func openStampEditor(_ section: StampLayoutEditor.Element) {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+        stampEditorSection = section
+    }
+
     private var liveStamp: some View {
         HStack(spacing: 0) {
             if stampProfiles.selected.layout.horizontal == "right" { Spacer(minLength: 0) }
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 LiveStampView(snapshot: makeSnapshot(at: timeline.date),
-                              editMap: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampMapOptions = true },
-                              editInformation: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showStampEditor = true })
+                              editMap: { openStampEditor(.map) },
+                              editInformation: { openStampEditor(.information) },
+                                                  editLogo: { openStampEditor(.logo) })
             }.frame(maxWidth: stampProfiles.selected.layout.horizontal == "auto" ? .infinity : 280)
             if stampProfiles.selected.layout.horizontal == "left" { Spacer(minLength: 0) }
         }.padding(.horizontal, 16)
@@ -1296,7 +1302,7 @@ struct CameraScreen: View {
     }
 
     private var cameraSurfaceVisible: Bool {
-        scenePhase == .active && !showSettings && !showStampEditor && !showStampMapOptions && !showOriginals && !showMap && !showSupportPanel &&
+        scenePhase == .active && !showSettings && stampEditorSection == nil && !showOriginals && !showMap && !showSupportPanel &&
             !showAspectPanel && !showSettingsImport && selectedRecognizedText == nil && cameraShare == nil
     }
 
@@ -1458,6 +1464,7 @@ private struct LiveStampView: View {
     let snapshot: StampSnapshot
     let editMap: () -> Void
     let editInformation: () -> Void
+    let editLogo: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1467,7 +1474,7 @@ private struct LiveStampView: View {
                        height: (snapshot.mapScale == "small" ? 75 : snapshot.mapScale == "large" ? 125 : 100) * snapshot.layout.mapSize * snapshot.layout.combinedSize)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay { Color.clear.contentShape(Rectangle()).onTapGesture(perform: editMap) }
-                .accessibilityLabel("Escolher mapa ou satélite")
+                .accessibilityLabel("Editar mapa")
             }
             if snapshot.layout.showsInformation {
             VStack(alignment: snapshot.layout.textAlignment == "right" ? .trailing : snapshot.layout.textAlignment == "center" ? .center : .leading, spacing: 2) {
@@ -1483,13 +1490,14 @@ private struct LiveStampView: View {
             if snapshot.layout.showsLogo, let logo = snapshot.logo {
                 Image(uiImage: logo).resizable().scaledToFit().frame(width: 38 * snapshot.layout.logoSize * snapshot.layout.combinedSize,
                                                                  height: 38 * snapshot.layout.logoSize * snapshot.layout.combinedSize)
-                    .accessibilityLabel("Logotipo do perfil")
-                    .onTapGesture(perform: editInformation)
+                    .accessibilityLabel("Editar logotipo")
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: editLogo)
             }
         }
         .foregroundStyle(.white)
         .padding(10)
         .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }

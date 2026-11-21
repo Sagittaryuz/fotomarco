@@ -1,4 +1,4 @@
-# Momentra iOS · Guia de desenvolvimento
+# Fotomarco iOS · Guia de desenvolvimento
 
 Este guia descreve a versão nativa em SwiftUI. O código de produção do app fica em `feat/storage-integration`, o código do instalador em `fix/ota-download-recovery` e os testes de interface em `qa/momentra-016-gallery`. O site institucional tem repositório próprio em `Sagittaryuz/momentra-site`. Comece pelo estado do Git, pelo diff local e pela última tag estável. Preserve revisões em andamento usando um worktree quando necessário.
 
@@ -20,12 +20,12 @@ funções, os gestos e a semântica acessível de cada controle ao reaplicar o e
 | Carimbo e perfis | `StampProfilesStore.swift`, `StampLayoutEditor.swift`, `PhotoProfileIndex.swift` e arquivos de renderização do carimbo em `Momentra/`. |
 | Elementos visuais | `Momentra/Assets.xcassets` mantém ícones, marcas dos provedores, cores e imagens locais. O repositório do site mantém ilustrações, logos e estilos da landing page. |
 
-No macOS, gere o projeto a partir da definição versionada.
+No macOS, gere o projeto Fotomarco a partir da definição versionada. A mudança de nome não altera o esquema interno Momentra, o produto Momentra.app, o bundle ID, os callbacks ou o contrato de distribuição do instalador privado.
 
 ```sh
 cd native-ios
 xcodegen generate
-xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug \
+xcodebuild -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO test
 ```
 

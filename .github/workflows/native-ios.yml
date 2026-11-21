@@ -1,7 +1,7 @@
 name: Validate native iOS draft
 on:
   push:
-    branches: [feat/native-ios, feat/native-camera-control, feat/native-direct-updates, feat/native-icons, feat/native-camera-redesign, feat/native-address-zoom, feat/native-one-tap-update]
+    branches: [feat/native-ios, feat/native-camera-control, feat/native-direct-updates, feat/native-icons, feat/native-camera-redesign, feat/native-address-zoom, feat/native-one-tap-update, feat/stamp-models]
     paths: ['native-ios/**', '.github/workflows/native-ios.yml']
   workflow_dispatch:
     inputs:
@@ -26,7 +26,7 @@ jobs:
         run: xcodegen generate
       - name: Compile unsigned app for iPhone
         working-directory: native-ios
-        run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -project Fotomarco.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
       - name: Configure Google iOS sign-in
         if: inputs.signing_candidate || github.ref_name == 'feat/native-direct-updates' || (github.ref_name == 'feat/native-icons' || (github.ref_name == 'feat/native-camera-redesign' || (github.ref_name == 'feat/native-address-zoom' || github.ref_name == 'feat/native-one-tap-update')))
         env:
@@ -111,13 +111,13 @@ jobs:
         run: xcodegen generate
       - name: Compile for iOS Simulator
         working-directory: native-ios
-        run: xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/momentra-simulator" CODE_SIGNING_ALLOWED=NO -quiet build
+        run: xcodebuild -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/momentra-simulator" CODE_SIGNING_ALLOWED=NO -quiet build
       - name: Run native unit tests
         working-directory: native-ios
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
           echo "MOMENTRA_SIM_ID=$DEVICE_ID" >> "$GITHUB_ENV"
-          xcodebuild -project Momentra.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/momentra-simulator" -resultBundlePath "$RUNNER_TEMP/Momentra.xcresult" CODE_SIGNING_ALLOWED=NO -quiet test
+          xcodebuild -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/momentra-simulator" -resultBundlePath "$RUNNER_TEMP/Momentra.xcresult" CODE_SIGNING_ALLOWED=NO -quiet test
       - name: Summarize native test results
         if: always()
         run: |

@@ -603,6 +603,35 @@ enum StampRenderer {
         }
         return true
     }
+    /// Only the displayed logo slots on fixed templates should intercept camera taps.
+    static func fixedLogoHitRects(snapshot: StampSnapshot, in size: CGSize) -> [CGRect] {
+        let box = workReportRect(in: size)
+        let w = box.width, h = box.height
+        switch snapshot.layout.template {
+        case .construction:
+            let images = [snapshot.logo] + Array(snapshot.extraLogos.prefix(2))
+            return images.enumerated().compactMap { index, image in
+                guard let image, image.size.width > 0, image.size.height > 0 else { return nil }
+                return CGRect(x: box.minX + w * (0.03 + CGFloat(index) * 0.32), y: box.minY + h * 0.04, width: w * 0.29, height: h * 0.19)
+            }
+        case .portrait, .shopee, .completed, .deliveryProof:
+            guard let logo = snapshot.logo, logo.size.width > 0, logo.size.height > 0 else { return [] }
+            switch snapshot.layout.template {
+            case .portrait:
+                return [CGRect(x: box.minX + w * 0.70, y: box.minY, width: w * 0.30, height: h * 0.85)]
+            case .shopee:
+                return [CGRect(x: box.minX + w * 0.9 * 0.77, y: box.minY + h * 0.34 * 0.08,
+                               width: w * 0.9 * 0.21, height: h * 0.34 * 0.84)]
+            default:
+                let bannerHeight = h * 0.37
+                return [CGRect(x: box.minX + bannerHeight * 0.08, y: box.minY + bannerHeight * 0.08,
+                               width: bannerHeight * 0.84, height: bannerHeight * 0.84)]
+            }
+        default:
+            return []
+        }
+    }
+
     static func fixedMapRect(in size: CGSize) -> CGRect {
         let box = workReportRect(in: size)
         let side = min(box.height * 0.9, box.width * 0.32)
@@ -950,7 +979,7 @@ enum StampRenderer {
             }
             let lineGap = pointSize * 0.10
             let contentHeight = rowHeights.reduce(0, +) + CGFloat(max(0, rows.count - 1)) * lineGap
-            let prototype = UIFont(name: "AvenirNextCondensed-Bold", size: 100) ?? UIFont.systemFont(ofSize: 100, weight: .bold)
+            let prototype = UIFont(name: "DINCondensed-Bold", size: 100) ?? UIFont.systemFont(ofSize: 100, weight: .bold)
             let prototypeLine = CTLineCreateWithAttributedString(NSAttributedString(string: content.time, attributes: [.font: prototype]))
             let prototypeHeight = max(1, CTLineGetBoundsWithOptions(prototypeLine, .useGlyphPathBounds).height)
             let clockFont = prototype.withSize(100 * contentHeight / prototypeHeight)

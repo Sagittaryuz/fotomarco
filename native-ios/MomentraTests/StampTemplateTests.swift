@@ -1,7 +1,33 @@
 import XCTest
+import UIKit
 @testable import Momentra
 
 final class StampTemplateTests: XCTestCase {
+    func testFixedTemplateLogoHitRegionsOnlyCoverExistingImages() throws {
+        let size = CGSize(width: 390, height: 520)
+        let logo = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10)).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
+        }
+        func rects(_ template: StampLayout.Template, logo: UIImage?, extras: [UIImage?] = []) -> [CGRect] {
+            var layout = StampLayout()
+            layout.template = template
+            let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, logo: logo, extraLogos: extras,
+                                         location: nil, heading: nil, layout: layout)
+            return StampRenderer.fixedLogoHitRects(snapshot: snapshot, in: size)
+        }
+        let box = StampRenderer.workReportRect(in: size)
+        XCTAssertTrue(rects(.custom, logo: logo).isEmpty)
+        XCTAssertTrue(rects(.portrait, logo: nil).isEmpty)
+        let construction = rects(.construction, logo: logo, extras: [nil, logo])
+        XCTAssertEqual(construction.count, 2)
+        XCTAssertFalse(construction[0].intersects(construction[1]))
+        for template in [StampLayout.Template.completed, .deliveryProof, .portrait, .shopee] {
+            let rect = try XCTUnwrap(rects(template, logo: logo).first)
+            XCTAssertTrue(box.contains(rect))
+        }
+    }
+
     func testFixedTemplateFieldsWarnForValuesThatExceedTheirRenderedWidth() {
         for template in StampLayout.Template.allCases {
             for field in template.fields {
