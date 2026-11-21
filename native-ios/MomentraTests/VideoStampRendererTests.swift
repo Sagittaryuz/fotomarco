@@ -16,6 +16,7 @@ final class VideoStampRendererTests: XCTestCase {
         let track = try XCTUnwrap(tracks.first)
         let duration = try await input.load(.duration)
         let snapshot = StampSnapshot(capturedAt: Date(), gpsEnabled: false, location: nil, heading: nil)
+        var firstMask: Set<Int>?
         for (index, transform) in [CGAffineTransform.identity,
                                    CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: 160, ty: 120)].enumerated() {
             let composition = AVMutableComposition()
@@ -36,6 +37,11 @@ final class VideoStampRendererTests: XCTestCase {
             XCTAssertEqual(frame.width, 160)
             XCTAssertEqual(frame.height, 120)
             XCTAssertGreaterThan(try brightPixels(in: frame), 15, "O quadro deve conter o carimbo nos dois sentidos.")
+            let mask = try brightPixelMask(in: frame)
+            if let firstMask {
+                let overlap = Double(firstMask.intersection(mask).count) / Double(max(1, min(firstMask.count, mask.count)))
+                XCTAssertGreaterThan(overlap, 0.35, "O carimbo deve ter a mesma posição e orientação nos dois sentidos.")
+            } else { firstMask = mask }
             XCTAssertTrue(FileManager.default.fileExists(atPath: oriented.path))
         }
     }
@@ -250,6 +256,10 @@ final class VideoStampRendererTests: XCTestCase {
     }
 
     private func brightPixels(in image: CGImage) throws -> Int {
+        try brightPixelMask(in: image).count
+    }
+
+    private func brightPixelMask(in image: CGImage) throws -> Set<Int> {
         let width = image.width, height = image.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
         guard let context = CGContext(data: &bytes, width: width, height: height, bitsPerComponent: 8,
@@ -258,8 +268,8 @@ final class VideoStampRendererTests: XCTestCase {
             throw NSError(domain: "VideoTest", code: 6)
         }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        return stride(from: 0, to: bytes.count, by: 4).filter {
+        return Set(stride(from: 0, to: bytes.count, by: 4).filter {
             bytes[$0] > 205 && bytes[$0 + 1] > 205 && bytes[$0 + 2] > 205
-        }.count
+        })
     }
 }
