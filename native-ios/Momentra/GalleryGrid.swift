@@ -23,6 +23,14 @@ enum GalleryEndRefresh {
     }
 }
 
+private final class GalleryCollectionView: UICollectionView {
+    var onLayout: (() -> Void)?
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
+}
+
 /// A collection view supports pinch-to-resize and selection after entering Select mode.
 struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where Item.ID: Hashable {
     let groups: [GalleryGroup<Item>]
@@ -48,7 +56,11 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         layout.minimumInteritemSpacing = 3
         layout.minimumLineSpacing = 3
         layout.headerReferenceSize = CGSize(width: 1, height: 44)
-        let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        let view = GalleryCollectionView(frame: .zero, collectionViewLayout: layout)
+        view.onLayout = { [weak coordinator = context.coordinator] in
+            guard let coordinator, let request = coordinator.parent.newestScrollRequest else { return }
+            coordinator.scrollToLastIfRequested(request)
+        }
         view.backgroundColor = .clear
         view.alwaysBounceVertical = true
         view.contentInset.bottom = bottomInset
@@ -127,6 +139,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         private var orderedIDs: [Item.ID] = []
         private var pathOffsets: [IndexPath: Int] = [:]
         private var scrolledRequest: Int?
+        private var scheduledRequest: Int?
+        private var scrollGeneration = 0
         private var refreshedThisDrag = false
         private var initialEndDistance: CGFloat?
 
@@ -165,12 +179,18 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         }
 
         func scrollToLastIfRequested(_ request: Int) {
-            guard scrolledRequest != request, let collection, let path = orderedPaths.last else { return }
-            scrolledRequest = request
+            guard scrolledRequest != request, scheduledRequest != request, let collection,
+                  collection.window != nil, collection.bounds.height > 0, !orderedPaths.isEmpty else { return }
+            scheduledRequest = request
+            let generation = scrollGeneration
             DispatchQueue.main.async { [weak self, weak collection] in
-                guard let self, let collection, self.parent.newestScrollRequest == request,
+                guard let self else { return }
+                if self.scheduledRequest == request { self.scheduledRequest = nil }
+                guard let collection, self.scrollGeneration == generation,
+                      self.parent.newestScrollRequest == request, let path = self.orderedPaths.last,
                       collection.numberOfSections > path.section,
                       collection.numberOfItems(inSection: path.section) > path.item else { return }
+                self.scrolledRequest = request
                 collection.layoutIfNeeded()
                 collection.scrollToItem(at: path, at: .bottom, animated: false)
             }
@@ -189,7 +209,12 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             }
         }
         func numberOfSections(in collectionView: UICollectionView) -> Int { parent.groups.count }
-        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { parent.userStartedScrolling?() }
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            scrollGeneration += 1
+            scrolledRequest = parent.newestScrollRequest
+            scheduledRequest = nil
+            parent.userStartedScrolling?()
+        }
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { parent.groups[section].items.count }
         func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "tile", for: indexPath) as! GallerySelectionCell

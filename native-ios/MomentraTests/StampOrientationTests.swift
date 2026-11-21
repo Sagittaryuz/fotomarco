@@ -3,6 +3,10 @@ import UIKit
 @testable import Momentra
 
 final class StampOrientationTests: XCTestCase {
+    func testApplicationSupportsOnlyPortraitInterface() {
+        let orientations = Bundle.main.object(forInfoDictionaryKey: "UISupportedInterfaceOrientations~iphone") as? [String]
+        XCTAssertEqual(orientations, ["UIInterfaceOrientationPortrait"])
+    }
     func testBothLandscapeDirectionsWhenInterfaceRemainsPortrait() {
         XCTAssertEqual(StampOrientation.angle(device: .landscapeLeft, interface: .portrait), 90)
         XCTAssertEqual(StampOrientation.angle(device: .landscapeRight, interface: .portrait), -90)

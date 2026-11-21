@@ -193,12 +193,13 @@ struct OriginalsView: View {
         }
         .onChange(of: tab) { _, _ in
             resetSelection()
+            openedAtNewest = true
             scrollRequest += 1
             updateProjection()
             reloadVersion += 1
         }
-        .onChange(of: origin) { _, _ in resetSelection(); scrollRequest += 1; updateProjection() }
-        .onChange(of: profile) { _, _ in resetSelection(); scrollRequest += 1; updateProjection() }
+        .onChange(of: origin) { _, _ in resetSelection(); openedAtNewest = true; scrollRequest += 1; updateProjection() }
+        .onChange(of: profile) { _, _ in resetSelection(); openedAtNewest = true; scrollRequest += 1; updateProjection() }
         .onChange(of: captureFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .fullScreenCover(item: $detail) { item in
@@ -342,7 +343,7 @@ struct OriginalsView: View {
                 ForEach(Tab.allCases, id: \.self) { choice in
                     Button {
                         FotomarcoHaptics.play(.gallery)
-                        if tab == choice { scrollRequest += 1 }
+                        if tab == choice { openedAtNewest = true; scrollRequest += 1 }
                         else { tab = choice }
                     } label: {
                         VStack(spacing: 3) {
@@ -537,7 +538,6 @@ struct OriginalsView: View {
         }.value
         guard !Task.isCancelled, activeTab == tab, version == reloadVersion, let source else { return }
         authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        let wasEmpty = projection.items.isEmpty
         if activeTab == .trash {
             localTrash = source.files
         } else {
@@ -547,7 +547,7 @@ struct OriginalsView: View {
         }
         updateProjection()
         loadedLocalVersion = version
-        if wasEmpty || (!selecting && openedAtNewest) { scrollRequest += 1 }
+        if !selecting && openedAtNewest { scrollRequest += 1 }
     }
 
     private func reloadCloud(trash: Bool) async {
@@ -653,14 +653,13 @@ struct OriginalsView: View {
         let unique = results.filter { ids.insert($0.storageID).inserted }
         let previous = trash ? remoteTrash : remote
         guard !GalleryItem.sameCloudSnapshot(previous, unique) else { return }
-        let wasEmpty = projection.items.isEmpty
         if trash {
             remoteTrash = unique
         } else {
             remote = unique
         }
         updateProjection()
-        if wasEmpty || (!selecting && openedAtNewest) { scrollRequest += 1 }
+        if !selecting && openedAtNewest { scrollRequest += 1 }
     }
 
     @State private var lastCatalogRefresh = 0

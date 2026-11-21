@@ -37,10 +37,7 @@ private struct StampOrientationContainer<Content: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let interface = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first { $0.activationState == .foregroundActive }?.interfaceOrientation ?? .portrait
-            let angle = StampOrientation.angle(device: deviceOrientation, interface: interface)
+            let angle = StampOrientation.angle(device: deviceOrientation, interface: .portrait)
             let swap = abs(angle) == 90
             content()
                 .frame(width: swap ? geometry.size.height : geometry.size.width,
@@ -672,6 +669,8 @@ struct CameraScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                let orientation = UIDevice.current.orientation
+                if orientation.isPortrait || orientation.isLandscape { stampDeviceOrientation = orientation }
                 if didEnterBackground {
                     didEnterBackground = false
                     returnToCamera()
