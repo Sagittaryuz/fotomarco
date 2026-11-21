@@ -24,4 +24,15 @@ final class CloudUploadProgressTests: XCTestCase {
         tracker.set(id, fraction: 0.8)
         XCTAssertNil(tracker.values[id])
     }
+
+    func testNonFiniteInputIsIgnoredAndProgressUsesWholePercentages() {
+        let tracker = CloudUploadProgress.shared
+        let id = UUID()
+        defer { tracker.stop(id) }
+        tracker.start(id)
+        tracker.set(id, fraction: .nan)
+        XCTAssertEqual(tracker.values[id], 0)
+        tracker.set(id, fraction: 0.426)
+        XCTAssertEqual(tracker.values[id], 0.42)
+    }
 }

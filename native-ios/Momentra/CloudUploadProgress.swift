@@ -9,7 +9,10 @@ final class CloudUploadProgress: ObservableObject {
 
     func set(_ id: UUID, fraction: Double) {
         guard let previous = values[id], previous < 1 else { return }
-        values[id] = min(0.99, max(0, fraction))
+        guard fraction.isFinite else { return }
+        let percentage = floor(min(0.99, max(0, fraction)) * 100) / 100
+        guard percentage != previous else { return }
+        values[id] = percentage
     }
 
     func finish(_ id: UUID) {
