@@ -53,7 +53,9 @@ final class UpdateService: ObservableObject {
                 status = "Uma versão mais recente está disponível."
             } else {
                 availableVersion = nil
-                status = "Nenhuma versão mais recente publicada."
+                status = DirectUpdateAccess.shared.ready
+                    ? "Nenhuma versão mais recente publicada."
+                    : "Atualizações diretas ainda não estão ativadas neste iPhone. Abra seu link pessoal de instalação para ativá-las."
             }
         } catch {
             status = "Não foi possível verificar atualizações agora."
