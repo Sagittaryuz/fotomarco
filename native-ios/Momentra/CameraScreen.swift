@@ -6,6 +6,52 @@ import UniformTypeIdentifiers
 import PhotosUI
 import ImageIO
 
+/// Keeps the stamp upright relative to the phone, even when interface rotation is locked.
+enum StampOrientation {
+    static func angle(device: UIDeviceOrientation, interface: UIInterfaceOrientation) -> Double {
+        let deviceAngle: Double
+        switch device {
+        case .portrait: deviceAngle = 0
+        case .portraitUpsideDown: deviceAngle = 180
+        case .landscapeLeft: deviceAngle = 90
+        case .landscapeRight: deviceAngle = -90
+        default: return 0
+        }
+        let interfaceAngle: Double
+        switch interface {
+        case .portraitUpsideDown: interfaceAngle = 180
+        case .landscapeRight: interfaceAngle = 90
+        case .landscapeLeft: interfaceAngle = -90
+        default: interfaceAngle = 0
+        }
+        var result = deviceAngle - interfaceAngle
+        if result > 180 { result -= 360 }
+        if result < -180 { result += 360 }
+        return result
+    }
+}
+
+private struct StampOrientationContainer<Content: View>: View {
+    let deviceOrientation: UIDeviceOrientation
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            let interface = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }?.interfaceOrientation ?? .portrait
+            let angle = StampOrientation.angle(device: deviceOrientation, interface: interface)
+            let swap = abs(angle) == 90
+            content()
+                .frame(width: swap ? geometry.size.height : geometry.size.width,
+                       height: swap ? geometry.size.width : geometry.size.height)
+                .rotationEffect(.degrees(angle))
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                .animation(.easeInOut(duration: 0.2), value: angle)
+        }
+    }
+}
+
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
     @StateObject private var camera = CameraService()
@@ -91,6 +137,7 @@ struct CameraScreen: View {
     @State private var photoFlight: PhotoFlight?
     @State private var photoLanded = false
     @State private var shutterOpacity = 0.0
+    @State private var stampDeviceOrientation: UIDeviceOrientation = .portrait
     @State private var shutterFeedbackTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -260,6 +307,7 @@ struct CameraScreen: View {
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
                     .overlay {
+                        StampOrientationContainer(deviceOrientation: stampDeviceOrientation) {
                         if stampEnabled && stampProfiles.selected.layout.template.hasFixedRenderer {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 GeometryReader { geometry in
@@ -311,6 +359,13 @@ struct CameraScreen: View {
                                                   editInformation: { openStampEditor(.information) },
                                                   editLogo: { openStampEditor(.logo) })
                             }
+                        } else if stampEnabled && stampProfiles.selected.layout.template == .original {
+                            VStack(spacing: 0) {
+                                if stampProfiles.selected.layout.position == "top" { liveStamp }
+                                Spacer(minLength: 0)
+                                if stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
+                            }
+                        }
                         }
                     }
                     .overlay {
@@ -341,14 +396,12 @@ struct CameraScreen: View {
                              : "\(archiveStatus.pending) captura(s) aguardando envio")
                             .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
                     }
-                    if stampEnabled && stampProfiles.selected.layout.template == .original && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position == "top" { liveStamp }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
                             .shadow(radius: 6).accessibilityLabel("\(countdown) segundos")
                         Spacer(minLength: 8)
                     }
-                    if stampEnabled && stampProfiles.selected.layout.template == .original && stampProfiles.selected.layout.mode == .combined && stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
                     if recognitionDemand.qr || recognitionDemand.text {
                         LiveRecognitionBanner(engine: camera.recognition) { text in
                             selectedRecognizedText = RecognizedTextSelection(text: text)
@@ -592,6 +645,10 @@ struct CameraScreen: View {
             if ready { Task { await updates.check() } }
         }
         .onAppear {
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            if UIDevice.current.orientation.isPortrait || UIDevice.current.orientation.isLandscape {
+                stampDeviceOrientation = UIDevice.current.orientation
+            }
             camera.setRecognition(qr: recognitionDemand.qr, text: recognitionDemand.text)
             camera.start()
             if !addressPreviewMigrated {
@@ -608,7 +665,11 @@ struct CameraScreen: View {
             refreshAddress()
             publishCaptureContext()
         }
-        .onDisappear { modeTransitionTask?.cancel(); modeTransitionBlur = false; finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications(); modeTransitionTask?.cancel(); modeTransitionBlur = false; finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            let orientation = UIDevice.current.orientation
+            if orientation.isPortrait || orientation.isLandscape { stampDeviceOrientation = orientation }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 if didEnterBackground {
