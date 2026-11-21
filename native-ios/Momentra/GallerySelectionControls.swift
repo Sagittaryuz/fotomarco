@@ -12,14 +12,14 @@ struct GallerySelectionBar<Share: View>: View {
             share()
                 .accessibilityLabel("Compartilhar seleção")
             Spacer(minLength: 0)
-            Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); review() }) {
+            Button(action: { FotomarcoHaptics.play(.gallery); review() }) {
                 Text("Mostrar seleção (\(count))").font(.subheadline.weight(.semibold))
                     .lineLimit(1).minimumScaleFactor(0.72)
                     .frame(minHeight: 44).padding(.horizontal, 12)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
             }
             Spacer(minLength: 0)
-            Button(role: .destructive, action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); delete() }) {
+            Button(role: .destructive, action: { FotomarcoHaptics.play(.gallery); delete() }) {
                 Image(systemName: "trash").frame(width: 44, height: 44)
                     .modifier(GalleryControlSurface(rounded: true, tint: .red))
             }
@@ -51,7 +51,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
         let selection = items.filter { selected.contains($0.id) }
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); columns = columns == 3 ? 2 : 3 } label: {
+                Button { FotomarcoHaptics.play(.gallery); columns = columns == 3 ? 2 : 3 } label: {
                     Image(systemName: "square.grid.2x2").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Alterar tamanho das miniaturas")
@@ -62,7 +62,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
                         .font(.headline).lineLimit(1).minimumScaleFactor(0.72)
                 }
                 Spacer(minLength: 0)
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } label: {
+                Button { FotomarcoHaptics.play(.gallery); dismiss() } label: {
                     Image(systemName: "checkmark").font(.body.weight(.bold))
                         .frame(width: 44, height: 44).modifier(GalleryControlSurface(rounded: true, tint: .yellow))
                 }.accessibilityLabel("Concluir revisão")
@@ -77,7 +77,7 @@ struct GallerySelectionSheet<Item: Identifiable, Tile: View>: View {
                             selected: $selected, columns: $columns, showsSectionHeaders: false,
                             tile: tile, open: { _ in })
             }
-            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); selected.removeAll() } label: {
+            Button { FotomarcoHaptics.play(.gallery); selected.removeAll() } label: {
                 Text("Desmarcar tudo").font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 18).frame(minHeight: 44)
                     .modifier(GalleryControlSurface(rounded: true))
@@ -160,7 +160,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
                         LazyHStack(spacing: 12) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                                 Button {
-                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                                    FotomarcoHaptics.play(.gallery)
                                     if !selected.insert(item.id).inserted { selected.remove(item.id) }
                                 } label: {
                                     tile(item).frame(width: 136, height: 180).clipped()
@@ -181,7 +181,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
                     .scrollIndicators(.hidden).frame(height: 182)
                     .onAppear { proxy.scrollTo(current.id, anchor: .center) }
                 }
-                Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); prepare() }) {
+                Button(action: { FotomarcoHaptics.play(.gallery); prepare() }) {
                     HStack {
                         if preparation != nil { ProgressView() }
                         Label("Compartilhar seleção", systemImage: "square.and.arrow.up")
@@ -195,7 +195,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
             .padding(.top, 14)
             .navigationTitle("Compartilhar")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Fechar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); preparation?.cancel(); dismiss() } }
+            .toolbar { Button("Fechar") { FotomarcoHaptics.play(.gallery); preparation?.cancel(); dismiss() } }
             .sheet(item: $batch, onDismiss: {
                 if shareSucceeded { onSuccess() }
             }) { batch in
@@ -204,7 +204,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
                 }
             }
             .alert("Não foi possível preparar os itens", isPresented: $failed) {
-                Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+                Button("OK", role: .cancel) { FotomarcoHaptics.play(.gallery) }
             }
         }
         .preferredColorScheme(.dark)

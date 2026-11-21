@@ -23,14 +23,14 @@ struct PickedCloudPhotoView: View {
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Text("O Google não fornece a localização neste download. A cópia com carimbo ficará em Capturas e não alterará a foto na nuvem. A cópia não mantém os metadados originais.")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    Button("Criar cópia com carimbo") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); save() }
+                    Button("Criar cópia com carimbo") { FotomarcoHaptics.play(.gallery); save() }
                         .buttonStyle(.borderedProminent).disabled(preview == nil || lines.isEmpty || saving)
                     if saving { ProgressView("Criando cópia…") }
                 }.padding()
             }
             .navigationTitle("Foto selecionada")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } }
+            .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); dismiss() } }
             .onAppear { load() }
             .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }

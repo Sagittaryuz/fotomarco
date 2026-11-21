@@ -13,14 +13,14 @@ struct StampMapOptionsPopup: View {
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } label: {
+                Button { FotomarcoHaptics.play(.editor); dismiss() } label: {
                     Image(systemName: "chevron.left").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Voltar")
                 Spacer()
                 Text("Mapa").font(.headline)
                 Spacer()
-                Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.setLayout(draft); dismiss() }
+                Button("Salvar") { FotomarcoHaptics.play(.editor); store.setLayout(draft); dismiss() }
                     .padding(.horizontal, 16).frame(height: 44)
                     .modifier(GalleryControlSurface(rounded: true))
             }
@@ -39,7 +39,7 @@ struct StampMapOptionsPopup: View {
     }
 
     private func option(_ title: String, image: String?, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); action() }) {
+        Button(action: { FotomarcoHaptics.play(.editor); action() }) {
             VStack(spacing: 8) {
                 Group {
                     if let image { Image(image).resizable().scaledToFill() }

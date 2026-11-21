@@ -17,11 +17,11 @@ struct GalleryQuickShare: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Button("Fechar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() }.frame(minHeight: 44)
+                Button("Fechar") { FotomarcoHaptics.play(.gallery); dismiss() }.frame(minHeight: 44)
                 Spacer()
                 Text(isVideo ? "Vídeo ampliado" : "Foto ampliada").font(.headline)
                 Spacer()
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); sharePresented = true } label: {
+                Button { FotomarcoHaptics.play(.gallery); sharePresented = true } label: {
                     GalleryShareIcon()
                 }.accessibilityLabel("Compartilhar").disabled(source == nil)
             }.padding(.horizontal, 16)

@@ -75,7 +75,7 @@ struct LiveRecognitionBanner: View {
     var body: some View {
         if let item = engine.item {
             Button {
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                FotomarcoHaptics.play(.buttons)
                 if item.kind == .qr, let url = RecognitionWebURL.parse(item.value) {
                     UIApplication.shared.open(url)
                 } else {

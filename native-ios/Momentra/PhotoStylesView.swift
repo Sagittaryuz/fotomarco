@@ -18,7 +18,7 @@ struct PhotoStylesView: View {
             .frame(maxHeight: 450)
             Text(candidate.detail).multilineTextAlignment(.center).frame(minHeight: 44).padding(.horizontal)
             Button {
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                FotomarcoHaptics.play(.editor)
                 selected = candidate.rawValue
                 dismiss()
             } label: {

@@ -52,7 +52,7 @@ struct CloudOfflinePreviews: View {
                         }
                     }
                     .navigationTitle("Prévia reduzida")
-                    .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); selected = nil } }
+                    .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); selected = nil } }
                 }
             }
         }

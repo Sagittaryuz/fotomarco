@@ -324,7 +324,7 @@ struct MomentraPhotoEditor: View {
     }
 
     private func lightEditorTap() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+        FotomarcoHaptics.play(.editor)
     }
 
     private func icon(_ image: String, label: String, action: @escaping () -> Void) -> some View {

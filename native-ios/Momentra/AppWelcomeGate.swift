@@ -111,7 +111,7 @@ struct AppWelcomeGate: View {
     }
 
     private func welcomeTap() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+        FotomarcoHaptics.play(.buttons)
     }
 
     private func signIn() {

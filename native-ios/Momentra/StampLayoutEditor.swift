@@ -71,7 +71,7 @@ struct StampLayoutEditor: View {
                 ForEach(0..<4, id: \.self) { index in
                     let corner = corners[index]
                     let selected = point.wrappedValue == corner.1
-                    Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); point.wrappedValue = corner.1 } label: {
+                    Button { FotomarcoHaptics.play(.editor); point.wrappedValue = corner.1 } label: {
                         RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.secondary, lineWidth: selected ? 2 : 1)
                             .frame(width: 36, height: 42)
                             .overlay(alignment: corner.2) {
@@ -90,7 +90,7 @@ struct StampLayoutEditor: View {
     }
 
     private func elementButton(_ element: Element) -> some View {
-        Button(element.rawValue) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); editingElement = element }
+        Button(element.rawValue) { FotomarcoHaptics.play(.editor); editingElement = element }
             .font(.caption.weight(.semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -112,14 +112,14 @@ struct StampLayoutEditor: View {
             HStack {
                 Menu {
                     ForEach(store.profiles) { item in
-                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.select(item.id) } label: {
+                        Button { FotomarcoHaptics.play(.editor); store.select(item.id) } label: {
                             if item.id == store.selectedID { Label(item.name, systemImage: "checkmark") }
                             else { Text(item.name) }
                         }
                     }
                     Divider()
-                    Button("Renomear perfil") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); draftName = store.selected.name; renameProfile = true }
-                    if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); confirmRemove = true } }
+                    Button("Renomear perfil") { FotomarcoHaptics.play(.editor); draftName = store.selected.name; renameProfile = true }
+                    if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { FotomarcoHaptics.play(.editor); confirmRemove = true } }
                 } label: {
                     Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square")
                         .font(.headline).lineLimit(1)
@@ -128,7 +128,7 @@ struct StampLayoutEditor: View {
                 }
                 Spacer()
                 Button {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.editor)
                     let wasSingle = store.profiles.count == 1
                     if store.create() { if wasSingle { chooseStartup = true } } else { showLimit = true }
                 } label: {
@@ -141,7 +141,7 @@ struct StampLayoutEditor: View {
             Picker("Modelo", selection: Binding(
                 get: { layout.wrappedValue.template },
                 set: { value in
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.editor)
                     var next = layout.wrappedValue; next.selectTemplate(value); layout.wrappedValue = next
                     editingElement = value == .original ? .map : .combined
                 }
@@ -170,7 +170,7 @@ struct StampLayoutEditor: View {
             Picker("Composição", selection: Binding(
                 get: { layout.wrappedValue.mode },
                 set: { value in
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.editor)
                     var next = layout.wrappedValue; next.mode = value; layout.wrappedValue = next
                 }
             )) {
@@ -205,8 +205,8 @@ struct StampLayoutEditor: View {
                     if template.usesLogo && (editingElement == .combined || editingElement == .logo) {
                         ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
                             Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo \(slot + 1)") {
-                                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = slot; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
-                                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = slot; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                                Button { FotomarcoHaptics.play(.editor); logoSlot = slot; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                                Button { FotomarcoHaptics.play(.editor); logoSlot = slot; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
                             }.disabled(logoLoading)
                         }
                     }
@@ -214,7 +214,7 @@ struct StampLayoutEditor: View {
                         Picker("Visualização do mapa", selection: Binding(
                             get: { layout.wrappedValue.mapStyle },
                             set: { value in
-                                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                                FotomarcoHaptics.play(.editor)
                                 var next = layout.wrappedValue; next.mapStyle = value; layout.wrappedValue = next
                             }
                         )) {
@@ -310,10 +310,10 @@ struct StampLayoutEditor: View {
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Voltar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() }.disabled(logoLoading)
+                Button("Voltar") { FotomarcoHaptics.play(.editor); dismiss() }.disabled(logoLoading)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
+                Button("Salvar") { FotomarcoHaptics.play(.editor); originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
             }
         }
     }
@@ -321,34 +321,34 @@ struct StampLayoutEditor: View {
     var body: some View {
         editorWithToolbar
         .alert("Fotomarco", isPresented: importAlertPresented) {
-            Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); importMessage = nil }
+            Button("OK", role: .cancel) { FotomarcoHaptics.play(.editor); importMessage = nil }
         } message: { Text(importMessage ?? "") }
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }
         .alert("Renomear perfil", isPresented: $renameProfile) {
             TextField("Nome", text: $draftName)
-            Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.rename(draftName) }
-            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            Button("Salvar") { FotomarcoHaptics.play(.editor); store.rename(draftName) }
+            Button("Cancelar", role: .cancel) { FotomarcoHaptics.play(.editor) }
         }
         .alert("Observação na foto", isPresented: $editNote) {
             TextField("Observação", text: $draftNote)
-            Button("Salvar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.setNote(draftNote) }
-            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            Button("Salvar") { FotomarcoHaptics.play(.editor); store.setNote(draftNote) }
+            Button("Cancelar", role: .cancel) { FotomarcoHaptics.play(.editor) }
         }
         .alert("Limite de perfis atingido", isPresented: $showLimit) {
-            Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            Button("OK", role: .cancel) { FotomarcoHaptics.play(.editor) }
         } message: { Text("Você pode criar até cinco perfis de carimbo.") }
         .confirmationDialog("Qual perfil deve abrir com o aplicativo?", isPresented: $chooseStartup, titleVisibility: .visible) {
-            Button("Usar o último perfil") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.setStartup("last") }
+            Button("Usar o último perfil") { FotomarcoHaptics.play(.editor); store.setStartup("last") }
             ForEach(store.profiles) { item in
                 Button("Sempre abrir com \(item.name.isEmpty ? "Sem nome" : item.name)") {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.editor)
                     store.setStartup(item.id.uuidString)
                 }
             }
         } message: { Text("Você poderá alterar essa escolha nas configurações.") }
         .confirmationDialog("Apagar este perfil?", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Apagar perfil", role: .destructive) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); store.removeSelected() }
-            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            Button("Apagar perfil", role: .destructive) { FotomarcoHaptics.play(.editor); store.removeSelected() }
+            Button("Cancelar", role: .cancel) { FotomarcoHaptics.play(.editor) }
         } message: { Text("As fotos existentes não serão alteradas.") }
     }
 
@@ -377,14 +377,14 @@ struct StampLayoutEditor: View {
                         Toggle("Texto compacto", isOn: flag(\.compact))
                         Toggle("Incluir endereço", isOn: flag(\.showsAddress))
                         Toggle("Incluir previsão do tempo", isOn: flag(\.showsForecast))
-                        Button("Observação") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); draftNote = store.selected.note; editNote = true }
+                        Button("Observação") { FotomarcoHaptics.play(.editor); draftNote = store.selected.note; editNote = true }
                     }
                     Toggle("Mostrar informações", isOn: flag(\.showsInformation)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 case .logo:
                     Menu("Escolher") {
-                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = 0; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
-                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); logoSlot = 0; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
+                        Button { FotomarcoHaptics.play(.editor); logoSlot = 0; showPhotoPicker = true } label: { Label("Fotos", systemImage: "photo") }
+                        Button { FotomarcoHaptics.play(.editor); logoSlot = 0; importLogo = true } label: { Label("Arquivos", systemImage: "folder") }
                     }.disabled(logoLoading)
                     Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))

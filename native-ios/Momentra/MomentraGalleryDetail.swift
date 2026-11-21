@@ -91,7 +91,7 @@ struct MomentraGalleryDetail: View {
         }
         .alert("Fotomarco", isPresented: Binding(get: { message != nil && panel == nil },
                                                 set: { if !$0, panel == nil { message = nil } })) {
-            Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
+            Button("OK") { FotomarcoHaptics.play(.gallery); message = nil }
         } message: { Text(message ?? "") }
     }
 
@@ -142,11 +142,11 @@ struct MomentraGalleryDetail: View {
 
     private func grouped(_ name: String, label: String, tint: Color = .primary,
                          action: @escaping () -> Void) -> some View {
-        Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); action() }) { icon(name).foregroundStyle(tint) }.accessibilityLabel(label)
+        Button(action: { FotomarcoHaptics.play(.gallery); action() }) { icon(name).foregroundStyle(tint) }.accessibilityLabel(label)
     }
 
     private func button(_ name: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); action() }) { icon(name).modifier(GalleryControlSurface(rounded: true)) }
+        Button(action: { FotomarcoHaptics.play(.gallery); action() }) { icon(name).modifier(GalleryControlSurface(rounded: true)) }
             .buttonStyle(.plain).accessibilityLabel(label)
     }
 
@@ -161,7 +161,7 @@ struct MomentraGalleryDetail: View {
                 GalleryItemInformation(item: item)
                     .navigationTitle("Informações")
                     .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); panel = nil } }
+                    .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); panel = nil } }
             }
         case .edit:
             if item.isVideo {
@@ -196,7 +196,7 @@ struct MomentraGalleryDetail: View {
             NavigationStack {
                 GalleryLoadedText(item: item)
                     .navigationTitle("Texto da foto").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); panel = nil } }
+                    .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); panel = nil } }
             }
         }
     }
@@ -311,17 +311,17 @@ private struct GalleryItemStamp: View {
                     Text(profile.name.isEmpty ? "Sem nome" : profile.name).tag(Optional(profile.id))
                 }
             }
-            Button("Adicionar carimbo em uma cópia") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); save() }
+            Button("Adicionar carimbo em uma cópia") { FotomarcoHaptics.play(.gallery); save() }
                 .disabled(saving || item.date == nil || profileID == nil)
             if saving { ProgressView("Aplicando carimbo…") }
             if item.date == nil { Text("A data da foto não está disponível.").font(.footnote) }
         }
         .onAppear { profileID = item.profile?.id ?? profiles.first?.id }
         .navigationTitle("Adicionar carimbo").navigationBarTitleDisplayMode(.inline)
-        .toolbar { Button("Cancelar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() }.disabled(saving) }
+        .toolbar { Button("Cancelar") { FotomarcoHaptics.play(.gallery); dismiss() }.disabled(saving) }
         .interactiveDismissDisabled(saving)
         .alert("Não foi possível criar a cópia com carimbo", isPresented: $failed) {
-            Button("OK", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            Button("OK", role: .cancel) { FotomarcoHaptics.play(.gallery) }
         }
     }
 

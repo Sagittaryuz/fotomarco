@@ -124,7 +124,7 @@ struct OriginalsView: View {
                 .frame(height: storageBandHeight)
                 .clipped()
             if cloudError, origin != .local {
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); cloudRefresh += 1 } label: {
+                Button { FotomarcoHaptics.play(.gallery); cloudRefresh += 1 } label: {
                     Label("Algumas contas estão indisponíveis. Tentar novamente", systemImage: "arrow.clockwise")
                         .font(.caption).lineLimit(2)
                 }
@@ -157,7 +157,7 @@ struct OriginalsView: View {
             if selecting {
                 GallerySelectionBar(count: selected.count, busy: busy,
                                     review: { pane = .selection }, delete: { confirmBatch = true }) {
-                    Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); shareSelection(items) } label: { GalleryShareIcon() }
+                    Button { FotomarcoHaptics.play(.gallery); shareSelection(items) } label: { GalleryShareIcon() }
                 }
             }
         }
@@ -235,13 +235,13 @@ struct OriginalsView: View {
             }
         }
         .confirmationDialog("Mover a seleção para a lixeira?", isPresented: $confirmBatch, titleVisibility: .visible) {
-            Button("Mover para a lixeira", role: .destructive) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); trashSelection(items) }
-            Button("Cancelar", role: .cancel) { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+            Button("Mover para a lixeira", role: .destructive) { FotomarcoHaptics.play(.gallery); trashSelection(items) }
+            Button("Cancelar", role: .cancel) { FotomarcoHaptics.play(.gallery) }
         } message: {
             Text("A cópia exibida de cada foto vai para a lixeira da sua origem. As demais cópias continuam disponíveis.")
         }
         .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-            Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
+            Button("OK") { FotomarcoHaptics.play(.gallery); message = nil }
         } message: { Text(message ?? "") }
     }
 
@@ -250,7 +250,7 @@ struct OriginalsView: View {
     private func header(total: Int, latest: Date?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); closeGallery(toward: .down) } label: {
+                Button { FotomarcoHaptics.play(.gallery); closeGallery(toward: .down) } label: {
                     Image(systemName: "chevron.down").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }.accessibilityLabel("Fechar galeria")
@@ -273,7 +273,7 @@ struct OriginalsView: View {
                 Spacer()
                 if tab != .trash, total > 0 {
                     Button {
-                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                        FotomarcoHaptics.play(.gallery)
                         if selecting { resetSelection() } else { selecting = true }
                     } label: {
                         Text(selecting ? "Cancelar" : "Selecionar").font(.subheadline.weight(.semibold))
@@ -289,13 +289,13 @@ struct OriginalsView: View {
 
     private var originMenu: some View {
         Menu {
-            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); origin = nil } label: { menuLabel("Todos", active: origin == nil) }
+            Button { FotomarcoHaptics.play(.gallery); origin = nil } label: { menuLabel("Todos", active: origin == nil) }
             ForEach(GalleryOrigin.allCases) { source in
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); origin = source } label: { menuLabel(source.title, active: origin == source) }
+                Button { FotomarcoHaptics.play(.gallery); origin = source } label: { menuLabel(source.title, active: origin == source) }
             }
             if authorization == .notDetermined {
                 Button("Permitir acesso ao Fotos") {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.gallery)
                     Task { _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite); reloadVersion += 1 }
                 }
             } else if authorization == .denied || authorization == .restricted {
@@ -311,9 +311,9 @@ struct OriginalsView: View {
 
     private var profileMenu: some View {
         Menu {
-            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); profile = nil } label: { menuLabel("Todos os perfis", active: profile == nil) }
+            Button { FotomarcoHaptics.play(.gallery); profile = nil } label: { menuLabel("Todos os perfis", active: profile == nil) }
             ForEach(stampProfiles.profiles) { item in
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); profile = item.id } label: {
+                Button { FotomarcoHaptics.play(.gallery); profile = item.id } label: {
                     menuLabel(item.name.isEmpty ? "Sem nome" : item.name, active: profile == item.id)
                 }
             }
@@ -341,7 +341,7 @@ struct OriginalsView: View {
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { choice in
                     Button {
-                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                        FotomarcoHaptics.play(.gallery)
                         if tab == choice { scrollRequest += 1 }
                         else { tab = choice }
                     } label: {
@@ -359,7 +359,7 @@ struct OriginalsView: View {
                 }
             }
             .padding(5).modifier(GalleryControlSurface(rounded: true, interactive: false))
-            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); pane = .search } label: {
+            Button { FotomarcoHaptics.play(.gallery); pane = .search } label: {
                 Image(systemName: "magnifyingglass").font(.title3.weight(.medium))
                     .frame(width: 54, height: 54)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
@@ -418,15 +418,15 @@ struct OriginalsView: View {
                         .font(.footnote)
                 } else { Text("Consulte o prazo na lixeira do provedor.").font(.footnote) }
                 if item.canRestore {
-                    Button("Restaurar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); restore(item) }.buttonStyle(.borderedProminent)
+                    Button("Restaurar") { FotomarcoHaptics.play(.gallery); restore(item) }.buttonStyle(.borderedProminent)
                         .tint(.yellow).foregroundStyle(.black).disabled(busy)
                 }
             }.padding()
                 .navigationTitle("Lixeira")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); trashItem = nil }.disabled(busy) }
+                .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); trashItem = nil }.disabled(busy) }
                 .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-                    Button("OK") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); message = nil }
+                    Button("OK") { FotomarcoHaptics.play(.gallery); message = nil }
                 } message: { Text(message ?? "") }
         }
         .interactiveDismissDisabled(busy)

@@ -9,7 +9,7 @@ struct PhotoAspectPanel: View {
             ZStack {
                 Text("PROPORÇÃO").font(.subheadline.weight(.medium)).tracking(1.2)
                 HStack {
-                    Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); close() }) {
+                    Button(action: { FotomarcoHaptics.play(.buttons); close() }) {
                         Image(systemName: "chevron.left").font(.headline)
                             .frame(width: 44, height: 44)
                             .modifier(GalleryControlSurface(rounded: true))
@@ -24,7 +24,7 @@ struct PhotoAspectPanel: View {
             HStack(spacing: 0) {
                 ForEach(PhotoAspect.allCases, id: \.rawValue) { aspect in
                     Button {
-                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                        FotomarcoHaptics.play(.buttons)
                         withAnimation(.easeInOut(duration: 0.2)) { selection = aspect.rawValue }
                     } label: {
                         ZStack {

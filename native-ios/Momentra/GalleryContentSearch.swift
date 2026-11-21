@@ -62,12 +62,12 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
                     Label("Buscas recentes", systemImage: "clock")
                         .font(.headline).accessibilityAddTraits(.isHeader)
                     Spacer()
-                    Button("Limpar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); recentData = Data() }
+                    Button("Limpar") { FotomarcoHaptics.play(.gallery); recentData = Data() }
                         .foregroundStyle(.yellow)
                 }
                 ForEach(recent, id: \.self) { value in
                     Button {
-                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                        FotomarcoHaptics.play(.gallery)
                         query = value
                         submit()
                     } label: {
@@ -115,7 +115,7 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
                     ForEach(shown) { item in
                         Button {
-                            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                            FotomarcoHaptics.play(.gallery)
                             searchFocused = false
                             onOpen(item)
                         } label: {
@@ -146,7 +146,7 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
                     .accessibilityIdentifier("gallery-content-search-field")
                 if !query.isEmpty {
                     Button {
-                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                        FotomarcoHaptics.play(.gallery)
                         query = ""
                         searchFocused = true
                     } label: {
@@ -163,7 +163,7 @@ struct GalleryContentSearch<Item: Identifiable, Tile: View>: View {
             .modifier(GalleryControlSurface(rounded: true, interactive: false))
 
             Button {
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                FotomarcoHaptics.play(.gallery)
                 searchFocused = false
                 dismiss()
             } label: {

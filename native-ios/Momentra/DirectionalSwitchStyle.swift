@@ -24,7 +24,7 @@ struct DirectionalSwitchStyle: ToggleStyle {
             .labelsHidden()
             .fixedSize(horizontal: true, vertical: false)
             .onChange(of: configuration.isOn) { _, _ in
-                if isEnabled { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+                if isEnabled { FotomarcoHaptics.play(.switches) }
             }
             .simultaneousGesture(DragGesture(minimumDistance: 10).onEnded { value in
                 let distance = value.translation

@@ -133,7 +133,7 @@ struct CameraScreen: View {
     private var normalCameraHeader: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); cycleFlash() } label: {
+                Button { FotomarcoHaptics.play(.buttons); cycleFlash() } label: {
                     Image(systemName: camera.flashMode == .off ? "bolt.slash.fill" : camera.flashMode == .auto ? "bolt.badge.a" : "bolt.fill")
                         .font(.title2).foregroundStyle(camera.flashMode == .off ? Color.white : Color.yellow)
                         .frame(width: 44, height: 44)
@@ -143,9 +143,9 @@ struct CameraScreen: View {
                 .accessibilityValue(camera.flashMode == .off ? "Desativado" : camera.flashMode == .auto ? "Automático" : "Ativado")
 
                 Menu {
-                    Button("Desligado") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); timerSeconds = 0 }
-                    Button("3 segundos") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); timerSeconds = 3 }
-                    Button("10 segundos") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); timerSeconds = 10 }
+                    Button("Desligado") { FotomarcoHaptics.play(.buttons); timerSeconds = 0 }
+                    Button("3 segundos") { FotomarcoHaptics.play(.buttons); timerSeconds = 3 }
+                    Button("10 segundos") { FotomarcoHaptics.play(.buttons); timerSeconds = 10 }
                 } label: {
                     VStack(spacing: 0) {
                         Image(systemName: "timer").font(.title2)
@@ -157,7 +157,7 @@ struct CameraScreen: View {
 
                 Spacer(minLength: 4)
                 Button {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.buttons)
                     setSupportPanel(true)
                 } label: {
                     MomentraWordmark()
@@ -173,7 +173,7 @@ struct CameraScreen: View {
                 Spacer(minLength: 4)
 
                 Button {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.buttons)
                     withAnimation(.easeInOut(duration: 0.22)) { showAspectPanel.toggle() }
                 } label: {
                     Text(photoAspect).font(.system(size: 17, weight: .semibold)).monospacedDigit().frame(width: 44, height: 44)
@@ -181,7 +181,7 @@ struct CameraScreen: View {
                 .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                 .accessibilityLabel("Proporção da foto")
 
-                Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showSettings = true } label: {
+                Button { FotomarcoHaptics.play(.buttons); showSettings = true } label: {
                     Image(systemName: "gearshape.fill").font(.title2)
                         .frame(width: 44, height: 44)
                         .overlay(alignment: .topTrailing) {
@@ -209,7 +209,7 @@ struct CameraScreen: View {
             if let version = updates.availableVersion {
                 Button {
                     if directUpdate.ready { requestUpdate(version, fromBanner: true) }
-                    else { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showSettings = true }
+                    else { FotomarcoHaptics.play(.buttons); showSettings = true }
                 } label: {
                     Text(directUpdate.busy ? "Preparando atualização…" : "Atualização \(version) disponível")
                         .font(.caption.bold()).padding(.horizontal, 12).frame(minHeight: 44)
@@ -231,7 +231,7 @@ struct CameraScreen: View {
             HStack(spacing: 0) {
                 ForEach(CaptureMode.allCases.reversed(), id: \.self) { value in
                     Button {
-                        if mode == value { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) }
+                        if mode == value { FotomarcoHaptics.play(.buttons) }
                         mode = value
                     } label: {
                         Text(value.rawValue).font(.subheadline.weight(.medium))
@@ -460,7 +460,7 @@ struct CameraScreen: View {
                         )
                         Spacer(minLength: 0)
                         Button {
-                            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                            FotomarcoHaptics.play(.buttons)
                             mapLocation = makeSnapshot(at: Date()).location
                             showMap = true
                         } label: {
@@ -496,7 +496,7 @@ struct CameraScreen: View {
                         Color.clear.frame(height: 190)
                     } else {
                     HStack(spacing: 10) {
-                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); openGallery() } label: {
+                        Button { FotomarcoHaptics.play(.buttons); openGallery() } label: {
                             Group {
                                 if let galleryThumbnail {
                                     Image(uiImage: galleryThumbnail.image).resizable().scaledToFill()
@@ -522,7 +522,7 @@ struct CameraScreen: View {
                         Spacer(minLength: 0)
                         captureModePicker
                         Spacer(minLength: 0)
-                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); camera.flipCamera() } label: {
+                        Button { FotomarcoHaptics.play(.cameraFlip); camera.flipCamera() } label: {
                             Image(systemName: "camera.rotate").font(.title2).frame(width: 52, height: 52)
                                 .background(.white.opacity(0.10), in: Circle())
                         }
@@ -670,7 +670,7 @@ struct CameraScreen: View {
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+            FotomarcoHaptics.play(.mode)
             refreshAddress()
             modeTransitionTask?.cancel()
             guard !reduceMotion else { modeTransitionBlur = false; return }
@@ -686,7 +686,7 @@ struct CameraScreen: View {
             guard cameraSurfaceVisible, camera.ready, (old * 10).rounded() != (new * 10).rounded(),
                   now - lastZoomHaptic >= 0.1 else { return }
             lastZoomHaptic = now
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+            FotomarcoHaptics.play(.zoom)
         }
         .onChange(of: showSettings) { _, _ in refreshAddress() }
         .onChange(of: showOriginals) { _, showing in refreshAddress(); if !showing { refreshGalleryThumbnail() } }
@@ -706,7 +706,7 @@ struct CameraScreen: View {
             }
         }
         .onReceive(camera.capturedPhoto) { _ in
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+            FotomarcoHaptics.play(.photo)
             showShutterFeedback()
         }
         .onReceive(camera.completedPhoto) { showCapturedPhoto($0) }
@@ -767,7 +767,7 @@ struct CameraScreen: View {
                             HStack(spacing: 6) {
                                 ForEach(StampLayout.MapAppearance.allCases, id: \.self) { appearance in
                                     Button {
-                                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                                        FotomarcoHaptics.play(.buttons)
                                         mapAppearance = appearance
                                     } label: {
                                         Text(appearance == .map ? "Mapa" : "Satélite")
@@ -792,7 +792,7 @@ struct CameraScreen: View {
                 }
                 .navigationTitle("Mapa")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showMap = false } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { FotomarcoHaptics.play(.buttons); showMap = false } } }
             }
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
@@ -809,7 +809,7 @@ struct CameraScreen: View {
     private func shareCameraThumbnail() {
         guard let thumbnail = galleryThumbnail, cameraSurfaceVisible, cameraShareTask == nil, cameraShare == nil,
               !camera.isRecording, !camera.isFinishingRecording, !camera.isCapturing, countdown == 0 else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.4)
+        FotomarcoHaptics.play(.quickShare)
         cameraShareTask = Task {
             defer { cameraShareTask = nil }
             do {
@@ -857,7 +857,7 @@ struct CameraScreen: View {
 
     private func requestUpdate(_ version: String, fromBanner: Bool = false) {
         guard !directUpdate.busy else { return }
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+        FotomarcoHaptics.play(.buttons)
         Task {
             await directUpdate.install(expectedVersion: version) {
                 UpdateCloseReadiness.allowsClose(capturing: camera.isCapturing, switching: camera.isSwitching,
@@ -877,14 +877,14 @@ struct CameraScreen: View {
 
     private var archiveSettingsSection: some View {
         Section("Armazenamento e contas") {
-            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); connectArchive(.googleDrive) } label: {
+            Button { FotomarcoHaptics.play(.buttons); connectArchive(.googleDrive) } label: {
                 Label {
                     Text("Adicionar conta Google Drive")
                 } icon: {
                     Image("GoogleDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
                 }
             }.disabled(connectingArchive)
-            Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); connectArchive(.oneDrive) } label: {
+            Button { FotomarcoHaptics.play(.buttons); connectArchive(.oneDrive) } label: {
                 Label {
                     Text("Adicionar OneDrive ou Microsoft 365")
                 } icon: {
@@ -932,7 +932,7 @@ struct CameraScreen: View {
                     archiveSettingsSection
                     Section("Ajustes da câmera") {
                         NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
-                            .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) })
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         Toggle("Escanear QR Codes", isOn: $scanQR)
                         Toggle("Mostrar Texto Detectado", isOn: $scanText)
                         Text("QR Codes e textos são reconhecidos automaticamente na prévia. Toque no resultado para abrir ou selecionar.")
@@ -942,18 +942,22 @@ struct CameraScreen: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }
+                    Section("Preferências") {
+                        NavigationLink("Vibrações") { HapticSettingsView() }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                    }
                     Section("Composição") {
                         Toggle("Grade", isOn: $showGrid)
                     }
                     Section("Aparência") {
                         NavigationLink("Ícone do aplicativo") { AppIconPicker() }
-                            .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) })
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     Section("Carimbo") {
                         NavigationLink("Layout e perfis") {
                             StampLayoutEditor(store: stampProfiles)
                         }
-                        .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2) })
+                        .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         if stampProfiles.profiles.count > 1 {
                             Picker("Perfil ao abrir o app", selection: Binding(
                                 get: { stampProfiles.startupSelection },
@@ -982,7 +986,7 @@ struct CameraScreen: View {
                             }
                         }
                         Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
-                            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                            FotomarcoHaptics.play(.buttons)
                             Task { await updates.check() }
                         }.disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
@@ -997,7 +1001,7 @@ struct CameraScreen: View {
                 }
                 .toggleStyle(DirectionalSwitchStyle())
                 .navigationTitle("Configurações")
-                .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showSettings = false } }
+                .toolbar { Button("Concluído") { FotomarcoHaptics.play(.buttons); showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
                     get: { archiveConnectionError != nil },
                     set: { if !$0 { archiveConnectionError = nil } }
@@ -1275,7 +1279,7 @@ struct CameraScreen: View {
     }
 
     private func openStampEditor(_ section: StampLayoutEditor.Element) {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+        FotomarcoHaptics.play(.buttons)
         stampEditorSection = section
     }
 
@@ -1383,7 +1387,7 @@ struct CameraScreen: View {
 
     private func stopVideoWithFeedback() {
         guard camera.isRecording, !camera.isFinishingRecording else { return }
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+        FotomarcoHaptics.play(.stopVideo)
         camera.stopRecording()
     }
 

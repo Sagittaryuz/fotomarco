@@ -33,7 +33,7 @@ struct AppIconPicker: View {
                 .font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(choices) { choice in
-                    Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); choose(choice) } label: {
+                    Button { FotomarcoHaptics.play(.buttons); choose(choice) } label: {
                         VStack(spacing: 7) {
                             Image(choice.preview).resizable().scaledToFit()
                                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))

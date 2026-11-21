@@ -227,7 +227,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             return CGSize(width: width, height: max(44, ceil(height) + 20))
         }
         func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+            FotomarcoHaptics.play(.gallery)
             let item = parent.groups[indexPath.section].items[indexPath.item]
             if parent.selecting {
                 parent.selected.insert(item.id)
@@ -239,7 +239,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         }
         func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath) {
             guard parent.selecting else { return }
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+            FotomarcoHaptics.play(.gallery)
             parent.selected.remove(parent.groups[indexPath.section].items[indexPath.item].id)
             (collectionView.cellForItem(at: indexPath) as? GallerySelectionCell)?.showSelected(false)
         }

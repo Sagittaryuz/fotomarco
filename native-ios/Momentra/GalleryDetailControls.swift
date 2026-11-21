@@ -10,7 +10,7 @@ struct GalleryDetailHeader<Actions: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); close() }) {
+            Button(action: { FotomarcoHaptics.play(.gallery); close() }) {
                 Image(systemName: "chevron.left").font(.body.weight(.semibold))
                     .frame(width: 44, height: 44)
                     .modifier(GalleryControlSurface(rounded: true, tint: .yellow))
@@ -31,7 +31,7 @@ struct GalleryDetailHeader<Actions: View>: View {
             .accessibilityHint("\(position) de \(count)")
             Spacer(minLength: 0)
             if let overview {
-                Button(action: { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); overview() }) {
+                Button(action: { FotomarcoHaptics.play(.gallery); overview() }) {
                     Image(systemName: "square.grid.3x3").frame(width: 44, height: 44)
                         .modifier(GalleryControlSurface(rounded: true))
                 }
@@ -72,7 +72,7 @@ struct GalleryTrashButton: View {
     @State private var showingConfirmation = false
 
     var body: some View {
-        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); showingConfirmation = true } label: {
+        Button { FotomarcoHaptics.play(.gallery); showingConfirmation = true } label: {
             Image(systemName: "trash").frame(width: 44, height: 44)
                 .modifier(GalleryControlSurface(rounded: true))
         }
@@ -85,7 +85,7 @@ struct GalleryTrashButton: View {
                 Text(message).font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(role: .destructive) {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2)
+                    FotomarcoHaptics.play(.gallery)
                     showingConfirmation = false
                     confirm()
                 } label: {
@@ -117,7 +117,7 @@ struct GalleryDetailGrid<Item: Identifiable, Tile: View>: View {
             })
             .navigationTitle("Nesta galeria")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Concluído") { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); dismiss() } }
+            .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); dismiss() } }
         }
     }
 }
@@ -134,7 +134,7 @@ struct GalleryFilmstrip<Item: Identifiable, Tile: View>: View {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 5) {
                     ForEach(items) { item in
-                        Button { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.2); selection = item.id } label: {
+                        Button { FotomarcoHaptics.play(.gallery); selection = item.id } label: {
                             tile(item)
                                 .frame(width: 40, height: 44).clipped()
                                 .clipShape(RoundedRectangle(cornerRadius: 5))
