@@ -3,9 +3,10 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.41"
+    static let version = "0.1.42"
     static let items = [
-        "O mapa prepara agrupamentos por aproximação e reaproveita os dados armazenados no aparelho."
+        "A grade mantém sua posição ao iniciar ou encerrar a seleção de fotos.",
+        "Os cabeçalhos de Capturas, Favoritos, Mapa e Lixeira usam o mesmo alinhamento."
     ]
 
     static func items(for version: String) -> [String] {

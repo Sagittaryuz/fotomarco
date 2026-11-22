@@ -143,23 +143,23 @@ struct OriginalsView: View {
                 } else {
                     GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
                                 contentVersion: projectionVersion, newestScrollRequest: scrollRequest,
-                                bottomInset: selecting ? 0 : galleryFooterHeight,
+                                bottomInset: galleryFooterHeight,
                                 tile: tile, open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
                                 reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
                                 dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) },
                                 userStartedScrolling: { openedAtNewest = false })
                         .accessibilityIdentifier("momentra-gallery-grid")
                 }
-                if !selecting {
+                if selecting {
+                    GallerySelectionBar(count: selected.count, busy: busy,
+                                        review: { pane = .selection }, delete: { confirmBatch = true }) {
+                        Button { FotomarcoHaptics.play(.gallery); shareSelection(items) } label: { GalleryShareIcon() }
+                    }
+                    .zIndex(1)
+                } else {
                     footer
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { galleryFooterHeight = $0 }
                         .zIndex(1)
-                }
-            }
-            if selecting {
-                GallerySelectionBar(count: selected.count, busy: busy,
-                                    review: { pane = .selection }, delete: { confirmBatch = true }) {
-                    Button { FotomarcoHaptics.play(.gallery); shareSelection(items) } label: { GalleryShareIcon() }
                 }
             }
         }
@@ -271,11 +271,10 @@ struct OriginalsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(total == 1 ? "1 item" : "\(total.formatted()) itens")
                         .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    if let latest {
-                        Text((Calendar.current.isDateInToday(latest) ? "Hoje · " : "") +
-                             latest.formatted(date: .abbreviated, time: .omitted))
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
+                    Text(latest.map { (Calendar.current.isDateInToday($0) ? "Hoje · " : "") +
+                         $0.formatted(date: .abbreviated, time: .omitted) } ?? " ")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .accessibilityHidden(latest == nil)
                 }
                 Spacer()
                 if tab != .trash, tab != .map, total > 0 {
@@ -288,7 +287,7 @@ struct OriginalsView: View {
                             .modifier(GalleryControlSurface(rounded: true))
                     }.disabled(busy)
                 }
-            }
+            }.frame(minHeight: 42)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 13).padding(.top, 8).padding(.bottom, 5)
