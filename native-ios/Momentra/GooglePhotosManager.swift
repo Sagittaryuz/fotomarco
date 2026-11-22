@@ -68,7 +68,7 @@ final class GooglePhotosManager: ObservableObject {
         cloudPhotos = []; cloudNextPage = nil; cloudLoaded = false; cloudError = nil
         pendingCloudCaptures = 0; cloudNeedsAttention = false
         objectWillChange.send()
-        message = "Conta desconectada do Fotomarco. Fotos e permissões na conta Google não foram apagadas."
+        message = "Conta desconectada do Photomark. Fotos e permissões na conta Google não foram apagadas."
     }
 
     func loadCloudPhotos(nextPage: Bool = false) {

@@ -29,7 +29,7 @@ struct CloudPhotoGallery: View {
                 ContentUnavailableView("Google Fotos indisponível", systemImage: "cloud", description: Text("A conexão Google ainda não foi configurada nesta versão."))
             } else if !googlePhotos.connected {
                 ScrollView {
-                    ContentUnavailableView("Conecte o Google Fotos", systemImage: "cloud", description: Text("Conecte sua conta em Ajustes do Fotomarco para acessar os originais na nuvem."))
+                    ContentUnavailableView("Conecte o Google Fotos", systemImage: "cloud", description: Text("Conecte sua conta em Ajustes do Photomark para acessar os originais na nuvem."))
                     if let ownerHash = CloudStoragePreference.selectedHash(),
                        googlePhotos.ownerID == nil || googlePhotos.ownerID.map({ CloudCaptureQueue.ownerHash($0) == ownerHash }) == true {
                         CloudOfflinePreviews(ownerHash: ownerHash, columnCount: columnCount, profiles: profileLookup)
@@ -53,7 +53,7 @@ struct CloudPhotoGallery: View {
                                 .buttonStyle(.bordered).disabled(picker.busy || googlePhotos.busy)
                         }
                         if picker.busy { ProgressView("Preparando seleção…").padding() }
-                        Text("Aqui aparecem fotos pessoais criadas pelo Fotomarco no Google Fotos. Outras fotos da sua conta não aparecem nesta lista.")
+                        Text("Aqui aparecem fotos pessoais criadas pelo Photomark no Google Fotos. Outras fotos da sua conta não aparecem nesta lista.")
                             .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                         if googlePhotos.busy { ProgressView().padding() }
                         if let error = googlePhotos.cloudError {
@@ -64,7 +64,7 @@ struct CloudPhotoGallery: View {
                             }
                         }
                         if googlePhotos.cloudLoaded && googlePhotos.cloudPhotos.isEmpty {
-                            ContentUnavailableView("Nenhuma foto criada pelo Fotomarco", systemImage: "photo.on.rectangle")
+                            ContentUnavailableView("Nenhuma foto criada pelo Photomark", systemImage: "photo.on.rectangle")
                         }
                     }.padding(.vertical, 8)
                     if !groups.isEmpty {

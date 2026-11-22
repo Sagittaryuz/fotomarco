@@ -29,7 +29,7 @@ struct PhotoStylesView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            Text("Efeitos aplicados à cópia fotografada pelo Fotomarco. O original é preservado.")
+            Text("Efeitos aplicados à cópia fotografada pelo Photomark. O original é preservado.")
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
         }
         .padding(.vertical)

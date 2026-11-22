@@ -349,7 +349,7 @@ struct GalleryStorageSummary: View {
                     }.background(.secondary.opacity(0.22), in: Capsule()).clipShape(Capsule())
                 }.frame(height: 8)
                 HStack(spacing: 12) {
-                    legend(cloud ? "Google Drive" : "Fotomarco (aprox.)", color: cloud ? .blue : .green, bytes: totals.primary)
+                    legend(cloud ? "Google Drive" : "Photomark (aprox.)", color: cloud ? .blue : .green, bytes: totals.primary)
                     legend(cloud ? "Outros serviços" : "Outros dados", color: cloud ? .teal : .mint, bytes: totals.other)
                 }
                 HStack {
@@ -384,7 +384,7 @@ struct GalleryStorageSummary: View {
         .sheet(isPresented: $showDetails) {
             if let totals = cloud ? google.totals : local { StorageDetailView(totals: totals, cloud: cloud) }
         }
-        .confirmationDialog("Para mostrar o espaço disponível, o Fotomarco consultará o armazenamento compartilhado da conta Google usando acesso limitado aos dados do aplicativo no Google Drive.", isPresented: $confirmAccess, titleVisibility: .visible) {
+        .confirmationDialog("Para mostrar o espaço disponível, o Photomark consultará o armazenamento compartilhado da conta Google usando acesso limitado aos dados do aplicativo no Google Drive.", isPresented: $confirmAccess, titleVisibility: .visible) {
             Button("Continuar") { google.requestAccess() }
             Button("Cancelar", role: .cancel) {}
         }
@@ -561,7 +561,7 @@ private struct StorageDetailView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     VStack(spacing: 0) {
-                        row(cloud ? "Google Drive" : "Fotomarco (aproximado)", value: format(totals.primary),
+                        row(cloud ? "Google Drive" : "Photomark (aproximado)", value: format(totals.primary),
                             symbol: cloud ? "folder.fill" : "camera.fill", color: cloud ? .blue : .green)
                         Divider().padding(.leading, 52)
                         row(cloud ? "Outros serviços" : "Outros dados", value: format(totals.other),

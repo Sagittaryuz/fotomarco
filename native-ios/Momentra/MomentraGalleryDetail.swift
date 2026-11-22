@@ -89,7 +89,7 @@ struct MomentraGalleryDetail: View {
         .sheet(item: $panel) { route in
             if let current { sheet(route, item: current) }
         }
-        .alert("Fotomarco", isPresented: Binding(get: { message != nil && panel == nil },
+        .alert("Photomark", isPresented: Binding(get: { message != nil && panel == nil },
                                                 set: { if !$0, panel == nil { message = nil } })) {
             Button("OK") { FotomarcoHaptics.play(.gallery); message = nil }
         } message: { Text(message ?? "") }

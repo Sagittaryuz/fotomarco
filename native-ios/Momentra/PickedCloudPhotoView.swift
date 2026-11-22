@@ -32,7 +32,7 @@ struct PickedCloudPhotoView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); dismiss() } }
             .onAppear { load() }
-            .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+            .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }
             } message: { Text(message ?? "") }
         }

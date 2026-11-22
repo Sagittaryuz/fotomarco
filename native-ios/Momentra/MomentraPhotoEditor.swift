@@ -79,7 +79,7 @@ struct MomentraPhotoEditor: View {
             Button("Descartar", role: .destructive) { dismiss() }
             Button("Continuar editando", role: .cancel) {}
         }
-        .alert("Editor Fotomarco", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+        .alert("Editor Photomark", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
     }
@@ -91,7 +91,7 @@ struct MomentraPhotoEditor: View {
                     .buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.primary)
                     .disabled(saving)
                 Spacer()
-                Text("Editor Fotomarco").font(.headline).accessibilityAddTraits(.isHeader)
+                Text("Editor Photomark").font(.headline).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button("Salvar cópia") { lightEditorTap(); save() }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).tint(.yellow).foregroundStyle(.black)

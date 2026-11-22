@@ -132,7 +132,7 @@ struct CameraScreen: View {
     @AppStorage("native.profile.hamoa.note") private var hamoaNote = ""
     @AppStorage("native.profile.piresco.title") private var pirescoTitle = "PIRESCO ENGENHARIA"
     @AppStorage("native.profile.piresco.note") private var pirescoNote = ""
-    @AppStorage("native.profile.pessoal.title") private var pessoalTitle = "FOTOMARCO"
+    @AppStorage("native.profile.pessoal.title") private var pessoalTitle = "PHOTOMARK"
     @AppStorage("native.profile.pessoal.note") private var pessoalNote = ""
     @AppStorage("native.profile.hamoa.logo") private var hamoaLogo = ""
     @AppStorage("native.profile.piresco.logo") private var pirescoLogo = ""
@@ -863,7 +863,7 @@ struct CameraScreen: View {
         .sheet(item: $cameraShare) { batch in
             batch.sheet {}
         }
-        .alert("Atualização do Fotomarco", isPresented: $showUpdateMessage) {
+        .alert("Atualização do Photomark", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(directUpdate.message ?? "")
@@ -921,7 +921,7 @@ struct CameraScreen: View {
                 .presentationDetents([.fraction(0.55), .large])
                 .presentationDragIndicator(.visible)
         }
-        .alert("Fotomarco", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
+        .alert("Photomark", isPresented: Binding(get: { camera.errorMessage != nil }, set: { if !$0 { camera.clearError() } })) {
             Button("OK") { camera.clearError() }
         } message: { Text(camera.errorMessage ?? "") }
     }
@@ -1143,7 +1143,7 @@ struct CameraScreen: View {
                         importMessage = (error as? LocalizedError)?.errorDescription ?? "Não foi possível importar o arquivo. Nenhuma configuração foi alterada."
                     }
                 }
-                .alert("Fotomarco", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                .alert("Photomark", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
                     Button("OK") { importMessage = nil }
                 } message: { Text(importMessage ?? "") }
             }

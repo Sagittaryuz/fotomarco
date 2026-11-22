@@ -320,7 +320,7 @@ struct StampLayoutEditor: View {
 
     var body: some View {
         editorWithToolbar
-        .alert("Fotomarco", isPresented: importAlertPresented) {
+        .alert("Photomark", isPresented: importAlertPresented) {
             Button("OK", role: .cancel) { FotomarcoHaptics.play(.editor); importMessage = nil }
         } message: { Text(importMessage ?? "") }
         .onChange(of: layout.wrappedValue.mode) { _, mode in if mode == .separate && editingElement == .combined { editingElement = .map } }

@@ -73,7 +73,7 @@ struct GalleryCaptureMap: View {
             .mapStyle(satellite ? .imagery : .standard)
             .mapScope(mapScope)
             .onMapCameraChange(frequency: .onEnd) { context in longitudeSpan = context.region.span.longitudeDelta }
-            .accessibilityLabel("Mapa das capturas do Fotomarco")
+            .accessibilityLabel("Mapa das capturas do Photomark")
             VStack(spacing: 6) {
                 Button {
                     FotomarcoHaptics.play(.gallery)

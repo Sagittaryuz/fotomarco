@@ -18,7 +18,7 @@ final class CloudArchiveOAuth {
             case .busy: return "Conclua a conexão em andamento."
             case .cancelled: return "A conexão foi cancelada."
             case .invalidResponse: return "Não foi possível confirmar a conta com o serviço de armazenamento."
-            case .denied: return "A permissão para armazenar arquivos do Fotomarco não foi concedida."
+            case .denied: return "A permissão para armazenar arquivos do Photomark não foi concedida."
             case .disconnected, .expired: return "Conecte novamente a mesma conta para retomar seus envios."
             case .wrongAccount: return "A conta retornada não corresponde ao destino escolhido."
             case .keychain: return "Não foi possível acessar as credenciais. Desbloqueie o iPhone e tente novamente."

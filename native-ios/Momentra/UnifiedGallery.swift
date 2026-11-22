@@ -247,7 +247,7 @@ struct OriginalsView: View {
         } message: {
             Text("A cópia exibida de cada foto vai para a lixeira da sua origem. As demais cópias continuam disponíveis.")
         }
-        .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+        .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { FotomarcoHaptics.play(.gallery); message = nil }
         } message: { Text(message ?? "") }
     }
@@ -432,7 +432,7 @@ struct OriginalsView: View {
                 .navigationTitle("Lixeira")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { Button("Concluído") { FotomarcoHaptics.play(.gallery); trashItem = nil }.disabled(busy) }
-                .alert("Fotomarco", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+                .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                     Button("OK") { FotomarcoHaptics.play(.gallery); message = nil }
                 } message: { Text(message ?? "") }
         }
