@@ -33,6 +33,7 @@ struct GalleryCaptureMap: View {
     @State private var selectedCluster: GalleryMapCluster?
     @State private var pendingItem: GalleryItem?
     @State private var loading = false
+    @Namespace private var mapScope
     private let cacheKey = "native.gallery.captureMapCoordinates.v1"
 
     private var photos: [GalleryItem] {
@@ -73,19 +74,23 @@ struct GalleryCaptureMap: View {
                 UserAnnotation()
             }
             .mapStyle(satellite ? .imagery : .standard)
-            .mapControls { MapUserLocationButton(); MapCompass() }
+            .mapScope(mapScope)
             .onMapCameraChange(frequency: .onEnd) { context in longitudeSpan = context.region.span.longitudeDelta }
             .accessibilityLabel("Mapa das capturas do Fotomarco")
-            Button {
-                FotomarcoHaptics.play(.gallery)
-                satellite.toggle()
-            } label: {
-                Image(systemName: satellite ? "map.fill" : "globe.americas.fill")
-                    .frame(width: 48, height: 48)
-                    .modifier(GalleryControlSurface(rounded: true))
+            VStack(spacing: 6) {
+                Button {
+                    FotomarcoHaptics.play(.gallery)
+                    satellite.toggle()
+                } label: {
+                    Image(systemName: satellite ? "map.fill" : "globe.americas.fill")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(satellite ? "Mostrar mapa" : "Mostrar satélite")
+                MapUserLocationButton(scope: mapScope)
+                    .frame(width: 44, height: 44)
             }
+            .modifier(GalleryControlSurface(rounded: true))
             .padding(12)
-            .accessibilityLabel(satellite ? "Mostrar mapa" : "Mostrar satélite")
             if loading {
                 ProgressView("Localizando fotos…")
                     .font(.caption).padding(10)
