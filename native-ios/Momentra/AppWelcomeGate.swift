@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.43"
+    static let version = "0.1.44"
     static let items = [
-        "A detecção de orientação do carimbo utiliza também os sensores de movimento."
+        "A marca no cabeçalho usa o símbolo original do Fotomarco e letras com espaçamento uniforme."
     ]
 
     static func items(for version: String) -> [String] {
