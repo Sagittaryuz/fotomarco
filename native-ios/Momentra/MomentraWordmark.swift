@@ -5,7 +5,7 @@ struct MomentraWordmark: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
-            Text("Fot")
+            Text("Fot").fixedSize().frame(width: 65, alignment: .trailing)
             // The mark is clipped from the original icon, preserving its exact arrow and gradient.
             Image("IconPreviewOriginal")
                 .resizable()
@@ -14,9 +14,9 @@ struct MomentraWordmark: View {
                 .frame(width: symbolSize, height: symbolSize)
                 .clipShape(Circle())
                 .environment(\.colorScheme, .dark)
-            Text("marco")
+            Text("marco").fixedSize().frame(width: 65, alignment: .leading)
         }
-        .font(.system(size: 24, weight: .bold, design: .rounded))
+        .font(.system(size: 23, weight: .bold, design: .rounded))
         .foregroundStyle(.white)
         .frame(height: 32)
         .accessibilityElement(children: .ignore)
