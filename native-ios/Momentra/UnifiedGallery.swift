@@ -52,12 +52,13 @@ struct OriginalsView: View {
     private enum ExitDirection { case left, down }
 
     private enum Tab: String, CaseIterable {
-        case captures = "Capturas", favorites = "Favoritos", trash = "Lixeira"
+        case captures = "Capturas", favorites = "Favoritos", map = "Mapa", trash = "Lixeira"
 
         var icon: String {
             switch self {
             case .captures: "photo.on.rectangle"
             case .favorites: "heart.fill"
+            case .map: "map.fill"
             case .trash: "trash"
             }
         }
@@ -132,7 +133,9 @@ struct OriginalsView: View {
                 trashSources
             }
             ZStack(alignment: .bottom) {
-                if items.isEmpty {
+                if tab == .map {
+                    GalleryCaptureMap(items: items, open: open)
+                } else if items.isEmpty {
                     emptyState
                         .contentShape(Rectangle())
                         .simultaneousGesture(gallerySwipe(toward: .left))
@@ -269,7 +272,7 @@ struct OriginalsView: View {
                     }
                 }
                 Spacer()
-                if tab != .trash, total > 0 {
+                if tab != .trash, tab != .map, total > 0 {
                     Button {
                         FotomarcoHaptics.play(.gallery)
                         if selecting { resetSelection() } else { selecting = true }

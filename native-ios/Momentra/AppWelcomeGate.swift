@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.39"
+    static let version = "0.1.40"
     static let items = [
-        "Nova marca no cabeçalho da câmera, com tipografia geométrica e o símbolo do Fotomarco."
+        "Veja no mapa as capturas do Fotomarco com localização, agrupadas conforme a aproximação."
     ]
 
     static func items(for version: String) -> [String] {
