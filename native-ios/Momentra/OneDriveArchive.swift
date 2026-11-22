@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 /// Operates only in the app folder of the OneDrive selected by the supplied token.
 struct OneDriveArchive {
@@ -208,6 +209,16 @@ struct OneDriveArchive {
         let (thumbnail, result) = try await Self.session.data(from: target)
         guard try Self.status(result) == 200, thumbnail.count <= 2_000_000 else { return nil }
         return thumbnail
+    }
+
+    func mapLocation(id: String, accessToken: String) async throws -> CLLocationCoordinate2D? {
+        guard Self.validID(id) else { throw Failure.invalidResponse }
+        struct Metadata: Decodable { struct Location: Decodable { let latitude: Double?; let longitude: Double? }; let location: Location? }
+        let url = try Self.query(itemURL(id), items: [.init(name: "$select", value: "location")])
+        let metadata = try JSONDecoder().decode(Metadata.self, from: await get(url, accessToken: accessToken))
+        guard let lat = metadata.location?.latitude, let lon = metadata.location?.longitude else { return nil }
+        let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
     private func path(name: String, in folder: String) -> URL {

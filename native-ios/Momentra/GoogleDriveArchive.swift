@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 /// Accesses only the files created or opened by Momentra under the current drive.file grant.
 final class GoogleDriveArchive {
@@ -172,6 +173,21 @@ final class GoogleDriveArchive {
         let lookup = try request(path: "/drive/v3/files/\(id)", query: ["fields": "thumbnailLink"], accessToken: accessToken)
         let metadata: Metadata = try await decode(lookup)
         return metadata.thumbnailLink
+    }
+
+    func mapLocation(id: String, accessToken: String) async throws -> CLLocationCoordinate2D? {
+        guard Self.validID(id) else { throw ArchiveError.invalidRequest }
+        struct Metadata: Decodable {
+            struct Image: Decodable { struct Location: Decodable { let latitude: Double?; let longitude: Double? }; let location: Location? }
+            let imageMediaMetadata: Image?
+        }
+        let lookup = try request(path: "/drive/v3/files/\(id)",
+            query: ["fields": "imageMediaMetadata(location(latitude,longitude))"], accessToken: accessToken)
+        let metadata: Metadata = try await decode(lookup)
+        guard let lat = metadata.imageMediaMetadata?.location?.latitude,
+              let lon = metadata.imageMediaMetadata?.location?.longitude else { return nil }
+        let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
     /// The URL came from Drive's read-only thumbnailLink field. Keep the bearer on Google's

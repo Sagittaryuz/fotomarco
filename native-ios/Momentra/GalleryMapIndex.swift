@@ -62,6 +62,11 @@ struct GalleryMapRecord: Codable, Equatable {
             }).first {
                 point = await Task.detached(priority: .utility) { GalleryFileInformation(url: url).location?.coordinate }.value
             }
+            if point == nil, let cloud = sources.compactMap({ source -> GalleryCloudItem? in
+                if case .cloud(let item) = source { return item }; return nil
+            }).first {
+                point = try? await cloud.mapLocation()
+            }
             if let point, CLLocationCoordinate2DIsValid(point) {
                 records.append(.init(id: key, latitude: point.latitude, longitude: point.longitude))
             }

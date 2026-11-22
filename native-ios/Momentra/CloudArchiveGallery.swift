@@ -1,4 +1,5 @@
 import ImageIO
+import CoreLocation
 import SwiftUI
 
 struct CloudArchiveGallery: View {
@@ -109,6 +110,12 @@ struct GalleryCloudItem: Identifiable {
 
     func captureDate(lookup: PhotoProfileLookup) -> Date? {
         lookup.dates[captureID] ?? date
+    }
+
+    @MainActor func mapLocation() async throws -> CLLocationCoordinate2D? {
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        if provider == .googleDrive { return try await images.drive.mapLocation(id: photo.id, accessToken: token) }
+        return try await OneDriveArchive().mapLocation(id: photo.id, accessToken: token)
     }
 
     @MainActor
