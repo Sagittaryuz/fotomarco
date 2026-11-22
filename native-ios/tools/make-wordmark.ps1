@@ -4,7 +4,7 @@ $bitmap = [Drawing.Bitmap]::new(1100, 180, [Drawing.Imaging.PixelFormat]::Format
 $graphics = [Drawing.Graphics]::FromImage($bitmap)
 $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
 $graphics.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-$font = [Drawing.Font]::new('Arial', 115, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
+$font = [Drawing.Font]::new('Arial Black', 105, [Drawing.FontStyle]::Regular, [Drawing.GraphicsUnit]::Pixel)
 $format = [Drawing.StringFormat]::GenericTypographic
 $format.FormatFlags = $format.FormatFlags -bor [Drawing.StringFormatFlags]::MeasureTrailingSpaces
 $yellow = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(255, 222, 0))
@@ -15,7 +15,16 @@ $graphics.DrawString('Fot', $font, [Drawing.Brushes]::White, [Drawing.PointF]::n
 $x += $leftWidth
 $graphics.FillEllipse($yellow, $x, 43, 92, 92)
 $arrow = [Drawing.Drawing2D.GraphicsPath]::new()
-$arrow.AddPolygon([Drawing.PointF[]]@([Drawing.PointF]::new($x + 21, 89), [Drawing.PointF]::new($x + 72, 61), [Drawing.PointF]::new($x + 52, 119), [Drawing.PointF]::new($x + 46, 95)))
+$arrow.StartFigure()
+$arrow.AddBezier($x + 23, 88, $x + 20, 91, $x + 21, 94, $x + 26, 94)
+$arrow.AddLine($x + 26, 94, $x + 44, 94)
+$arrow.AddBezier($x + 44, 94, $x + 48, 94, $x + 48, 95, $x + 49, 99)
+$arrow.AddLine($x + 49, 99, $x + 52, 115)
+$arrow.AddBezier($x + 52, 115, $x + 53, 120, $x + 56, 120, $x + 58, 115)
+$arrow.AddLine($x + 58, 115, $x + 73, 64)
+$arrow.AddBezier($x + 73, 64, $x + 74, 60, $x + 71, 59, $x + 68, 61)
+$arrow.AddLine($x + 68, 61, $x + 23, 88)
+$arrow.CloseFigure()
 $graphics.FillPath([Drawing.Brushes]::Black, $arrow)
 $x += 95
 $graphics.DrawString('marco', $font, [Drawing.Brushes]::White, [Drawing.PointF]::new($x, 15), $format)

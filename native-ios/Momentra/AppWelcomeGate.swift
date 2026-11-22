@@ -3,13 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.38"
+    static let version = "0.1.39"
     static let items = [
-        "Favoritos mostra apenas capturas feitas no Fotomarco.",
-        "As novidades de cada atualização aparecem em uma lista numerada.",
-        "A mensagem de apoio foi simplificada para ‘Gostou do app?’ com a chave Pix abaixo.",
-        "Deslize o visor da câmera para a direita para abrir a galeria.",
-        "O carimbo mantém quatro linhas e informa quando algum dado está indisponível."
+        "Nova marca no cabeçalho da câmera, com tipografia geométrica e o símbolo do Fotomarco."
     ]
 
     static func items(for version: String) -> [String] {
