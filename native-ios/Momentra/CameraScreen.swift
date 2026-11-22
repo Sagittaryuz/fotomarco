@@ -5,6 +5,7 @@ import MapKit
 import UniformTypeIdentifiers
 import PhotosUI
 import ImageIO
+import CoreMotion
 
 enum CameraGallerySwipe {
     static func qualifies(_ translation: CGSize) -> Bool {
@@ -14,6 +15,16 @@ enum CameraGallerySwipe {
 
 /// Keeps the stamp upright relative to the phone, even when interface rotation is locked.
 enum StampOrientation {
+    static func deviceOrientation(gravityX: Double, gravityY: Double) -> UIDeviceOrientation? {
+        guard gravityX.isFinite, gravityY.isFinite, hypot(gravityX, gravityY) >= 0.22 else { return nil }
+        if abs(gravityX) > abs(gravityY) * 1.15 {
+            return gravityX < 0 ? .landscapeLeft : .landscapeRight
+        }
+        if abs(gravityY) > abs(gravityX) * 1.15 {
+            return gravityY < 0 ? .portrait : .portraitUpsideDown
+        }
+        return nil
+    }
     static func angle(device: UIDeviceOrientation, interface: UIInterfaceOrientation) -> Double {
         let deviceAngle: Double
         switch device {
@@ -37,6 +48,27 @@ enum StampOrientation {
     }
 }
 
+@MainActor
+private final class StampMotionOrientation: ObservableObject {
+    @Published private(set) var orientation: UIDeviceOrientation = .portrait
+    private let motion = CMMotionManager()
+
+    func start() {
+        guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
+        motion.deviceMotionUpdateInterval = 0.1
+        motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
+            guard let gravity = data?.gravity,
+                  let next = StampOrientation.deviceOrientation(gravityX: gravity.x, gravityY: gravity.y) else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.orientation != next else { return }
+                self.orientation = next
+            }
+        }
+    }
+
+    func stop() { motion.stopDeviceMotionUpdates() }
+}
+
 private struct StampOrientationContainer<Content: View>: View {
     let deviceOrientation: UIDeviceOrientation
     @ViewBuilder let content: () -> Content
@@ -58,6 +90,7 @@ private struct StampOrientationContainer<Content: View>: View {
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
     @StateObject private var camera = CameraService()
+    @StateObject private var stampMotion = StampMotionOrientation()
     @StateObject private var location = LocationService()
     @StateObject private var addressPreview = AddressPreviewService()
     @StateObject private var pressure = PressureService()
@@ -667,6 +700,7 @@ struct CameraScreen: View {
             if ready { Task { await updates.check() } }
         }
         .onAppear {
+            stampMotion.start()
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             if UIDevice.current.orientation.isPortrait || UIDevice.current.orientation.isLandscape {
                 stampDeviceOrientation = UIDevice.current.orientation
@@ -687,7 +721,8 @@ struct CameraScreen: View {
             refreshAddress()
             publishCaptureContext()
         }
-        .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications(); modeTransitionTask?.cancel(); modeTransitionBlur = false; finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onDisappear { stampMotion.stop(); UIDevice.current.endGeneratingDeviceOrientationNotifications(); modeTransitionTask?.cancel(); modeTransitionBlur = false; finishPhotoFlight(); flashNoticeTask?.cancel(); dismissZoomDial(); cancelCountdown(); camera.setRecognition(qr: false, text: false); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear() }
+        .onChange(of: stampMotion.orientation) { _, orientation in stampDeviceOrientation = orientation }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             let orientation = UIDevice.current.orientation
             if orientation.isPortrait || orientation.isLandscape { stampDeviceOrientation = orientation }

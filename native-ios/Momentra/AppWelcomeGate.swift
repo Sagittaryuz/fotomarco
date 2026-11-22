@@ -3,10 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.42"
+    static let version = "0.1.43"
     static let items = [
-        "A grade mantém sua posição ao iniciar ou encerrar a seleção de fotos.",
-        "Os cabeçalhos de Capturas, Favoritos, Mapa e Lixeira usam o mesmo alinhamento."
+        "A detecção de orientação do carimbo utiliza também os sensores de movimento."
     ]
 
     static func items(for version: String) -> [String] {
