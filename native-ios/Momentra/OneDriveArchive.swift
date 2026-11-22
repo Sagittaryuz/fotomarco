@@ -194,6 +194,22 @@ struct OneDriveArchive {
         Self.graph.appendingPathComponent("items").appendingPathComponent(id)
     }
 
+    func thumbnail(id: String, accessToken: String) async throws -> Data? {
+        guard Self.validID(id) else { throw Failure.invalidResponse }
+        let url = itemURL(id).appendingPathComponent("thumbnails").appendingPathComponent("0")
+            .appendingPathComponent("medium").appendingPathComponent("content")
+        let (data, response) = try await Self.session.data(for: authorizedRequest(url, accessToken: accessToken))
+        let status = try Self.status(response)
+        if status == 404 { return nil }
+        if status == 200 { return data.count <= 2_000_000 ? data : nil }
+        guard status == 302, let response = response as? HTTPURLResponse,
+              let location = response.value(forHTTPHeaderField: "Location"),
+              let target = URL(string: location), Self.secureURL(target) else { throw Failure.http(status) }
+        let (thumbnail, result) = try await Self.session.data(from: target)
+        guard try Self.status(result) == 200, thumbnail.count <= 2_000_000 else { return nil }
+        return thumbnail
+    }
+
     private func path(name: String, in folder: String) -> URL {
         Self.graph.appendingPathComponent("items").appendingPathComponent(folder + ":")
             .appendingPathComponent(name + ":")

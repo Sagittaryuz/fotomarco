@@ -116,6 +116,10 @@ struct GalleryCloudItem: Identifiable {
         ArchiveGalleryImage(photo: photo, images: images)
     }
 
+    @MainActor func mapThumb() -> some View {
+        ArchiveMapThumbnail(photo: photo, images: images)
+    }
+
     @MainActor
     func fullImage(active: Bool = true) -> some View {
         ArchiveGalleryImage(photo: photo, images: images, fullView: true, active: active)
@@ -570,6 +574,31 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         return await offlineGridPreview(photo, pixels: 640).map { UIImage(cgImage: $0) }
     }
 
+    func mapThumbnail(_ photo: ArchiveGalleryPhoto) async -> UIImage? {
+        if let cached = await cachedGridImage(photo) { return cached }
+        if let key = persistentThumbnailKey(photo) {
+            guard let bitmap = try? await GalleryThumbnailCache.shared.image(for: key, maximumPixels: Self.gridPixels,
+                generate: { try await self.strictMapImage(photo) }) else { return nil }
+            return UIImage(cgImage: bitmap)
+        }
+        guard let bitmap = try? await strictMapImage(photo) else { return nil }
+        let result = UIImage(cgImage: bitmap)
+        cache.setObject(result, forKey: thumbnailMemoryKey(photo, pixels: Self.gridPixels, version: revision))
+        return result
+    }
+
+    private func strictMapImage(_ photo: ArchiveGalleryPhoto) async throws -> CGImage? {
+        guard let token = try? await CloudArchiveAccounts.shared.accessToken(for: destination) else { return nil }
+        let bytes: Data?
+        if destination.provider == .googleDrive { bytes = try? await googleThumbnail(photo, token: token) }
+        else { bytes = try? await OneDriveArchive().thumbnail(id: photo.id, accessToken: token) }
+        guard let bytes,
+              let bitmap = await Task.detached(priority: .utility, operation: {
+                  Self.downsample(CGImageSourceCreateWithData(bytes as CFData, nil), pixels: Self.gridPixels)
+              }).value else { return nil }
+        return bitmap
+    }
+
     private func acquireFullPreview(_ photo: ArchiveGalleryPhoto, pixels: Int) async throws -> CGImage {
         await acquireDownload(priority: true)
         defer { releaseDownload() }
@@ -671,6 +700,19 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
     private func releaseDownload() {
         if waiting.isEmpty { activeDownloads -= 1 }
         else { waiting.removeFirst().resume() }
+    }
+}
+
+private struct ArchiveMapThumbnail: View {
+    let photo: ArchiveGalleryPhoto
+    let images: ArchiveGalleryImages
+    @State private var image: UIImage?
+    var body: some View {
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFill() }
+            else { Color.gray.opacity(0.25).overlay(Image(systemName: "photo").foregroundStyle(.white)) }
+        }
+        .task(id: photo.id) { image = await images.mapThumbnail(photo) }
     }
 }
 

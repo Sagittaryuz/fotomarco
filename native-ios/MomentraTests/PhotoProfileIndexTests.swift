@@ -1,7 +1,18 @@
 import XCTest
+import CoreLocation
 @testable import Momentra
 
 final class PhotoProfileIndexTests: XCTestCase {
+    func testCaptureCoordinatesPersistForMapWithoutChangingPhoto() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID()
+        try PhotoProfileIndex.register(captureID: id, profile: .init(id: UUID(), name: "Obra"),
+                                       root: root, location: CLLocation(latitude: -17.88, longitude: -51.71))
+        let location = try XCTUnwrap(PhotoProfileIndex.load(root: root).locations[id])
+        XCTAssertEqual(location.latitude, -17.88, accuracy: 0.00001)
+        XCTAssertEqual(location.longitude, -51.71, accuracy: 0.00001)
+    }
     func testAssociationsPersistWithoutChangingTheImage() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

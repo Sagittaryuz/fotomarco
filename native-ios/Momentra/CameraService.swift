@@ -526,7 +526,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             }
         }
         if let profile = request.profile {
-            do { try PhotoProfileIndex.register(captureID: request.id, profile: profile, captureDate: request.capturedAt) }
+            do { try PhotoProfileIndex.register(captureID: request.id, profile: profile, captureDate: request.capturedAt, location: request.snapshot?.location) }
             catch { report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
         }
         let staged = StagedPhoto(request: request, original: original, root: base, archiveQueued: archiveQueued)

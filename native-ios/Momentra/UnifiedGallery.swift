@@ -8,6 +8,7 @@ struct OriginalsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption2) private var storageBandHeight = 44.0
     @StateObject private var archive = CloudArchiveAccounts.shared
+    @StateObject private var mapStore = GalleryMapStore()
     @AppStorage("native.gallery.favoriteCaptureKeys") private var captureFavorites = Data()
     @AppStorage("native.gallery.favoriteCloudKeys") private var cloudFavorites = Data()
     @State private var deviceFavorites: [String: Bool] = [:]
@@ -134,7 +135,7 @@ struct OriginalsView: View {
             }
             ZStack(alignment: .bottom) {
                 if tab == .map {
-                    GalleryCaptureMap(items: items, open: open)
+                    GalleryCaptureMap(items: items, open: open, store: mapStore)
                 } else if items.isEmpty {
                     emptyState
                         .contentShape(Rectangle())
@@ -167,6 +168,11 @@ struct OriginalsView: View {
         .task(id: reloadVersion) {
             guard loadedLocalVersion != reloadVersion else { return }
             await reloadLocal(version: reloadVersion)
+        }
+        .task(id: projectionVersion) {
+            let all = GalleryItem.grouped(local + trackedPhotos + remote, origin: nil, profile: nil)
+                .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+            await mapStore.prepare(items: all)
         }
         .task(id: CatalogRequest(trash: tab == .trash, destinations: archive.accounts.map(\.id),
                                  refresh: cloudRefresh, activation: cloudActivation)) {

@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 import Photos
 
-private struct GalleryMapCoordinate: Codable {
+struct GalleryMapCoordinate: Codable {
     let latitude: Double
     let longitude: Double
     var coordinate: CLLocationCoordinate2D { .init(latitude: latitude, longitude: longitude) }
@@ -25,16 +25,13 @@ enum GalleryMapBinning {
 struct GalleryCaptureMap: View {
     let items: [GalleryItem]
     let open: (GalleryItem) -> Void
+    @ObservedObject var store: GalleryMapStore
     @State private var position: MapCameraPosition = .automatic
     @State private var longitudeSpan = 180.0
     @State private var satellite = false
-    @State private var coordinates: [String: GalleryMapCoordinate] = [:]
-    @State private var attempted = Set<String>()
     @State private var selectedCluster: GalleryMapCluster?
     @State private var pendingItem: GalleryItem?
-    @State private var loading = false
     @Namespace private var mapScope
-    private let cacheKey = "native.gallery.captureMapCoordinates.v1"
 
     private var photos: [GalleryItem] {
         var seen = Set<String>()
@@ -46,18 +43,18 @@ struct GalleryCaptureMap: View {
     }
 
     private var clusters: [GalleryMapCluster] {
-        let located = photos.compactMap { item -> (GalleryItem, GalleryMapCoordinate)? in
-            coordinates[item.id].map { (item, $0) }
-        }
-        let groups = Dictionary(grouping: located) { pair in
-            GalleryMapBinning.key(latitude: pair.1.latitude, longitude: pair.1.longitude, span: longitudeSpan)
-        }
-        return groups.map { key, group in
-            let count = Double(group.count)
-            return GalleryMapCluster(id: key,
-                coordinate: .init(latitude: group.reduce(0) { $0 + $1.1.latitude } / count,
-                                  longitude: group.reduce(0) { $0 + $1.1.longitude } / count),
-                items: group.map(\.0))
+        let byID = Dictionary(photos.map { ($0.captureIDForUpload?.uuidString ?? $0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let locations = Dictionary(store.index.records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let zoom = GalleryMapIndex.zoom(for: longitudeSpan)
+        guard store.index.levels.indices.contains(zoom) else { return [] }
+        return store.index.levels[zoom].compactMap { group in
+            let matched = group.itemIDs.compactMap { byID[$0] }
+            guard !matched.isEmpty else { return nil }
+            let points = matched.compactMap { locations[$0.captureIDForUpload?.uuidString ?? $0.id] }
+            let count = Double(points.count)
+            guard count > 0 else { return nil }
+            return GalleryMapCluster(id: group.id, coordinate: .init(latitude: points.reduce(0) { $0 + $1.latitude } / count,
+                longitude: points.reduce(0) { $0 + $1.longitude } / count), items: matched)
         }
     }
 
@@ -91,20 +88,19 @@ struct GalleryCaptureMap: View {
             }
             .modifier(GalleryControlSurface(rounded: true))
             .padding(12)
-            if loading {
+            if store.loading {
                 ProgressView("Localizando fotos…")
                     .font(.caption).padding(10)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(12)
-            } else if !photos.isEmpty && !photos.contains(where: { coordinates[$0.id] != nil }) {
+            } else if !photos.isEmpty && clusters.isEmpty {
                 Text("Nenhuma captura com localização disponível.")
                     .font(.footnote).padding(12)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }
-        .task(id: photos.map(\.id)) { await loadLocations() }
         .sheet(item: $selectedCluster, onDismiss: {
             if let pendingItem { self.pendingItem = nil; open(pendingItem) }
         }) { cluster in
@@ -117,7 +113,7 @@ struct GalleryCaptureMap: View {
                                 pendingItem = item
                                 selectedCluster = nil
                             } label: {
-                                item.thumbnail().aspectRatio(1, contentMode: .fill).clipped()
+                                item.mapThumbnail().aspectRatio(1, contentMode: .fill).clipped()
                             }.buttonStyle(.plain)
                         }
                     }
@@ -133,7 +129,7 @@ struct GalleryCaptureMap: View {
     private func mapMarker(_ cluster: GalleryMapCluster) -> some View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                if let item = cluster.items.first { item.thumbnail().frame(width: 72, height: 72).clipped() }
+                if let item = cluster.items.first { item.mapThumbnail().frame(width: 72, height: 72).clipped() }
                 if cluster.items.count > 1 {
                     Text(cluster.items.count.formatted()).font(.caption.bold()).foregroundStyle(.white)
                         .padding(4).background(.black.opacity(0.55), in: Capsule()).padding(3)
@@ -147,39 +143,4 @@ struct GalleryCaptureMap: View {
         .accessibilityLabel(cluster.items.count == 1 ? "Uma foto neste local" : "\(cluster.items.count) fotos neste local")
     }
 
-    @MainActor private func loadLocations() async {
-        if coordinates.isEmpty, let data = UserDefaults.standard.data(forKey: cacheKey),
-           let saved = try? JSONDecoder().decode([String: GalleryMapCoordinate].self, from: data) { coordinates = saved }
-        loading = true
-        defer {
-            loading = false
-            if let data = try? JSONEncoder().encode(coordinates) { UserDefaults.standard.set(data, forKey: cacheKey) }
-        }
-        for item in photos where coordinates[item.id] == nil && !attempted.contains(item.id) {
-            guard !Task.isCancelled else { return }
-            attempted.insert(item.id)
-            let sources = [item.source] + item.copies
-            let localLocation = sources.compactMap { source -> CLLocation? in
-                if case .device(let asset) = source { return asset.location }
-                return nil
-            }.first
-            let localURL = sources.compactMap { source -> URL? in
-                if case .capture(let capture) = source { return capture.url }
-                return nil
-            }.first
-            var location = localLocation
-            if location == nil, let localURL {
-                location = await Task.detached(priority: .utility) { GalleryFileInformation(url: localURL).location }.value
-            }
-            if location == nil, localURL == nil, let input = try? await item.input() {
-                let url = input.url
-                location = await Task.detached(priority: .utility) { GalleryFileInformation(url: url).location }.value
-                input.close()
-            }
-            if Task.isCancelled { attempted.remove(item.id); return }
-            if let coordinate = location?.coordinate, CLLocationCoordinate2DIsValid(coordinate) {
-                coordinates[item.id] = .init(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            }
-        }
-    }
 }

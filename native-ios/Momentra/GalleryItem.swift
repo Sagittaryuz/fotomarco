@@ -236,6 +236,22 @@ struct GalleryItem: Identifiable {
         }
     }
 
+    @MainActor @ViewBuilder func mapThumbnail() -> some View {
+        switch source {
+        case .cloud(let item):
+            if let local = copies.first(where: { source in
+                switch source { case .capture, .device: true; case .cloud: false }
+            }) {
+                switch local {
+                case .capture(let file): Thumbnail(url: file.url, isVideo: file.isVideo)
+                case .device(let asset): DeviceThumbnail(asset: asset)
+                case .cloud: item.mapThumb()
+                }
+            } else { item.mapThumb() }
+        default: thumbnail()
+        }
+    }
+
     @MainActor @ViewBuilder func preview(active: Bool) -> some View {
         switch source {
         case .capture(let item): CapturePage(item: item, active: active)

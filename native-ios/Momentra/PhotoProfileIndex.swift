@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import CoreLocation
 
 struct CaptureProfileTag: Codable, Equatable {
     let id: UUID
@@ -12,6 +13,8 @@ struct CaptureProfileRecord: Codable {
     let captureDate: Date?
     var localAssetID: String?
     var cloudMediaIDs: [String]
+    var latitude: Double? = nil
+    var longitude: Double? = nil
 }
 
 struct PhotoProfileLookup {
@@ -20,6 +23,7 @@ struct PhotoProfileLookup {
     var assets: [String: CaptureProfileTag] = [:]
     var assetCaptures: [String: UUID] = [:]
     var cloud: [String: CaptureProfileTag] = [:]
+    var locations: [UUID: CLLocationCoordinate2D] = [:]
 }
 
 /// Association metadata is stored separately and never printed into the image.
@@ -27,7 +31,7 @@ struct PhotoProfileLookup {
 enum PhotoProfileIndex {
     private static let lock = NSLock()
 
-    static func register(captureID: UUID, profile: CaptureProfileTag, captureDate: Date? = nil, root: URL? = nil) throws {
+    static func register(captureID: UUID, profile: CaptureProfileTag, captureDate: Date? = nil, root: URL? = nil, location: CLLocation? = nil) throws {
         lock.lock(); defer { lock.unlock() }
         let directory = try indexDirectory(root: root)
         let file = directory.appendingPathComponent(captureID.uuidString + ".json")
@@ -35,7 +39,8 @@ enum PhotoProfileIndex {
         let safeName = String(profile.name.prefix(60))
         try save(CaptureProfileRecord(captureID: captureID,
                                       profile: CaptureProfileTag(id: profile.id, name: safeName),
-                                      captureDate: captureDate, localAssetID: nil, cloudMediaIDs: []), to: file)
+                                      captureDate: captureDate, localAssetID: nil, cloudMediaIDs: [],
+                                      latitude: location?.coordinate.latitude, longitude: location?.coordinate.longitude), to: file)
     }
 
     static func bindLocal(captureID: UUID, assetID: String, root: URL? = nil) throws {
@@ -68,6 +73,10 @@ enum PhotoProfileIndex {
                   let record = try? JSONDecoder().decode(CaptureProfileRecord.self, from: data),
                   file.deletingPathExtension().lastPathComponent == record.captureID.uuidString else { continue }
             lookup.captures[record.captureID] = record.profile
+            if let latitude = record.latitude, let longitude = record.longitude {
+                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                if CLLocationCoordinate2DIsValid(coordinate) { lookup.locations[record.captureID] = coordinate }
+            }
             if let date = record.captureDate { lookup.dates[record.captureID] = date }
             if let id = record.localAssetID {
                 lookup.assets[id] = record.profile
