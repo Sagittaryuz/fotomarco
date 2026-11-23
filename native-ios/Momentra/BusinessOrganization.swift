@@ -9,7 +9,8 @@ enum OrganizationRole: String, Codable, Equatable {
 
 struct OrganizationMembership: Codable, Equatable {
     let organizationID: UUID
-    let userID: UUID
+    /// Firebase Authentication UIDs are opaque strings, not UUIDs.
+    let userID: String
     let role: OrganizationRole
     let active: Bool
 }
@@ -70,27 +71,27 @@ struct OrganizationDetails: Codable, Equatable {
 struct BusinessOrganization: Codable, Equatable {
     static let maximumMembers = 500
     let id: UUID
-    let ownerID: UUID
+    let ownerID: String
     let name: String
 
     func mayManage(_ membership: OrganizationMembership) -> Bool {
-        guard membership.active, membership.organizationID == id else { return false }
+        guard !membership.userID.isEmpty, !ownerID.isEmpty, membership.active, membership.organizationID == id else { return false }
         if membership.role == .owner { return membership.userID == ownerID }
         return membership.role == .administrator
     }
 
     func mayUsePublishedProfile(_ membership: OrganizationMembership) -> Bool {
-        membership.active && membership.organizationID == id &&
+        !membership.userID.isEmpty && !ownerID.isEmpty && membership.active && membership.organizationID == id &&
             (membership.role != .owner || membership.userID == ownerID)
     }
 
-    func mayViewPhoto(takenBy authorID: UUID, organizationID: UUID,
+    func mayViewPhoto(takenBy authorID: String, organizationID: UUID,
                       membership: OrganizationMembership) -> Bool {
         mayPerform(.view, takenBy: authorID, organizationID: organizationID,
                    membership: membership, permissions: .init())
     }
 
-    func mayPerform(_ action: OrganizationPhotoAction, takenBy authorID: UUID,
+    func mayPerform(_ action: OrganizationPhotoAction, takenBy authorID: String,
                     organizationID: UUID, membership: OrganizationMembership,
                     permissions: OrganizationPhotoPermissions) -> Bool {
         guard organizationID == id, mayUsePublishedProfile(membership) else { return false }

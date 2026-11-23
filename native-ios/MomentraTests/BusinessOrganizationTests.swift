@@ -10,9 +10,10 @@ final class BusinessOrganizationTests: XCTestCase {
         XCTAssertNil(OrganizationDetails(name: "Equipe", contactEmail: "invalid"))
         XCTAssertNil(OrganizationDetails(name: "Equipe", contactEmail: "contact@example.com", photoReference: "https://example.com/photo"))
     }
-    private let org = UUID(), owner = UUID(), member = UUID()
+    private let org = UUID()
+    private let owner = "firebase-owner-uid", member = "firebase-member-uid"
     private var organization: BusinessOrganization { .init(id: org, ownerID: owner, name: "Equipe") }
-    private func membership(_ user: UUID, _ role: OrganizationRole, active: Bool = true,
+    private func membership(_ user: String, _ role: OrganizationRole, active: Bool = true,
                             orgID: UUID? = nil) -> OrganizationMembership {
         .init(organizationID: orgID ?? org, userID: user, role: role, active: active)
     }
