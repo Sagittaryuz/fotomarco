@@ -9,6 +9,8 @@ test('allows only the owner and intended member', () => {
   assert.equal(validate(input([entry('owner', ['owner']), entry('member', ['write'])])), true);
   assert.equal(validate(input([entry('owner', ['owner']), entry('other', ['read'])])), false);
   assert.equal(validate(input([entry('member', ['write'])])), false);
+  assert.equal(validate(input([entry('owner', ['owner'])])), false);
+  assert.equal(validate(input([entry('owner', ['owner']), entry('member', ['read'])])), false);
 });
 
 test('fails closed for links, groups, incomplete listings and missing owner context', () => {

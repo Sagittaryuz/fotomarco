@@ -4,6 +4,7 @@ export function validateMemberFolderPermissions({ permissionPage, ownerIdentityI
       typeof memberIdentityId !== 'string' || !memberIdentityId || ownerIdentityId === memberIdentityId ||
       !permissionPage || !Array.isArray(permissionPage.value) || permissionPage['@odata.nextLink']) return false;
   let hasOwner = false;
+  let hasMemberWrite = false;
   for (const permission of permissionPage.value) {
     if (!permission || permission.link || permission.grantedToIdentities || permission.grantedToIdentitiesV2 ||
         !Array.isArray(permission.roles) || permission.roles.length === 0 ||
@@ -18,6 +19,7 @@ export function validateMemberFolderPermissions({ permissionPage, ownerIdentityI
       if (id !== ownerIdentityId) return false;
       hasOwner = true;
     }
+    if (id === memberIdentityId && permission.roles.includes('write')) hasMemberWrite = true;
   }
-  return hasOwner;
+  return hasOwner && hasMemberWrite;
 }
