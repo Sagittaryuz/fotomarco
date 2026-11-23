@@ -2,7 +2,7 @@ import { validateMemberFolderPermissions } from './business-onedrive-access.mjs'
 
 /** All IDs and the delegated owner token must come from trusted server records. */
 export async function verifyOneDriveMemberFolder({ ownerToken, expectedOwnerId, expectedDriveId,
-  expectedParentId, folderId, memberIdentityId, fetchImpl = fetch }) {
+  expectedParentId, folderId, memberIdentityId, requireMember = true, fetchImpl = fetch }) {
   const validId = id => typeof id === 'string' && id.length > 0 && id.length <= 256 && !/[\x00-\x20/\\?#]/.test(id);
   if (typeof ownerToken !== 'string' || !ownerToken || ![expectedOwnerId, expectedDriveId, expectedParentId, folderId, memberIdentityId].every(validId)) throw new Error('invalid-storage-configuration');
   const base = 'https://graph.microsoft.com/v1.0/me/drive';
@@ -19,6 +19,6 @@ export async function verifyOneDriveMemberFolder({ ownerToken, expectedOwnerId, 
       folder.parentReference?.driveId !== expectedDriveId || folder.parentReference?.id !== expectedParentId) throw new Error('invalid-member-folder');
   const permissions = await get(path + '/permissions');
   if (!validateMemberFolderPermissions({ permissionPage: permissions, ownerIdentityId: expectedOwnerId,
-    memberIdentityId, isOwnerListing: true })) throw new Error('unsafe-folder-permissions');
+    memberIdentityId, isOwnerListing: true, requireMember })) throw new Error('unsafe-folder-permissions');
   return { driveId: expectedDriveId, folderId };
 }

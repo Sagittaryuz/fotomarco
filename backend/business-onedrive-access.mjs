@@ -1,5 +1,5 @@
 /** Conservative gate for sharing. This is not a substitute for provider-side ACL enforcement. */
-export function validateMemberFolderPermissions({ permissionPage, ownerIdentityId, memberIdentityId, isOwnerListing }) {
+export function validateMemberFolderPermissions({ permissionPage, ownerIdentityId, memberIdentityId, isOwnerListing, requireMember = true }) {
   if (isOwnerListing !== true || typeof ownerIdentityId !== 'string' || !ownerIdentityId ||
       typeof memberIdentityId !== 'string' || !memberIdentityId || ownerIdentityId === memberIdentityId ||
       !permissionPage || !Array.isArray(permissionPage.value) || permissionPage['@odata.nextLink']) return false;
@@ -21,5 +21,5 @@ export function validateMemberFolderPermissions({ permissionPage, ownerIdentityI
     }
     if (id === memberIdentityId && permission.roles.includes('write')) hasMemberWrite = true;
   }
-  return hasOwner && hasMemberWrite;
+  return hasOwner && (!requireMember || hasMemberWrite);
 }
