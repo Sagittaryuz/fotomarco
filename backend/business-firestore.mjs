@@ -18,10 +18,11 @@ const decode = object => Object.fromEntries(Object.entries(object ?? {}).map(([k
   throw new Error('invalid-field');
 }));
 
-export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetch }) {
+export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetch, emulatorOrigin }) {
   const project = segment(projectId);
   const root = `projects/${project}/databases/(default)/documents`;
-  const endpoint = `https://firestore.googleapis.com/v1/${root}`;
+  if (emulatorOrigin && !/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(emulatorOrigin)) throw new Error('invalid-emulator-origin');
+  const endpoint = `${emulatorOrigin ?? 'https://firestore.googleapis.com'}/v1/${root}`;
   async function transaction(action) {
     const token = await accessToken();
     if (typeof token !== 'string' || !token) throw new Error('missing-server-credential');
