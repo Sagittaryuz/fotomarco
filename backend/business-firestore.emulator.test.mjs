@@ -38,6 +38,9 @@ test('Firestore emulator commits a real invitation and member transaction', { sk
   const service = new BusinessService({ transaction, verifyToken: async token => token, newId: () => 'test-invite', clock: () => 100 });
   await service.invite({ uid: 'owner' }, org, 'member@example.com');
   await service.accept({ uid: 'member', email: 'member@example.com', emailVerified: true }, org, 'test-invite');
+  await service.publishProfile({ uid: 'owner' }, org, '{"template":"original"}');
+  assert.equal((await service.readProfile({ uid: 'member' }, org)).layoutJSON, '{"template":"original"}');
+  await assert.rejects(service.publishProfile({ uid: 'member' }, org, '{}'), /forbidden/);
   const res = await fetch(`${root}/organizations/${org}/state/seats`, { headers: { authorization: 'Bearer owner' } });
   assert.equal((await res.json()).fields.count.integerValue, '2');
   await assert.rejects(service.accept({ uid: 'member', email: 'member@example.com', emailVerified: true }, org, 'test-invite'), /invalid-invitation/);

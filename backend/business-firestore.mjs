@@ -61,6 +61,11 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       organization: org => read(path(org)),
       membership: (org, user) => read(path(org, 'members', user)),
       invitation: (org, id) => read(path(org, 'invitations', id)),
+      latestProfile: async org => {
+        const head = await read(path(org, 'state', 'profile'));
+        if (!head) return null;
+        return read(path(org, 'profiles', head.versionId));
+      },
       occupiedSeats: async org => {
         activeOrg = segment(org);
         const counter = await read(path(org, 'state', 'seats'));
@@ -69,6 +74,10 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         return seatState;
       },
       createInvitation: async invitation => put(path(invitation.organizationId, 'invitations', invitation.id), invitation, { exists: false }),
+      publishProfile: async profile => {
+        put(path(profile.organizationId, 'profiles', profile.versionId), profile, { exists: false });
+        put(path(profile.organizationId, 'state', 'profile'), { versionId: profile.versionId });
+      },
       addMember: async member => {
         if (seatState === undefined || activeOrg !== member.organizationId || seatState >= 500) throw new Error('invalid-seat-counter');
         put(path(member.organizationId, 'members', member.userId), member);

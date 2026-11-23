@@ -1,4 +1,4 @@
-import { mayAcceptInvitation, mayInvite } from './business-policy.mjs';
+import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } from './business-policy.mjs';
 
 /**
  * Transactional service. The adapter must verify Firebase ID tokens and load records
@@ -65,6 +65,37 @@ export class BusinessService {
       await tx.addMember({ organizationId, userId: identity.uid, role: 'member', active: true });
       await tx.markInvitationAccepted(organizationId, invitationId, identity.uid);
       return { organizationId };
+    });
+  }
+
+  async publishProfile(token, organizationId, layoutJSON) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
+        typeof layoutJSON !== 'string' || new TextEncoder().encode(layoutJSON).length > 65536) throw new Error('invalid-request');
+    let layout;
+    try { layout = JSON.parse(layoutJSON); } catch { throw new Error('invalid-request'); }
+    if (!layout || typeof layout !== 'object' || Array.isArray(layout)) throw new Error('invalid-request');
+    const versionId = this.newId();
+    if (typeof versionId !== 'string' || !versionId) throw new Error('invalid-id');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member)) throw new Error('forbidden');
+      await tx.publishProfile({ organizationId, versionId, layoutJSON, publishedBy: identity.uid, publishedAt: this.clock() });
+      return { versionId };
+    });
+  }
+
+  async readProfile(token, organizationId) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member)) throw new Error('forbidden');
+      const profile = await tx.latestProfile(organizationId);
+      if (!profile || profile.organizationId !== organizationId) throw new Error('not-found');
+      return profile;
     });
   }
 }

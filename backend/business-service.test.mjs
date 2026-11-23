@@ -6,6 +6,7 @@ function fixture() {
   const organization = { id: 'org', ownerId: 'owner' };
   const records = new Map([['owner', { organizationId: 'org', userId: 'owner', role: 'owner', active: true }]]);
   const invites = new Map();
+  let profile;
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
@@ -14,6 +15,8 @@ function fixture() {
     invitation: async (_, id) => invites.get(id),
     addMember: async value => { records.set(value.userId, value); },
     markInvitationAccepted: async (_, id, userId) => { invites.set(id, { ...invites.get(id), state: 'accepted', userId }); },
+    publishProfile: async value => { profile = value; },
+    latestProfile: async () => profile,
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100 });
   return { service, records, invites };
@@ -26,6 +29,18 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('only managers publish layouts; active members can read but not change them', async () => {
+  const { service, records } = fixture();
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  await service.publishProfile({ uid: 'owner' }, 'org', '{"template":"original"}');
+  assert.equal((await service.readProfile({ uid: 'member' }, 'org')).layoutJSON, '{"template":"original"}');
+  await assert.rejects(service.publishProfile({ uid: 'member' }, 'org', '{}'), /forbidden/);
+  await assert.rejects(service.readProfile({ uid: 'outsider' }, 'org'), /forbidden/);
+  records.set('member', { ...records.get('member'), active: false });
+  await assert.rejects(service.readProfile({ uid: 'member' }, 'org'), /forbidden/);
+  await assert.rejects(service.publishProfile({ uid: 'owner' }, 'org', 'invalid'), /invalid-request/);
 });
 
 test('a nonmember cannot invite; unverified or mismatched recipients cannot accept', async () => {
