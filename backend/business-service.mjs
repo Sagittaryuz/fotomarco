@@ -98,4 +98,39 @@ export class BusinessService {
       return profile;
     });
   }
+
+  async uploadAsset(token, organizationId, mimeType, base64) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
+        !['image/jpeg', 'image/png'].includes(mimeType) || typeof base64 !== 'string' ||
+        base64.length > 349528 || base64.length % 4 !== 0 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) throw new Error('invalid-request');
+    let bytes;
+    try { bytes = atob(base64); } catch { throw new Error('invalid-request'); }
+    const png = bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((v, i) => bytes.charCodeAt(i) === v);
+    const jpeg = bytes.length >= 3 && [255,216,255].every((v, i) => bytes.charCodeAt(i) === v);
+    if (bytes.length > 262144 || (mimeType === 'image/png' ? !png : !jpeg)) throw new Error('invalid-request');
+    const assetId = this.newId();
+    if (typeof assetId !== 'string' || !assetId) throw new Error('invalid-id');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member)) throw new Error('forbidden');
+      await tx.createAsset({ organizationId, assetId, mimeType, base64, createdBy: identity.uid, createdAt: this.clock() });
+      return { assetId };
+    });
+  }
+
+  async readAsset(token, organizationId, assetId) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId || typeof assetId !== 'string' || !assetId) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member)) throw new Error('forbidden');
+      const asset = await tx.asset(organizationId, assetId);
+      if (!asset || asset.organizationId !== organizationId || asset.assetId !== assetId) throw new Error('not-found');
+      return { mimeType: asset.mimeType, base64: asset.base64 };
+    });
+  }
 }

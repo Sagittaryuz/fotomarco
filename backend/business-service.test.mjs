@@ -7,6 +7,7 @@ function fixture() {
   const records = new Map([['owner', { organizationId: 'org', userId: 'owner', role: 'owner', active: true }]]);
   const invites = new Map();
   let profile;
+  let asset;
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
@@ -17,6 +18,8 @@ function fixture() {
     markInvitationAccepted: async (_, id, userId) => { invites.set(id, { ...invites.get(id), state: 'accepted', userId }); },
     publishProfile: async value => { profile = value; },
     latestProfile: async () => profile,
+    createAsset: async value => { asset = value; },
+    asset: async () => asset,
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100 });
   return { service, records, invites };
@@ -29,6 +32,17 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('organization image is limited to managers for writing and members for reading', async () => {
+  const { service, records } = fixture();
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  const image = 'iVBORw0KGgo=';
+  assert.deepEqual(await service.uploadAsset({ uid: 'owner' }, 'org', 'image/png', image), { assetId: 'invite' });
+  assert.deepEqual(await service.readAsset({ uid: 'member' }, 'org', 'invite'), { mimeType: 'image/png', base64: image });
+  await assert.rejects(service.uploadAsset({ uid: 'member' }, 'org', 'image/png', image), /forbidden/);
+  await assert.rejects(service.readAsset({ uid: 'outsider' }, 'org', 'invite'), /forbidden/);
+  await assert.rejects(service.uploadAsset({ uid: 'owner' }, 'org', 'image/jpeg', image), /invalid-request/);
 });
 
 test('only managers publish layouts; active members can read but not change them', async () => {
