@@ -81,6 +81,23 @@ export class BusinessService {
     });
   }
 
+  async listMembers(token, organizationId) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const organization = await tx.organization(organizationId);
+      const membership = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, organization, membership)) throw new Error('forbidden');
+      const members = await tx.activeMembers(organizationId);
+      if (!Array.isArray(members) || members.length > 500 || members.some(member =>
+        member.organizationId !== organizationId || typeof member.userId !== 'string' ||
+        !member.userId || member.active !== true || !['owner', 'administrator', 'member'].includes(member.role))) {
+        throw new Error('invalid-members');
+      }
+      return { members: members.map(({ userId, role, email }) => ({ userId, role, ...(typeof email === 'string' ? { email } : {}) })) };
+    });
+  }
+
   async accept(token, organizationId, invitationId) {
     const identity = await this.verifyToken(token);
     if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
@@ -94,7 +111,8 @@ export class BusinessService {
       if (existing?.active) throw new Error('already-member');
       const seats = await tx.occupiedSeats(organizationId);
       if (!Number.isInteger(seats) || seats < 0 || seats >= 500) throw new Error('full');
-      await tx.addMember({ organizationId, userId: identity.uid, role: 'member', active: true });
+      await tx.addMember({ organizationId, userId: identity.uid, role: 'member', active: true,
+        email: identity.email.trim().toLowerCase() });
       await tx.markInvitationAccepted(organizationId, invitationId, identity.uid);
       return { organizationId };
     });

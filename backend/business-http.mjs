@@ -8,9 +8,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const match = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/invitations(?:\/([A-Za-z0-9_-]{1,128})\/accept)?$/.exec(new URL(request.url).pathname);
       const profile = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/profile\/(read|publish)$/.exec(new URL(request.url).pathname);
       const settings = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/settings\/(read|update)$/.exec(new URL(request.url).pathname);
+      const members = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/list$/.exec(new URL(request.url).pathname);
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
-      if (!match && !createOrganization && !profile && !asset && !settings) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -48,6 +49,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply(400, { error: 'invalid-body' });
       const service = serviceForIdentity(identity);
       try {
+        if (members) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.listMembers(null, members[1]));
+        }
         if (createOrganization) {
           if (Object.keys(payload).length !== 2 || typeof payload.name !== 'string' || typeof payload.contactEmail !== 'string') return reply(400, { error: 'invalid-body' });
           return reply(201, await service.createOrganization(null, payload.name, payload.contactEmail));

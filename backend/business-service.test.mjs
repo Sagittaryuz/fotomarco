@@ -11,6 +11,7 @@ function fixture() {
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
+    activeMembers: async () => [...records.values()].filter(item => item.active),
     occupiedSeats: async () => [...records.values()].filter(x => x.active).length,
     createInvitation: async value => { invites.set(value.id, value); },
     invitation: async (_, id) => invites.get(id),
@@ -33,6 +34,17 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('only a manager may list active members and their verified email addresses', async () => {
+  const { service, records } = fixture();
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true, email: 'person@example.com' });
+  records.set('revoked', { organizationId: 'org', userId: 'revoked', role: 'member', active: false, email: 'old@example.com' });
+  const result = await service.listMembers({ uid: 'owner' }, 'org');
+  assert.deepEqual(result.members.map(item => item.userId).sort(), ['member', 'owner']);
+  assert.equal(result.members.find(item => item.userId === 'member').email, 'person@example.com');
+  await assert.rejects(service.listMembers({ uid: 'member' }, 'org'), /forbidden/);
+  await assert.rejects(service.listMembers({ uid: 'outsider' }, 'org'), /forbidden/);
 });
 
 test('only managers can edit organization data and contact email is withheld from members', async () => {

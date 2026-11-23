@@ -102,6 +102,13 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   assert.equal((await app(req(base, ownerToken, { email: 'member@example.com' }))).status, 201);
   assert.equal((await app(req(`${base}/invite/accept`, memberToken, {}))).status, 200);
   assert.equal((await app(req(`${base}/invite/accept`, memberToken, {}))).status, 403);
+  const membersPath = `/v1/organizations/${org}/members/list`;
+  const membersResponse = await app(req(membersPath, ownerToken, {}));
+  assert.equal(membersResponse.status, 200);
+  const members = (await membersResponse.json()).members;
+  assert.deepEqual(members.map(member => member.userId).sort(), ['member', 'owner']);
+  assert.equal(members.find(member => member.userId === 'member').email, 'member@example.com');
+  assert.equal((await app(req(membersPath, memberToken, {}))).status, 403);
   const asset = `/v1/organizations/${org}/assets`;
   assert.equal((await app(req(`${asset}/upload`, ownerToken, { mimeType: 'image/png', base64: 'iVBORw0KGgo=' }))).status, 201);
   const logo = await app(req(`${asset}/invite/read`, memberToken, {}));

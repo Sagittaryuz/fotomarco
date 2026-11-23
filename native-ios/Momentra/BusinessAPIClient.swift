@@ -10,6 +10,8 @@ struct BusinessAPIClient {
     struct AssetReceipt: Decodable { let assetId: String }
     struct Asset: Decodable { let mimeType: String; let base64: String }
     struct OrganizationSettings: Decodable { let id: String; let name: String; let photoAssetId: String; let contactEmail: String? }
+    struct Member: Decodable, Identifiable { let userId: String; let role: String; let email: String?; var id: String { userId } }
+    struct MemberList: Decodable { let members: [Member] }
     private let endpoint: URL
     private let transport: (URLRequest) async throws -> (Data, URLResponse)
 
@@ -43,6 +45,10 @@ struct BusinessAPIClient {
 
     func invite(organizationID: String, email: String, token: String) async throws -> InvitationReceipt {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "invitations"], values: ["email": email], token: token)
+    }
+
+    func listMembers(organizationID: String, token: String) async throws -> MemberList {
+        try await post(path: ["v1", "organizations", try Self.id(organizationID), "members", "list"], values: [:], token: token)
     }
 
     func accept(organizationID: String, invitationID: String, token: String) async throws -> OrganizationReceipt {

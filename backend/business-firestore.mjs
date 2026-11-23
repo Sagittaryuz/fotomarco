@@ -64,6 +64,22 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       organization: org => read(path(org)),
       membership: (org, user) => read(path(org, 'members', user)),
+      activeMembers: async org => {
+        if (writes.length) throw new Error('read-after-write');
+        const organization = segment(org);
+        const result = await send(`/organizations/${organization}:runQuery`, {
+          transaction: txId,
+          structuredQuery: { from: [{ collectionId: 'members' }],
+            where: { fieldFilter: { field: { fieldPath: 'active' }, op: 'EQUAL', value: { booleanValue: true } } },
+            limit: 501 }
+        });
+        if (!Array.isArray(result) || result.some(entry => !entry || entry.error || (!entry.document && !entry.readTime))) throw new Error('invalid-read');
+        return result.filter(entry => entry.document).map(entry => {
+          const member = decode(entry.document.fields);
+          if (entry.document.name !== path(organization, 'members', member.userId)) throw new Error('invalid-read');
+          return member;
+        });
+      },
       invitation: (org, id) => read(path(org, 'invitations', id)),
       asset: (org, id) => read(path(org, 'assets', id)),
       latestProfile: async org => {

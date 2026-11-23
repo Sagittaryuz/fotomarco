@@ -2,6 +2,15 @@ import XCTest
 @testable import Momentra
 
 final class BusinessAPIClientTests: XCTestCase {
+    func testMemberListDecodesOnlyServerResponse() async throws {
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.url?.path, "/v1/organizations/org/members/list")
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"members":[{"userId":"member","role":"member","email":"member@example.com"}]}"#.utf8), response)
+        }
+        let result = try await client.listMembers(organizationID: "org", token: "token")
+        XCTAssertEqual(result.members.first?.email, "member@example.com")
+    }
     func testInvitationUsesFirebaseTokenAndEncodedPayload() async throws {
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
             XCTAssertEqual(request.url?.absoluteString, "https://business.example/v1/organizations/org-1/invitations")
