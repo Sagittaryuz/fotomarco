@@ -29,6 +29,8 @@ struct GalleryCaptureMap: View {
     @StateObject private var currentLocation = LocationService()
     @State private var position: MapCameraPosition = .automatic
     @State private var centeredOnCurrentLocation = false
+    @State private var pendingRecenter = false
+    @State private var mapHeading = 0.0
     @State private var longitudeSpan = 180.0
     @State private var satellite = false
     @State private var selectedCluster: GalleryMapCluster?
@@ -75,8 +77,11 @@ struct GalleryCaptureMap: View {
             .mapStyle(satellite ? .imagery : .standard)
             .mapScope(mapScope)
             .onMapCameraChange(frequency: .onEnd) { context in longitudeSpan = context.region.span.longitudeDelta }
+            .onMapCameraChange(frequency: .continuous) { context in
+                if abs(mapHeading - context.camera.heading) >= 0.5 { mapHeading = context.camera.heading }
+            }
             .accessibilityLabel("Mapa das capturas do Photomark")
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Button {
                     FotomarcoHaptics.play(.gallery)
                     satellite.toggle()
@@ -85,9 +90,24 @@ struct GalleryCaptureMap: View {
                         .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(satellite ? "Mostrar mapa" : "Mostrar satélite")
-                MapUserLocationButton(scope: mapScope)
-                    .frame(width: 44, height: 44)
+                Button {
+                    FotomarcoHaptics.play(.gallery)
+                    if let location = currentLocation.location {
+                        recenter(on: location)
+                    } else {
+                        pendingRecenter = true
+                        currentLocation.setEnabled(true)
+                    }
+                } label: {
+                    Image(systemName: "safari.fill")
+                        .font(.system(size: 21, weight: .medium))
+                        .rotationEffect(.degrees(-mapHeading))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .accessibilityLabel("Centralizar na minha localização e orientar para o norte")
             }
+            .padding(4)
             .modifier(GalleryControlSurface(rounded: true))
             .padding(12)
             if store.loading {
@@ -105,16 +125,14 @@ struct GalleryCaptureMap: View {
         }
         .onAppear {
             centeredOnCurrentLocation = false
+            pendingRecenter = false
             currentLocation.setEnabled(true)
         }
         .onDisappear { currentLocation.setEnabled(false) }
         .onChange(of: currentLocation.location?.timestamp) { _, _ in
-            guard !centeredOnCurrentLocation, !position.positionedByUser,
-                  let location = currentLocation.location else { return }
-            centeredOnCurrentLocation = true
-            position = .region(MKCoordinateRegion(center: location.coordinate,
-                                                   latitudinalMeters: 2000, longitudinalMeters: 2000))
-            currentLocation.setEnabled(false)
+            guard let location = currentLocation.location else { return }
+            guard pendingRecenter || (!centeredOnCurrentLocation && !position.positionedByUser) else { return }
+            recenter(on: location)
         }
         .sheet(item: $selectedCluster, onDismiss: {
             if let pendingItem { self.pendingItem = nil; open(pendingItem) }
@@ -139,6 +157,12 @@ struct GalleryCaptureMap: View {
                 .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Concluído") { selectedCluster = nil } } }
             }.preferredColorScheme(.dark)
         }
+    }
+
+    private func recenter(on location: CLLocation) {
+        centeredOnCurrentLocation = true
+        pendingRecenter = false
+        position = .camera(MapCamera(centerCoordinate: location.coordinate, distance: 2000, heading: 0, pitch: 0))
     }
 
     private func mapMarker(_ cluster: GalleryMapCluster) -> some View {

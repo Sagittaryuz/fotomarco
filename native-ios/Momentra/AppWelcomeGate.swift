@@ -5,7 +5,7 @@ import AVFoundation
 enum ReleaseNews {
     static let version = "0.1.46"
     static let items = [
-        "O mapa da galeria abre próximo à sua localização atual, quando disponível."
+        "O mapa abre na localização atual e a bússola recentraliza e aponta para o norte."
     ]
 
     static func items(for version: String) -> [String] {
