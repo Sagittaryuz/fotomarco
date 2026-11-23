@@ -195,6 +195,7 @@ actor CloudArchiveDelivery {
         }
         if !item.cleanupStarted {
             try CloudThumbnailCache.ensure(root: journal.root, captureID: item.id, source: stampedFile)
+            try? CloudThumbnailCache.cacheShareOriginal(root: journal.root, captureID: item.id, source: stampedFile)
             item.cleanupStarted = true
             try journal.write(item)
         }

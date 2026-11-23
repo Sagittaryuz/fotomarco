@@ -31,10 +31,14 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
         case .warm: return "Acrescenta uma tonalidade quente."
         }
     }
+    private static let styleContext = CIContext(options: nil)
+
     func apply(to image: UIImage) -> UIImage {
         guard let filterName, let filter = CIFilter(name: filterName), let input = CIImage(image: image) else { return image }
         filter.setValue(input, forKey: kCIInputImageKey)
-        guard let output = filter.outputImage, let cg = CIContext(options: nil).createCGImage(output, from: input.extent) else { return image }
+        guard let filtered = filter.outputImage else { return image }
+        let output = self == .vivid ? filtered.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0.9]) : filtered
+        guard let cg = Self.styleContext.createCGImage(output, from: input.extent) else { return image }
         return UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
     }
 }

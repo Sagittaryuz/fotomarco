@@ -498,7 +498,8 @@ struct CameraScreen: View {
                             }
                             .pickerStyle(.inline)
                         } label: {
-                            Image(systemName: "square.on.square").font(.title2)
+                            ProfileLayoutIcon()
+                                .frame(width: 29, height: 29)
                                 .frame(width: 54, height: 54)
                                 .background(.black.opacity(0.5), in: Circle())
                                 .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
@@ -614,6 +615,7 @@ struct CameraScreen: View {
                                         .background(.white.opacity(0.16))
                                 }
                             }.frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 11))
+                                .overlay { if cameraShareTask != nil { Color.black.opacity(0.45).clipShape(RoundedRectangle(cornerRadius: 11)); ProgressView().tint(.white) } }
                                 .onGeometryChange(for: CGRect.self) { proxy in
                                     proxy.frame(in: .named("MomentraCamera"))
                                 } action: { galleryThumbnailFrame = $0 }
@@ -959,6 +961,13 @@ struct CameraScreen: View {
 
         guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else {
             throw CocoaError(.fileNoSuchFile)
+        }
+        if let cached = CloudThumbnailCache.shareOriginal(root: root, captureID: id) {
+            let destination = directory.appendingPathComponent(cached.lastPathComponent)
+            do {
+                try await Task.detached(priority: .userInitiated) { try FileManager.default.copyItem(at: cached, to: destination) }.value
+                return destination
+            } catch { /* Cache can be evicted while a share starts; fall back to cloud. */ }
         }
         let receipt = try await Task.detached(priority: .userInitiated) { try journal.read(id) }.value
         var lastError: Error = CocoaError(.fileNoSuchFile)
@@ -1623,5 +1632,24 @@ private struct LiveStampView: View {
         .padding(10)
         .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
+    }
+}
+
+
+private struct ProfileLayoutIcon: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4).stroke(.white, lineWidth: 1.7)
+            VStack(spacing: 3) {
+                HStack(spacing: 3) {
+                    Image(systemName: "person.crop.circle").resizable().scaledToFit()
+                    RoundedRectangle(cornerRadius: 1.5).stroke(.white, lineWidth: 1.2)
+                }
+                HStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 1.5).stroke(.white, lineWidth: 1.2)
+                    RoundedRectangle(cornerRadius: 1.5).stroke(.white, lineWidth: 1.2)
+                }
+            }.padding(4)
+        }.foregroundStyle(.white)
     }
 }

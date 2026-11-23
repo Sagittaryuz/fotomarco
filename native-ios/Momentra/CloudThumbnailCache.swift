@@ -28,6 +28,39 @@ enum CloudThumbnailCache {
         return nil
     }
 
+    private static let shareLock = NSLock()
+
+    static func shareOriginal(root: URL, captureID: UUID) -> URL? {
+        shareLock.lock(); defer { shareLock.unlock() }
+        let file = root.appendingPathComponent("QuickShareCache", isDirectory: true).appendingPathComponent(captureID.uuidString + ".jpg")
+        guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize, size > 0 else { return nil }
+        return file
+    }
+
+    static func cacheShareOriginal(root: URL, captureID: UUID, source: URL) throws {
+        shareLock.lock(); defer { shareLock.unlock() }
+        let fm = FileManager.default
+        let attrs = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey])
+        guard attrs.isRegularFile == true, let size = attrs.fileSize, size > 0, size <= 64_000_000 else { return }
+        let date = attrs.contentModificationDate ?? Date()
+        let directory = root.appendingPathComponent("QuickShareCache", isDirectory: true
+        )
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        var values = URLResourceValues(); values.isExcludedFromBackup = true
+        var cacheDirectory = directory; try? cacheDirectory.setResourceValues(values)
+        let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles])) ?? []
+        let output = directory.appendingPathComponent(captureID.uuidString + ".jpg")
+        if fm.fileExists(atPath: output.path) { return }
+        if existing.contains(where: { ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) > date }) { return }
+        let temporary = directory.appendingPathComponent("." + UUID().uuidString)
+        defer { try? fm.removeItem(at: temporary) }
+        try fm.copyItem(at: source, to: temporary)
+        try fm.setAttributes([.modificationDate: date, .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: temporary.path)
+        try fm.moveItem(at: temporary, to: output)
+        for old in existing where old.pathExtension.lowercased() == "jpg" && UUID(uuidString: old.deletingPathExtension().lastPathComponent) != nil { try? fm.removeItem(at: old) }
+    }
+
     static func ensure(root: URL, captureID: UUID, source: URL) throws {
         let directory = root.appendingPathComponent("CloudThumbnails", isDirectory: true)
         let output = directory.appendingPathComponent(captureID.uuidString + ".jpg")

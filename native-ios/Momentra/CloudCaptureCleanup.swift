@@ -37,6 +37,7 @@ actor CloudCaptureCleanup {
         do {
             // Keep an offline preview before freeing the full-resolution copies.
             try CloudThumbnailCache.ensure(root: root, captureID: id, source: stamped)
+            try? CloudThumbnailCache.cacheShareOriginal(root: root, captureID: id, source: stamped)
             guard await accountIsCurrent(owner) else { return .retained }
             if item.phase == .verified { try queue.beginCleanup(id: id, owner: owner) }
             guard await accountIsCurrent(owner) else { return .retained }

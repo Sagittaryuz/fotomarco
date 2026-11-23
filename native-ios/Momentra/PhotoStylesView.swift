@@ -39,6 +39,11 @@ struct PhotoStylesView: View {
     }
 }
 
+@MainActor
+private enum StylePreviewCache {
+    static let images = NSCache<NSString, UIImage>()
+}
+
 private struct StylePreview: View {
     let style: MomentraPhotoStyle
     @State private var image: UIImage?
@@ -55,8 +60,13 @@ private struct StylePreview: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .task(id: style) {
+            let key = style.rawValue as NSString
+            if let cached = StylePreviewCache.images.object(forKey: key) { image = cached; return }
             guard let source = UIImage(named: "StyleSample") else { return }
-            image = style.apply(to: source)
+            let rendered = await Task.detached(priority: .userInitiated) { style.apply(to: source) }.value
+            guard !Task.isCancelled else { return }
+            StylePreviewCache.images.setObject(rendered, forKey: key)
+            image = rendered
         }
     }
 }
