@@ -7,6 +7,8 @@ struct BusinessAPIClient {
     struct InvitationReceipt: Decodable { let id: String; let expiresAt: Int64 }
     struct ProfileReceipt: Decodable { let organizationId: String; let versionId: String; let layoutJSON: String }
     struct VersionReceipt: Decodable { let versionId: String }
+    struct AssetReceipt: Decodable { let assetId: String }
+    struct Asset: Decodable { let mimeType: String; let base64: String }
     private let endpoint: URL
     private let transport: (URLRequest) async throws -> (Data, URLResponse)
 
@@ -54,11 +56,21 @@ struct BusinessAPIClient {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "profile", "publish"], values: ["layoutJSON": layoutJSON], token: token)
     }
 
-    private func post<T: Decodable>(path: [String], values: [String: String], token: String) async throws -> T {
+    func uploadAsset(organizationID: String, mimeType: String, imageData: Data, token: String) async throws -> AssetReceipt {
+        guard ["image/jpeg", "image/png"].contains(mimeType), !imageData.isEmpty, imageData.count <= 262144 else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "assets", "upload"],
+                              values: ["mimeType": mimeType, "base64": imageData.base64EncodedString()], token: token, maxBodySize: 360448)
+    }
+
+    func readAsset(organizationID: String, assetID: String, token: String) async throws -> Asset {
+        try await post(path: ["v1", "organizations", try Self.id(organizationID), "assets", try Self.id(assetID), "read"], values: [:], token: token)
+    }
+
+    private func post<T: Decodable>(path: [String], values: [String: String], token: String, maxBodySize: Int = 98304) async throws -> T {
         guard !token.isEmpty, token.utf8.count <= 16384,
               token.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 46 || $0 == 95 }) else { throw Failure.invalidRequest }
         let body = try JSONEncoder().encode(values)
-        guard body.count <= 98304 else { throw Failure.invalidRequest }
+        guard body.count <= maxBodySize else { throw Failure.invalidRequest }
         var url = endpoint
         for component in path { url.appendPathComponent(component) }
         var request = URLRequest(url: url)

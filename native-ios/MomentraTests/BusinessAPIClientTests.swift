@@ -27,4 +27,21 @@ final class BusinessAPIClientTests: XCTestCase {
             XCTFail("Expected invalid request")
         } catch BusinessAPIClient.Failure.invalidRequest { } catch { XCTFail("Unexpected error") }
     }
+
+    func testAssetUploadPreservesImageAndRejectsOversizedInput() async throws {
+        let image = Data([137, 80, 78, 71, 13, 10, 26, 10])
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.url?.path, "/v1/organizations/org/assets/upload")
+            let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String])
+            XCTAssertEqual(payload["base64"], image.base64EncodedString())
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 201, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"assetId":"logo-1"}"#.utf8), response)
+        }
+        let receipt = try await client.uploadAsset(organizationID: "org", mimeType: "image/png", imageData: image, token: "token")
+        XCTAssertEqual(receipt.assetId, "logo-1")
+        do {
+            _ = try await client.uploadAsset(organizationID: "org", mimeType: "image/png", imageData: Data(count: 262145), token: "token")
+            XCTFail("Expected invalid request")
+        } catch BusinessAPIClient.Failure.invalidRequest { } catch { XCTFail("Unexpected error") }
+    }
 }
