@@ -7,8 +7,11 @@
     "check": "node tools/check.cjs"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "0.1.80",
     "esbuild": "0.28.2",
-    "typescript": "5.9.3",
-    "@napi-rs/canvas": "0.1.80"
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "jose": "^6.2.18"
   }
 }
