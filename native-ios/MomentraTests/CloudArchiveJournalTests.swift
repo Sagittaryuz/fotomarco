@@ -2,6 +2,24 @@ import XCTest
 @testable import Momentra
 
 final class CloudArchiveJournalTests: XCTestCase {
+    func testRenamedArchivePreservesIdentityAndIsIdempotent() throws {
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 1234)
+        let profile = CaptureProfileTag(id: UUID(), name: "Equipe")
+        let old = CloudArchiveFilename.make(captureID: id, capturedAt: date, profile: profile, originalExtension: nil)
+        let zone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        for (provider, label) in [(CloudDeliveryPlan.Provider.oneDrive, "OneDrive"), (.googleDrive, "Google Drive")] {
+            let renamed = try XCTUnwrap(CloudArchiveFilename.renamed(old, provider: provider, timeZone: zone))
+            XCTAssertTrue(renamed.hasPrefix("01-01-1970 - \(label) - 00-20-34 - "))
+            let decoded = try XCTUnwrap(CloudArchiveFilename(renamed))
+            XCTAssertEqual(decoded.captureID, id)
+            XCTAssertEqual(decoded.capturedAt, date)
+            XCTAssertEqual(decoded.profile, profile)
+            XCTAssertEqual(CloudArchiveFilename.renamed(renamed, provider: provider, timeZone: zone), renamed)
+        }
+        XCTAssertNil(CloudArchiveFilename.renamed("\(id.uuidString)-stamped.jpg", provider: .oneDrive, timeZone: zone))
+    }
+
     func testArchiveNameCarriesCaptureDateAndProfileAcrossDevices() throws {
         let id = UUID()
         let date = Date(timeIntervalSince1970: 1_790_000_000)

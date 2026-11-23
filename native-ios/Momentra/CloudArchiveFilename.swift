@@ -6,6 +6,34 @@ struct CloudArchiveFilename {
     let profile: CaptureProfileTag?
     let isOriginal: Bool
 
+    /// Keep the existing identity suffix so renamed archives remain discoverable.
+    static func renamed(_ existingName: String, provider: CloudDeliveryPlan.Provider,
+                        timeZone: TimeZone) -> String? {
+        guard let metadata = CloudArchiveFilename(existingName), let date = metadata.capturedAt else { return nil }
+        let legacy = legacyName(existingName)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "dd-MM-yyyy"
+        let day = formatter.string(from: date)
+        formatter.dateFormat = "HH-mm-ss"
+        let time = formatter.string(from: date)
+        let label: String
+        switch provider {
+        case .oneDrive: label = "OneDrive"
+        case .googleDrive: label = "Google Drive"
+        }
+        let result = "\(day) - \(label) - \(time) - \(legacy)"
+        return result.utf8.count <= 240 ? result : nil
+    }
+
+    private static func legacyName(_ name: String) -> String {
+        let pattern = #"^\d{2}-\d{2}-\d{4} - (OneDrive|Google Drive) - \d{2}-\d{2}-\d{2} - "#
+        guard let prefix = name.range(of: pattern, options: .regularExpression) else { return name }
+        return String(name[prefix.upperBound...])
+    }
+
     static func make(captureID: UUID, capturedAt: Date, profile: CaptureProfileTag?,
                      originalExtension: String?) -> String {
         let suffix = originalExtension.map { "-original." + $0 } ?? "-stamped.jpg"
@@ -24,6 +52,8 @@ struct CloudArchiveFilename {
     }
 
     init?(_ name: String) {
+        guard name.utf8.count <= 240 else { return nil }
+        let name = Self.legacyName(name)
         guard name.utf8.count <= 160, let captureID = UUID(uuidString: String(name.prefix(36))),
               let separator = name.range(of: "-original.", options: .backwards)
                 ?? name.range(of: "-stamped.", options: .backwards) else { return nil }
