@@ -1054,6 +1054,10 @@ struct CameraScreen: View {
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
+                    Section("Conta e organização") {
+                        NavigationLink("Conta Business") { BusinessAccountView() }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                    }
                     archiveSettingsSection
                     Section("Ajustes da câmera") {
                         NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }

@@ -1,6 +1,9 @@
 import Foundation
+import Combine
 import FirebaseCore
 import FirebaseAuth
+import GoogleSignIn
+import UIKit
 
 /// Business identity is independent of the user's Google Drive and OneDrive sessions.
 @MainActor
@@ -56,12 +59,46 @@ final class BusinessIdentity: ObservableObject {
         update(result.user)
     }
 
+    /// Reuse an existing Google session so enabling Business does not replace
+    /// the Google account already used for cloud storage.
+    func signInGoogle(presenting controller: UIViewController) async throws {
+        guard NativeGoogleAuth.configured else { throw IdentityError.notConfigured }
+        let google = GIDSignIn.sharedInstance
+        let account: GIDGoogleUser
+        if let current = google.currentUser {
+            account = current
+        } else if google.hasPreviousSignIn() {
+            account = try await withCheckedThrowingContinuation { continuation in
+                google.restorePreviousSignIn { user, error in
+                    if let user { continuation.resume(returning: user) }
+                    else { continuation.resume(throwing: error ?? IdentityError.signedOut) }
+                }
+            }
+        } else {
+            account = try await withCheckedThrowingContinuation { continuation in
+                google.signIn(withPresenting: controller) { result, error in
+                    if let user = result?.user { continuation.resume(returning: user) }
+                    else { continuation.resume(throwing: error ?? IdentityError.signedOut) }
+                }
+            }
+        }
+        guard let googleID = account.idToken?.tokenString else { throw IdentityError.signedOut }
+        let credential = GoogleAuthProvider.credential(withIDToken: googleID, accessToken: account.accessToken.tokenString)
+        let result = try await auth().signIn(with: credential)
+        update(result.user)
+    }
+
     func verifiedToken() async throws -> String {
         guard let user = try auth().currentUser else { throw IdentityError.signedOut }
         try await user.reload()
         update(user)
         guard user.isEmailVerified else { throw IdentityError.unverifiedEmail }
         return try await user.getIDToken(forcingRefresh: true)
+    }
+
+    func sendVerification() async throws {
+        guard let user = try auth().currentUser else { throw IdentityError.signedOut }
+        try await user.sendEmailVerification()
     }
 
     func signOut() throws {
