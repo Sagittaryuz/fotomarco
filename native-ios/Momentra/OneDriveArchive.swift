@@ -322,10 +322,10 @@ struct OneDriveArchive {
     }
 
     private static func validName(_ name: String) -> Bool {
-        !name.isEmpty && name.utf8.count <= 160 && name != "." && name != ".." &&
+        !name.isEmpty && name.utf8.count <= 240 && name != "." && name != ".." &&
             !name.hasSuffix(".") && name.utf8.allSatisfy {
                 (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) ||
-                    $0 == 45 || $0 == 46 || $0 == 95
+                    $0 == 32 || $0 == 45 || $0 == 46 || $0 == 95
             }
     }
 }
