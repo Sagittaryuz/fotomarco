@@ -34,6 +34,21 @@ final class BusinessOrganizationTests: XCTestCase {
         XCTAssertFalse(organization.mayInvite(membership(member, .member), activeMembers: 1))
     }
 
+    func testPhotoPermissionScopesAndRevocation() {
+        let user = membership(member, .member)
+        var permissions = OrganizationPhotoPermissions()
+        for action in OrganizationPhotoAction.allCases {
+            XCTAssertTrue(organization.mayPerform(action, takenBy: member, organizationID: org, membership: user, permissions: permissions))
+            XCTAssertFalse(organization.mayPerform(action, takenBy: owner, organizationID: org, membership: user, permissions: permissions))
+        }
+        permissions.view = .all
+        permissions.delete = .none
+        XCTAssertTrue(organization.mayPerform(.view, takenBy: owner, organizationID: org, membership: user, permissions: permissions))
+        XCTAssertFalse(organization.mayPerform(.delete, takenBy: member, organizationID: org, membership: user, permissions: permissions))
+        XCTAssertFalse(organization.mayPerform(.view, takenBy: owner, organizationID: org, membership: membership(member, .member, active: false), permissions: permissions))
+        XCTAssertFalse(organization.mayPerform(.view, takenBy: owner, organizationID: UUID(), membership: user, permissions: permissions))
+    }
+
     func testFolderComponentDoesNotAllowSeparators() {
         let value = OrganizationFolderNaming.memberFolder(name: "Ana / Silva", email: "ana@example.com")
         XCTAssertEqual(value, "Ana Silva (ana@example.com)")

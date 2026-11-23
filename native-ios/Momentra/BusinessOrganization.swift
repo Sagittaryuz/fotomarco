@@ -14,6 +14,33 @@ struct OrganizationMembership: Codable, Equatable {
     let active: Bool
 }
 
+/// Presentation policy only. The service and storage provider must enforce it separately.
+enum OrganizationPhotoAction: String, Codable, CaseIterable {
+    case view, edit, delete, move, download
+}
+
+enum OrganizationPhotoScope: String, Codable {
+    case none, own, all
+}
+
+struct OrganizationPhotoPermissions: Codable, Equatable {
+    var view: OrganizationPhotoScope = .own
+    var edit: OrganizationPhotoScope = .own
+    var delete: OrganizationPhotoScope = .own
+    var move: OrganizationPhotoScope = .own
+    var download: OrganizationPhotoScope = .own
+
+    func scope(for action: OrganizationPhotoAction) -> OrganizationPhotoScope {
+        switch action {
+        case .view: return view
+        case .edit: return edit
+        case .delete: return delete
+        case .move: return move
+        case .download: return download
+        }
+    }
+}
+
 struct BusinessOrganization: Codable, Equatable {
     static let maximumMembers = 500
     let id: UUID
@@ -33,8 +60,20 @@ struct BusinessOrganization: Codable, Equatable {
 
     func mayViewPhoto(takenBy authorID: UUID, organizationID: UUID,
                       membership: OrganizationMembership) -> Bool {
+        mayPerform(.view, takenBy: authorID, organizationID: organizationID,
+                   membership: membership, permissions: .init())
+    }
+
+    func mayPerform(_ action: OrganizationPhotoAction, takenBy authorID: UUID,
+                    organizationID: UUID, membership: OrganizationMembership,
+                    permissions: OrganizationPhotoPermissions) -> Bool {
         guard organizationID == id, mayUsePublishedProfile(membership) else { return false }
-        return mayManage(membership) || membership.userID == authorID
+        if mayManage(membership) { return true }
+        switch permissions.scope(for: action) {
+        case .none: return false
+        case .own: return membership.userID == authorID
+        case .all: return true
+        }
     }
 
     func mayInvite(_ membership: OrganizationMembership, activeMembers: Int) -> Bool {
