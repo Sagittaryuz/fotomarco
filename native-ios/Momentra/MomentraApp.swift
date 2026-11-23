@@ -7,6 +7,7 @@ struct MomentraApp: App {
     var body: some Scene {
         WindowGroup {
             AppWelcomeGate().task {
+                BusinessIdentity.shared.start()
                 if #available(iOS 18.0, *) { await LockedCaptureImporter.watch() }
             }.onOpenURL { url in
                 if url.scheme == "momentra" {

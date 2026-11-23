@@ -19,6 +19,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Provide Firebase configuration when available
+        env:
+          FIREBASE_IOS_CONFIG: ${{ secrets.PHOTOMARK_FIREBASE_IOS_CONFIG }}
+        run: |
+          if [ -n "$FIREBASE_IOS_CONFIG" ]; then
+            printf '%s' "$FIREBASE_IOS_CONFIG" > native-ios/Momentra/GoogleService-Info.plist
+          fi
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Generate Xcode project
@@ -104,6 +111,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Provide Firebase configuration when available
+        env:
+          FIREBASE_IOS_CONFIG: ${{ secrets.PHOTOMARK_FIREBASE_IOS_CONFIG }}
+        run: |
+          if [ -n "$FIREBASE_IOS_CONFIG" ]; then
+            printf '%s' "$FIREBASE_IOS_CONFIG" > native-ios/Momentra/GoogleService-Info.plist
+          fi
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Generate Xcode project
