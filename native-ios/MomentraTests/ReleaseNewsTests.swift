@@ -6,6 +6,6 @@ final class ReleaseNewsTests: XCTestCase {
         let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         XCTAssertEqual(current, ReleaseNews.version, "Atualize as novidades para a versão antes de publicar.")
         XCTAssertFalse(ReleaseNews.items(for: ReleaseNews.version).isEmpty)
-        XCTAssertTrue(ReleaseNews.items(for: "0.1.44").isEmpty)
+        XCTAssertTrue(ReleaseNews.items(for: "0.1.45").isEmpty)
     }
 }

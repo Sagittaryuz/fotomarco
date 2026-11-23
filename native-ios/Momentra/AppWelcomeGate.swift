@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.45"
+    static let version = "0.1.46"
     static let items = [
-        "O aplicativo agora se chama Photomark."
+        "O mapa da galeria abre próximo à sua localização atual, quando disponível."
     ]
 
     static func items(for version: String) -> [String] {

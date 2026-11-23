@@ -26,7 +26,9 @@ struct GalleryCaptureMap: View {
     let items: [GalleryItem]
     let open: (GalleryItem) -> Void
     @ObservedObject var store: GalleryMapStore
+    @StateObject private var currentLocation = LocationService()
     @State private var position: MapCameraPosition = .automatic
+    @State private var centeredOnCurrentLocation = false
     @State private var longitudeSpan = 180.0
     @State private var satellite = false
     @State private var selectedCluster: GalleryMapCluster?
@@ -100,6 +102,19 @@ struct GalleryCaptureMap: View {
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
+        }
+        .onAppear {
+            centeredOnCurrentLocation = false
+            currentLocation.setEnabled(true)
+        }
+        .onDisappear { currentLocation.setEnabled(false) }
+        .onChange(of: currentLocation.location?.timestamp) { _, _ in
+            guard !centeredOnCurrentLocation, !position.positionedByUser,
+                  let location = currentLocation.location else { return }
+            centeredOnCurrentLocation = true
+            position = .region(MKCoordinateRegion(center: location.coordinate,
+                                                   latitudinalMeters: 2000, longitudinalMeters: 2000))
+            currentLocation.setEnabled(false)
         }
         .sheet(item: $selectedCluster, onDismiss: {
             if let pendingItem { self.pendingItem = nil; open(pendingItem) }
