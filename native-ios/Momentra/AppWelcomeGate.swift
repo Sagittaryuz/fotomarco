@@ -3,12 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.46"
+    static let version = "0.1.47"
     static let items = [
-        "O mapa abre na localização atual e a bússola recentraliza e aponta para o norte.",
-        "O botão de perfis ganhou um novo ícone.",
-        "Estilos fotográficos abrem com prévias processadas em segundo plano, e o Vibrante tem cores mais suaves.",
-        "O compartilhamento da foto recente usa uma cópia local quando disponível."
+        "A tela da câmera ficou mais limpa, sem o aviso de envios pendentes."
     ]
 
     static func items(for version: String) -> [String] {

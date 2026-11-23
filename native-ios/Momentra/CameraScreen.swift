@@ -446,11 +446,6 @@ struct CameraScreen: View {
                         Text(camera.processingVideos == 1 ? "Aplicando carimbo ao vídeo…" : "Aplicando carimbo a \(camera.processingVideos) vídeos…")
                             .font(.caption).padding(8).background(.black.opacity(0.65), in: Capsule())
                     }
-                    if !camera.isRecording, archiveStatus.pending > 0 {
-                        Text(archiveStatus.needsAttention ? "Envios pendentes. Confira Armazenamento e contas."
-                             : "\(archiveStatus.pending) captura(s) aguardando envio")
-                            .font(.caption).padding(8).background(.black.opacity(0.75), in: Capsule())
-                    }
                     Spacer(minLength: 8)
                     if countdown > 0 {
                         Text("\(countdown)").font(.system(size: 56, weight: .bold, design: .rounded))
