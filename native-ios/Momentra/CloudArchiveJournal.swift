@@ -15,6 +15,13 @@ struct CloudArchiveJournal {
         var finished = false
         var remoteOriginalName: String?
         var remoteStampedName: String?
+        /// Frozen at enqueue time so retries and time-zone changes never change a destination path.
+        var providerNames: [String: ProviderNames]?
+
+        struct ProviderNames: Codable {
+            let original: String
+            let stamped: String
+        }
 
         struct Reservation: Codable {
             let destination: CloudDeliveryPlan.Destination
@@ -26,6 +33,11 @@ struct CloudArchiveJournal {
         func remoteName(stamped: Bool) -> String {
             if stamped { return remoteStampedName ?? id.uuidString + "-stamped.jpg" }
             return remoteOriginalName ?? id.uuidString + "-original." + originalExtension
+        }
+
+        func remoteName(stamped: Bool, destination: CloudDeliveryPlan.Destination) -> String {
+            guard let names = providerNames?[destination.provider.rawValue] else { return remoteName(stamped: stamped) }
+            return stamped ? names.stamped : names.original
         }
     }
 
@@ -60,6 +72,15 @@ struct CloudArchiveJournal {
                                                                originalExtension: originalExtension)
         capture.remoteStampedName = CloudArchiveFilename.make(captureID: id, capturedAt: date, profile: profile,
                                                               originalExtension: nil)
+        var names: [String: Capture.ProviderNames] = [:]
+        for destination in plan.deliveries.map(\.destination) {
+            guard let original = CloudArchiveFilename.renamed(capture.remoteName(stamped: false), provider: destination.provider, timeZone: .current),
+                  let stamped = CloudArchiveFilename.renamed(capture.remoteName(stamped: true), provider: destination.provider, timeZone: .current) else {
+                throw CocoaError(.fileWriteInvalidFileName)
+            }
+            names[destination.provider.rawValue] = .init(original: original, stamped: stamped)
+        }
+        capture.providerNames = names
         try write(capture)
     }
 
@@ -113,6 +134,11 @@ struct CloudArchiveJournal {
               Set(destinations).count == destinations.count,
               destinations.allSatisfy({
                   CloudDeliveryPlan.Destination(provider: $0.provider, accountHash: $0.accountHash) != nil
+              }), (item.providerNames == nil || destinations.allSatisfy({ destination in
+                  guard let names = item.providerNames?[destination.provider.rawValue],
+                        let original = CloudArchiveFilename(names.original), let stamped = CloudArchiveFilename(names.stamped) else { return false }
+                  return original.captureID == id && original.isOriginal && stamped.captureID == id && !stamped.isOriginal &&
+                      original.capturedAt == stamped.capturedAt && names.original.hasSuffix("." + item.originalExtension)
               }), (item.original == nil) == (item.stamped == nil),
               !item.cleanupStarted || (!item.plan.keepLocal && item.plan.destinationsVerified),
               !item.finished || item.plan.destinationsVerified else {

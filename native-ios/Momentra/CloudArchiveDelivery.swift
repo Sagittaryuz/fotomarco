@@ -62,8 +62,6 @@ actor CloudArchiveDelivery {
         guard let original = item.original, let stamped = item.stamped else { throw CocoaError(.fileReadCorruptFile) }
         let originalURL = journal.file(item, stamped: false)
         let stampedURL = journal.file(item, stamped: true)
-        let originalName = item.remoteName(stamped: false)
-        let stampedName = item.remoteName(stamped: true)
 
         if !item.cleanupStarted {
             if item.plan.keepsOriginal, try CloudFileFingerprint.read(originalURL) != original {
@@ -90,6 +88,8 @@ actor CloudArchiveDelivery {
                 Task { @MainActor in CloudUploadProgress.shared.set(captureID, fraction: fraction) }
             }
             let destination = delivery.destination
+            let originalName = item.remoteName(stamped: false, destination: destination)
+            let stampedName = item.remoteName(stamped: true, destination: destination)
             do {
                 try Task.checkCancellation()
                 if delivery.phase == .verified, item.plan.keepLocal {

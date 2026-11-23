@@ -54,11 +54,20 @@ final class CloudArchiveJournalTests: XCTestCase {
         try journal.enqueue(id: id, date: date, originalExtension: "heic", plan: plan)
 
         let reopened = try CloudArchiveJournal(root: root).read(id)
+        XCTAssertTrue(reopened.remoteName(stamped: true, destination: google).contains(" - Google Drive - "))
+        XCTAssertTrue(reopened.remoteName(stamped: true, destination: microsoft).contains(" - OneDrive - "))
+        XCTAssertEqual(reopened.remoteName(stamped: true, destination: google), item.remoteName(stamped: true, destination: google))
         XCTAssertEqual(reopened.plan.deliveries.map(\.destination), [google, microsoft])
         XCTAssertEqual(reopened.plan.deliveries.map(\.phase), [.verified, .pending])
         XCTAssertFalse(reopened.plan.destinationsVerified)
         let changed = try XCTUnwrap(CloudDeliveryPlan(keepLocal: true, destinations: [microsoft]))
         XCTAssertThrowsError(try journal.enqueue(id: id, date: date, originalExtension: "heic", plan: changed))
+
+        // Journals made by an older version retain their original destination names.
+        item.providerNames = nil
+        try journal.write(item)
+        let legacy = try journal.read(id)
+        XCTAssertEqual(legacy.remoteName(stamped: true, destination: google), legacy.remoteName(stamped: true))
     }
 
     func testMarkReadyRequiresTwoCompleteFiles() throws {

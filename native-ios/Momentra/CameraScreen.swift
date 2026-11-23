@@ -971,7 +971,7 @@ struct CameraScreen: View {
             try Task.checkCancellation()
             guard let remoteID = delivery.stampedID,
                   let account = archiveAccounts.accounts.first(where: { $0.id == delivery.destination }) else { continue }
-            let entry = CloudGalleryCatalog.Entry(id: remoteID, name: receipt.remoteName(stamped: true),
+            let entry = CloudGalleryCatalog.Entry(id: remoteID, name: receipt.remoteName(stamped: true, destination: delivery.destination),
                                                   date: receipt.createdAt, revision: nil)
             guard let item = GalleryCloudItem.cachedPage([entry], for: account).items.first else { continue }
             do { return try await item.copy(to: directory) }
