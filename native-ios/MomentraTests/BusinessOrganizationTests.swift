@@ -2,6 +2,14 @@ import XCTest
 @testable import Momentra
 
 final class BusinessOrganizationTests: XCTestCase {
+    func testOrganizationContactDoesNotAcceptPublicPhotoURL() throws {
+        let info = try XCTUnwrap(OrganizationDetails(name: " Equipe ", contactEmail: " contact@example.com ", photoReference: "logos/abc"))
+        XCTAssertEqual(info.name, "Equipe")
+        XCTAssertEqual(info.contactEmail, "contact@example.com")
+        XCTAssertNil(OrganizationDetails(name: "", contactEmail: "contact@example.com"))
+        XCTAssertNil(OrganizationDetails(name: "Equipe", contactEmail: "invalid"))
+        XCTAssertNil(OrganizationDetails(name: "Equipe", contactEmail: "contact@example.com", photoReference: "https://example.com/photo"))
+    }
     private let org = UUID(), owner = UUID(), member = UUID()
     private var organization: BusinessOrganization { .init(id: org, ownerID: owner, name: "Equipe") }
     private func membership(_ user: UUID, _ role: OrganizationRole, active: Bool = true,

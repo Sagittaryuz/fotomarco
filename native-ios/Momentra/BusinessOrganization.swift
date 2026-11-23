@@ -41,6 +41,32 @@ struct OrganizationPhotoPermissions: Codable, Equatable {
     }
 }
 
+/// Organization contact details do not establish cloud access or email-sender authority.
+struct OrganizationDetails: Codable, Equatable {
+    let name: String
+    let contactEmail: String
+    /// An opaque, access-controlled storage reference; never a public URL or access token.
+    let photoReference: String?
+
+    init?(name: String, contactEmail: String, photoReference: String? = nil) {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = contactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = normalizedEmail.split(separator: "@", omittingEmptySubsequences: false)
+        guard !normalizedName.isEmpty, normalizedName.utf8.count <= 160,
+              parts.count == 2, !parts[0].isEmpty, parts[1].contains("."),
+              !parts[1].hasPrefix("."), !parts[1].hasSuffix("."),
+              normalizedEmail.utf8.count <= 254,
+              !normalizedEmail.contains(where: { $0.isWhitespace || $0.isNewline }),
+              photoReference.map({ reference in
+                  !reference.isEmpty && reference.utf8.count <= 256 &&
+                  !reference.contains("://") && !reference.contains("?") && !reference.contains("#")
+              }) ?? true else { return nil }
+        self.name = normalizedName
+        self.contactEmail = normalizedEmail
+        self.photoReference = photoReference
+    }
+}
+
 struct BusinessOrganization: Codable, Equatable {
     static let maximumMembers = 500
     let id: UUID
