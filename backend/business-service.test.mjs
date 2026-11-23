@@ -36,3 +36,15 @@ test('a nonmember cannot invite; unverified or mismatched recipients cannot acce
   await assert.rejects(service.accept({ uid: 'x', email: 'b@example.com', emailVerified: true }, 'org', 'invite'), /invalid-invitation/);
   await assert.rejects(service.accept({ uid: 'x', email: 'a@example.com', emailVerified: true }, 'other', 'invite'), /invalid-invitation/);
 });
+
+test('organization creation requires verified identity and a trusted business entitlement', async () => {
+  let saved;
+  const tx = { initializeOrganization: async value => { saved = value; } };
+  const options = { verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'org', clock: () => 100 };
+  const user = { uid: 'owner', email: 'person@example.com', emailVerified: true };
+  await assert.rejects(new BusinessService(options).createOrganization(user, 'Empresa', 'business@example.com'), /forbidden/);
+  const service = new BusinessService({ ...options, canCreateOrganization: async identity => identity.uid === 'owner' });
+  await assert.rejects(service.createOrganization({ ...user, emailVerified: false }, 'Empresa', 'business@example.com'), /invalid-request/);
+  assert.deepEqual(await service.createOrganization(user, ' Empresa ', 'BUSINESS@example.com'), { organizationId: 'org' });
+  assert.deepEqual(saved, { id: 'org', ownerId: 'owner', name: 'Empresa', contactEmail: 'business@example.com' });
+});

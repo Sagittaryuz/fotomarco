@@ -51,6 +51,13 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       writes.push({ update: { name, fields: fields(data) }, ...(currentDocument ? { currentDocument } : {}) });
     }
     const tx = {
+      initializeOrganization: async organization => {
+        const org = segment(organization.id);
+        const owner = segment(organization.ownerId);
+        put(path(org), organization, { exists: false });
+        put(path(org, 'members', owner), { organizationId: org, userId: owner, role: 'owner', active: true }, { exists: false });
+        put(path(org, 'state', 'seats'), { count: 1 }, { exists: false });
+      },
       organization: org => read(path(org)),
       membership: (org, user) => read(path(org, 'members', user)),
       invitation: (org, id) => read(path(org, 'invitations', id)),

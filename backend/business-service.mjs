@@ -7,11 +7,27 @@ import { mayAcceptInvitation, mayInvite } from './business-policy.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
     this.clock = clock;
+    this.canCreateOrganization = canCreateOrganization;
+  }
+
+  async createOrganization(token, name, contactEmail) {
+    const identity = await this.verifyToken(token);
+    const displayName = typeof name === 'string' ? name.trim() : '';
+    const address = typeof contactEmail === 'string' ? contactEmail.trim().toLowerCase() : '';
+    if (!identity?.uid || identity.emailVerified !== true || !displayName || displayName.length > 160 ||
+        address.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new Error('invalid-request');
+    if (typeof this.canCreateOrganization !== 'function' || await this.canCreateOrganization(identity) !== true) throw new Error('forbidden');
+    const id = this.newId();
+    if (typeof id !== 'string' || !id) throw new Error('invalid-id');
+    return this.transaction(async tx => {
+      await tx.initializeOrganization({ id, ownerId: identity.uid, name: displayName, contactEmail: address });
+      return { organizationId: id };
+    });
   }
 
   async invite(token, organizationId, email) {

@@ -6,7 +6,8 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
     try {
       if (request.method !== 'POST') return reply(405, { error: 'method-not-allowed' });
       const match = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/invitations(?:\/([A-Za-z0-9_-]{1,128})\/accept)?$/.exec(new URL(request.url).pathname);
-      if (!match) return reply(404, { error: 'not-found' });
+      const createOrganization = new URL(request.url).pathname === '/v1/organizations';
+      if (!match && !createOrganization) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -43,6 +44,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply(400, { error: 'invalid-body' });
       const service = serviceForIdentity(identity);
       try {
+        if (createOrganization) {
+          if (Object.keys(payload).length !== 2 || typeof payload.name !== 'string' || typeof payload.contactEmail !== 'string') return reply(400, { error: 'invalid-body' });
+          return reply(201, await service.createOrganization(null, payload.name, payload.contactEmail));
+        }
         if (match[2]) {
           if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
           return reply(200, await service.accept(null, match[1], match[2]));
@@ -50,7 +55,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
         if (Object.keys(payload).length !== 1 || typeof payload.email !== 'string') return reply(400, { error: 'invalid-body' });
         return reply(201, await service.invite(null, match[1], payload.email));
       } catch (error) {
-        if (['invalid-request', 'invalid-invitation', 'already-member', 'forbidden-or-full', 'full'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
+        if (['invalid-request', 'invalid-invitation', 'already-member', 'forbidden', 'forbidden-or-full', 'full'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
         return reply(503, { error: 'unavailable' });
       }
     } catch { return reply(503, { error: 'unavailable' }); }

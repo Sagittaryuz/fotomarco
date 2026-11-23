@@ -7,6 +7,20 @@ import { createBusinessApp } from './business-app.mjs';
 import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 
+test('organization bootstrap creates owner and seat counter atomically', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
+  const projectId = 'demo-photomark-business';
+  const org = `org-${randomUUID()}`;
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const service = new BusinessService({ transaction, verifyToken: async token => token, newId: () => org, clock: () => 100, canCreateOrganization: async () => true });
+  const identity = { uid: 'owner', email: 'owner@example.com', emailVerified: true };
+  assert.deepEqual(await service.createOrganization(identity, 'Equipe', 'business@example.com'), { organizationId: org });
+  const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents/organizations/${org}`;
+  const result = await fetch(`${root}/members/owner`, { headers: { authorization: 'Bearer owner' } });
+  assert.equal((await result.json()).fields.role.stringValue, 'owner');
+  await assert.rejects(service.createOrganization(identity, 'Outra', 'business@example.com'));
+});
+
 test('Firestore emulator commits a real invitation and member transaction', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
   const projectId = 'demo-photomark-business';
