@@ -104,7 +104,10 @@ final class GalleryShareBatch: Identifiable {
     deinit { try? FileManager.default.removeItem(at: directory) }
 
     @MainActor
-    static func prepare<Item>(_ items: [Item], copy: (Item, URL) async throws -> URL) async throws -> GalleryShareBatch {
+    static func prepare<Item>(_ items: [Item], progress: ((Int, Int) -> Void)? = nil,
+                              copy: (Item, URL) async throws -> URL) async throws -> GalleryShareBatch {
+        progress?(0, items.count)
+        if progress != nil { await Task.yield() }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         do {
             var files: [URL] = []
@@ -113,6 +116,8 @@ final class GalleryShareBatch: Identifiable {
                 let target = directory.appendingPathComponent(String(index), isDirectory: true)
                 try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
                 files.append(try await copy(item, target))
+                try Task.checkCancellation()
+                progress?(index + 1, items.count)
             }
             try Task.checkCancellation()
             return GalleryShareBatch(directory: directory, files: files)
@@ -127,6 +132,36 @@ final class GalleryShareBatch: Identifiable {
     }
 }
 
+struct GalleryShareProgress: Equatable {
+    let completed: Int
+    let total: Int
+    var fraction: Double { total > 0 ? min(1, max(0, Double(completed) / Double(total))) : 0 }
+}
+
+struct GalleryShareProgressOverlay: View {
+    let progress: GalleryShareProgress
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.82).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Text("Preparando compartilhamento")
+                    .font(.headline).multilineTextAlignment(.center)
+                Text("Aguarde enquanto as fotos são preparadas e, se necessário, baixadas da nuvem.")
+                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Text("\(Int((progress.fraction * 100).rounded()))%")
+                    .font(.system(size: 34, weight: .semibold, design: .rounded)).monospacedDigit()
+                ProgressView(value: progress.fraction).tint(.yellow)
+                Text("\(progress.completed) de \(progress.total) itens preparados")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(24).frame(maxWidth: 340)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+            .padding(24)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
     let items: [Item]
     let current: Item
@@ -138,6 +173,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
     @State private var batch: GalleryShareBatch?
     @State private var shareSucceeded = false
     @State private var preparation: Task<Void, Never>?
+    @State private var progress: GalleryShareProgress?
     @State private var failed = false
 
     init(items: [Item], current: Item, copy: @escaping (Item, URL) async throws -> URL,
@@ -208,6 +244,7 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
             }
         }
         .preferredColorScheme(.dark)
+        .overlay { if let progress { GalleryShareProgressOverlay(progress: progress) } }
         .presentationDetents([.medium, .large])
         .interactiveDismissDisabled(preparation != nil)
     }
@@ -217,9 +254,11 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
         let chosen = items.filter { selected.contains($0.id) }
         guard !chosen.isEmpty else { return }
         preparation = Task {
-            defer { preparation = nil }
+            defer { preparation = nil; progress = nil }
             do {
-                let prepared = try await GalleryShareBatch.prepare(chosen, copy: copy)
+                let prepared = try await GalleryShareBatch.prepare(chosen, progress: { completed, total in
+                    progress = GalleryShareProgress(completed: completed, total: total)
+                }, copy: copy)
                 if !Task.isCancelled { batch = prepared }
             } catch {
                 if !Task.isCancelled { failed = true }

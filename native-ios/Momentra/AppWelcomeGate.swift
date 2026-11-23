@@ -3,11 +3,10 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.47"
+    static let version = "0.1.48"
     static let items = [
-        "A tela da câmera ficou mais limpa, sem o aviso de envios pendentes.",
-        "As fotos aguardando envio ficam mais escuras e se revelam durante a sincronização.",
-        "O mapa do carimbo reaproveita renderizações recentes quando possível."
+        "O compartilhamento de várias fotos mostra o andamento da preparação.",
+        "O mapa da câmera abre com a vista de satélite."
     ]
 
     static func items(for version: String) -> [String] {

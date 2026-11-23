@@ -36,6 +36,7 @@ struct OriginalsView: View {
     @State private var trashItem: GalleryItem?
     @State private var quickShare: GalleryItem?
     @State private var shared: GalleryShareBatch?
+    @State private var shareProgress: GalleryShareProgress?
     @State private var confirmBatch = false
     @State private var busy = false
     @State private var loading = false
@@ -103,6 +104,7 @@ struct OriginalsView: View {
                         y: galleryExit == .down ? geometry.size.height + 30 : galleryDrag.height)
                 .allowsHitTesting(galleryExit == nil)
         }
+        .overlay { if let shareProgress { GalleryShareProgressOverlay(progress: shareProgress) } }
         .presentationBackground(.clear)
         .task {
             guard !galleryVisible else { return }
@@ -720,9 +722,14 @@ struct OriginalsView: View {
         guard !busy, !chosen.isEmpty else { return }
         busy = true
         Task {
-            defer { busy = false }
-            do { shared = try await GalleryShareBatch.prepare(chosen) { try await $0.copy(to: $1) } }
-            catch { message = "Não foi possível preparar os itens selecionados." }
+            defer { busy = false; shareProgress = nil }
+            do {
+                let batch = try await GalleryShareBatch.prepare(chosen, progress: { completed, total in
+                    shareProgress = GalleryShareProgress(completed: completed, total: total)
+                }) { try await $0.copy(to: $1) }
+                shareProgress = nil
+                shared = batch
+            } catch { message = "Não foi possível preparar os itens selecionados." }
         }
     }
 

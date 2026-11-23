@@ -147,7 +147,7 @@ struct CameraScreen: View {
     @State private var showSupportPanel = false
     @State private var showOriginals = false
     @State private var showMap = false
-    @State private var mapAppearance: StampLayout.MapAppearance = .map
+    @State private var mapAppearance: StampLayout.MapAppearance = .satellite
     @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
     @State private var importMessage: String?
@@ -566,6 +566,7 @@ struct CameraScreen: View {
                         Button {
                             FotomarcoHaptics.play(.buttons)
                             mapLocation = makeSnapshot(at: Date()).location
+                            mapAppearance = .satellite
                             showMap = true
                         } label: {
                             Image(systemName: "map").font(.title2)
