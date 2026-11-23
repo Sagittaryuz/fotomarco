@@ -7,9 +7,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       if (request.method !== 'POST') return reply(405, { error: 'method-not-allowed' });
       const match = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/invitations(?:\/([A-Za-z0-9_-]{1,128})\/accept)?$/.exec(new URL(request.url).pathname);
       const profile = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/profile\/(read|publish)$/.exec(new URL(request.url).pathname);
+      const settings = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/settings\/(read|update)$/.exec(new URL(request.url).pathname);
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
-      if (!match && !createOrganization && !profile && !asset) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -58,6 +59,14 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
           }
           if (Object.keys(payload).length !== 1 || typeof payload.layoutJSON !== 'string') return reply(400, { error: 'invalid-body' });
           return reply(201, await service.publishProfile(null, profile[1], payload.layoutJSON));
+        }
+        if (settings) {
+          if (settings[2] === 'read') {
+            if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+            return reply(200, await service.readOrganization(null, settings[1]));
+          }
+          if (Object.keys(payload).length !== 3 || typeof payload.name !== 'string' || typeof payload.contactEmail !== 'string' || typeof payload.photoAssetId !== 'string') return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.updateOrganization(null, settings[1], payload.name, payload.contactEmail, payload.photoAssetId));
         }
         if (asset) {
           if (asset[2] === 'upload') {

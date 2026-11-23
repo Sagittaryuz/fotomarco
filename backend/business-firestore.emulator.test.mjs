@@ -106,6 +106,13 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   assert.equal((await app(req(`${asset}/upload`, ownerToken, { mimeType: 'image/png', base64: 'iVBORw0KGgo=' }))).status, 201);
   const logo = await app(req(`${asset}/invite/read`, memberToken, {}));
   assert.equal((await logo.json()).base64, 'iVBORw0KGgo=');
+  const settings = `/v1/organizations/${org}/settings`;
+  assert.equal((await app(req(`${settings}/update`, ownerToken, { name: 'Equipe', contactEmail: 'org@example.com', photoAssetId: 'invite' }))).status, 200);
+  const memberSettings = await (await app(req(`${settings}/read`, memberToken, {}))).json();
+  assert.equal(memberSettings.name, 'Equipe');
+  assert.equal(memberSettings.photoAssetId, 'invite');
+  assert.equal(memberSettings.contactEmail, undefined);
+  assert.equal((await app(req(`${settings}/update`, memberToken, { name: 'Alterado', contactEmail: 'x@example.com', photoAssetId: '' }))).status, 403);
   const profile = `/v1/organizations/${org}/profile`;
   const layoutJSON = '{"logoName":"business-asset:invite"}';
   assert.equal((await app(req(`${profile}/publish`, ownerToken, { layoutJSON }))).status, 201);

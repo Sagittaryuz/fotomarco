@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { BusinessService } from './business-service.mjs';
 
 function fixture() {
-  const organization = { id: 'org', ownerId: 'owner' };
+  const organization = { id: 'org', ownerId: 'owner', name: 'Equipe', contactEmail: 'owner@example.com' };
   const records = new Map([['owner', { organizationId: 'org', userId: 'owner', role: 'owner', active: true }]]);
   const invites = new Map();
   let profile;
@@ -20,6 +20,7 @@ function fixture() {
     latestProfile: async () => profile,
     createAsset: async value => { asset = value; },
     asset: async () => asset,
+    updateOrganization: async (_, updates) => { Object.assign(organization, updates); },
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100 });
   return { service, records, invites };
@@ -32,6 +33,17 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('only managers can edit organization data and contact email is withheld from members', async () => {
+  const { service, records } = fixture();
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  const updated = await service.updateOrganization({ uid: 'owner' }, 'org', ' Equipe Nova ', 'TEAM@example.com', '');
+  assert.equal(updated.contactEmail, 'team@example.com');
+  const memberView = await service.readOrganization({ uid: 'member' }, 'org');
+  assert.deepEqual(memberView, { id: 'org', name: 'Equipe Nova', photoAssetId: '' });
+  await assert.rejects(service.updateOrganization({ uid: 'member' }, 'org', 'Fraude', 'bad@example.com', ''), /forbidden/);
+  await assert.rejects(service.updateOrganization({ uid: 'owner' }, 'org', 'Nome', 'bad@example.com', 'missing'), /invalid-request/);
 });
 
 test('organization image is limited to managers for writing and members for reading', async () => {

@@ -30,6 +30,38 @@ export class BusinessService {
     });
   }
 
+  async readOrganization(token, organizationId) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member)) throw new Error('forbidden');
+      return { id: org.id, name: org.name, photoAssetId: org.photoAssetId ?? '',
+        ...(mayManage(identity, org, member) ? { contactEmail: org.contactEmail } : {}) };
+    });
+  }
+
+  async updateOrganization(token, organizationId, name, contactEmail, photoAssetId) {
+    const identity = await this.verifyToken(token);
+    const displayName = typeof name === 'string' ? name.trim() : '';
+    const address = typeof contactEmail === 'string' ? contactEmail.trim().toLowerCase() : '';
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId || !displayName || displayName.length > 160 ||
+        address.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) ||
+        typeof photoAssetId !== 'string' || (photoAssetId && !/^[A-Za-z0-9_-]{1,128}$/.test(photoAssetId))) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member)) throw new Error('forbidden');
+      if (photoAssetId) {
+        const photo = await tx.asset(organizationId, photoAssetId);
+        if (!photo || photo.organizationId !== organizationId || photo.assetId !== photoAssetId) throw new Error('invalid-request');
+      }
+      await tx.updateOrganization(organizationId, { name: displayName, contactEmail: address, photoAssetId });
+      return { id: organizationId, name: displayName, contactEmail: address, photoAssetId };
+    });
+  }
+
   async invite(token, organizationId, email) {
     const identity = await this.verifyToken(token);
     const address = typeof email === 'string' ? email.trim().toLowerCase() : '';
