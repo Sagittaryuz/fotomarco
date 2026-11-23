@@ -7,7 +7,7 @@ final class CloudUploadProgressTests: XCTestCase {
     func testTransferDoesNotClaimCompletionBeforeVerification() {
         let tracker = CloudUploadProgress.shared
         let id = UUID()
-        defer { tracker.stop(id) }
+        defer { tracker.discard(id) }
         tracker.start(id)
         tracker.set(id, fraction: 1)
         XCTAssertEqual(tracker.values[id], 0.99)
@@ -21,20 +21,33 @@ final class CloudUploadProgressTests: XCTestCase {
         let tracker = CloudUploadProgress.shared
         let id = UUID()
         tracker.start(id)
+        defer { tracker.discard(id) }
         tracker.stop(id)
         tracker.set(id, fraction: 0.8)
-        XCTAssertNil(tracker.values[id])
+        XCTAssertEqual(tracker.values[id], 0)
     }
 
     func testNonFiniteInputIsIgnoredAndProgressUsesWholePercentages() {
         let tracker = CloudUploadProgress.shared
         let id = UUID()
-        defer { tracker.stop(id) }
+        defer { tracker.discard(id) }
         tracker.start(id)
         tracker.set(id, fraction: .nan)
         XCTAssertEqual(tracker.values[id], 0)
         tracker.set(id, fraction: 0.426)
         XCTAssertEqual(tracker.values[id], 0.42)
+    }
+
+    func testWaitingItemsAreMarkedBeforeTheirTurn() {
+        let tracker = CloudUploadProgress.shared
+        let first = UUID(), second = UUID()
+        defer { tracker.discard(first); tracker.discard(second) }
+        tracker.preparePending([first, second])
+        XCTAssertEqual(tracker.values[first], 0)
+        XCTAssertEqual(tracker.values[second], 0)
+        tracker.preparePending([second])
+        XCTAssertNil(tracker.values[first])
+        XCTAssertEqual(tracker.values[second], 0)
     }
 
     func testRemainingMaskClearsClockwiseFromTheTop() {

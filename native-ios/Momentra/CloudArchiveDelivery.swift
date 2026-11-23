@@ -21,7 +21,10 @@ actor CloudArchiveDelivery {
         var changedDestinations = Set<CloudDeliveryPlan.Destination>()
         do {
             let journal = try CloudArchiveJournal.documents()
-            for id in try journal.ids() {
+            let ids = try journal.ids()
+            let pending = Set(ids.filter { (try? journal.read($0).finished) != true })
+            await MainActor.run { CloudUploadProgress.shared.preparePending(pending) }
+            for id in ids {
                 do {
                     var item = try journal.read(id)
                     guard !item.finished else { continue }

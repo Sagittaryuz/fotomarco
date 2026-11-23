@@ -1340,25 +1340,48 @@ enum StampAddress {
 }
 
 enum StampMap {
-    // Completion is serialized onto the caller's queue and fires at most once.
+    private struct CachedMap { let image: UIImage; let date: Date }
+    private static let coordinator = DispatchQueue(label: "br.com.momentra.stamp-map-cache", qos: .utility)
+    private static var cached: [String: CachedMap] = [:]
+    private static var waiting: [String: (id: UUID, callbacks: [(UIImage?) -> Void])] = [:]
+
+    // Requests for the same location and style share one render and retain it briefly.
+    // Each callback returns to the queue supplied by its caller.
     static func load(snapshot: StampSnapshot, queue: DispatchQueue, completion: @escaping (UIImage?) -> Void) {
-        guard snapshot.mapEnabled, let location = snapshot.location else { completion(nil); return }
-        let options = MKMapSnapshotter.Options()
-        options.region = MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 350, longitudinalMeters: 350)
-        options.mapType = snapshot.layout.mapStyle == .satellite ? .satellite : .standard
-        options.size = CGSize(width: 256, height: 256)
-        let snapshotter = MKMapSnapshotter(options: options)
-        var finished = false
-        let finish: (UIImage?) -> Void = { image in
-            guard !finished else { return }
-            finished = true
-            completion(image)
-        }
-        snapshotter.start(with: queue) { result, _ in finish(result?.image) }
-        queue.asyncAfter(deadline: .now() + 8) {
-            guard !finished else { return }
-            snapshotter.cancel()
-            finish(nil)
+        guard snapshot.mapEnabled, let coordinate = snapshot.location?.coordinate else { completion(nil); return }
+        let style = snapshot.layout.mapStyle
+        let key = "\(coordinate.latitude):\(coordinate.longitude):\(style.rawValue)"
+        coordinator.async {
+            let deliver: (UIImage?) -> Void = { image in queue.async { completion(image) } }
+            if let entry = cached[key], Date().timeIntervalSince(entry.date) < 30 {
+                deliver(entry.image); return
+            }
+            if waiting[key] != nil { waiting[key]?.callbacks.append(deliver); return }
+            let requestID = UUID()
+            waiting[key] = (requestID, [deliver])
+            let options = MKMapSnapshotter.Options()
+            options.region = MKCoordinateRegion(center: coordinate, latitudinalMeters: 350, longitudinalMeters: 350)
+            options.mapType = style == .satellite ? .satellite : .standard
+            options.size = CGSize(width: 256, height: 256)
+            let snapshotter = MKMapSnapshotter(options: options)
+            let finish: (UIImage?) -> Void = { image in
+                guard let flight = waiting[key], flight.id == requestID else { return }
+                waiting.removeValue(forKey: key)
+                if let image {
+                    cached = cached.filter { Date().timeIntervalSince($0.value.date) < 30 }
+                    if cached.count >= 4, let oldest = cached.min(by: { $0.value.date < $1.value.date })?.key {
+                        cached.removeValue(forKey: oldest)
+                    }
+                    cached[key] = CachedMap(image: image, date: Date())
+                }
+                flight.callbacks.forEach { $0(image) }
+            }
+            snapshotter.start(with: coordinator) { result, _ in finish(result?.image) }
+            coordinator.asyncAfter(deadline: .now() + 8) {
+                guard waiting[key]?.id == requestID else { return }
+                snapshotter.cancel()
+                finish(nil)
+            }
         }
     }
 }

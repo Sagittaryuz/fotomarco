@@ -4,11 +4,19 @@ import SwiftUI
 final class CloudUploadProgress: ObservableObject {
     static let shared = CloudUploadProgress()
     @Published private(set) var values: [UUID: Double] = [:]
+    private var active = Set<UUID>()
 
-    func start(_ id: UUID) { values[id] = 0 }
+    func preparePending(_ ids: Set<UUID>) {
+        for id in ids where values[id] == nil { values[id] = 0 }
+        for id in Array(values.keys) where !ids.contains(id) && !active.contains(id) && values[id] != 1 {
+            values.removeValue(forKey: id)
+        }
+    }
+
+    func start(_ id: UUID) { active.insert(id); values[id] = 0 }
 
     func set(_ id: UUID, fraction: Double) {
-        guard let previous = values[id], previous < 1 else { return }
+        guard active.contains(id), let previous = values[id], previous < 1 else { return }
         guard fraction.isFinite else { return }
         let percentage = floor(min(0.99, max(0, fraction)) * 100) / 100
         guard percentage != previous else { return }
@@ -16,6 +24,7 @@ final class CloudUploadProgress: ObservableObject {
     }
 
     func finish(_ id: UUID) {
+        active.remove(id)
         values[id] = 1
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
@@ -23,7 +32,8 @@ final class CloudUploadProgress: ObservableObject {
         }
     }
 
-    func stop(_ id: UUID) { values.removeValue(forKey: id) }
+    func stop(_ id: UUID) { active.remove(id); values[id] = 0 }
+    func discard(_ id: UUID) { active.remove(id); values.removeValue(forKey: id) }
 }
 
 /// Per-task delegate reports actual body bytes and preserves the no-redirect policy.
@@ -71,7 +81,7 @@ struct CloudUploadIndicator: View {
     var body: some View {
         GeometryReader { _ in
             ZStack {
-                Rectangle().fill(.black.opacity(0.65))
+                Rectangle().fill(.black.opacity(0.88))
                     .mask {
                         CloudUploadRemainingMask(progress: value)
                     }
