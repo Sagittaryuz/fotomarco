@@ -139,7 +139,7 @@ struct CloudArchiveJournal {
                         let original = CloudArchiveFilename(names.original), let stamped = CloudArchiveFilename(names.stamped) else { return false }
                   return original.captureID == id && original.isOriginal && stamped.captureID == id && !stamped.isOriginal &&
                       original.capturedAt == stamped.capturedAt && names.original.hasSuffix("." + item.originalExtension)
-              }), (item.original == nil) == (item.stamped == nil),
+              })), (item.original == nil) == (item.stamped == nil),
               !item.cleanupStarted || (!item.plan.keepLocal && item.plan.destinationsVerified),
               !item.finished || item.plan.destinationsVerified else {
             throw CocoaError(.fileReadCorruptFile)
