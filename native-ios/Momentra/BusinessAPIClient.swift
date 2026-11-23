@@ -9,6 +9,7 @@ struct BusinessAPIClient {
     struct VersionReceipt: Decodable { let versionId: String }
     struct AssetReceipt: Decodable { let assetId: String }
     struct Asset: Decodable { let mimeType: String; let base64: String }
+    struct OrganizationSettings: Decodable { let id: String; let name: String; let photoAssetId: String; let contactEmail: String? }
     private let endpoint: URL
     private let transport: (URLRequest) async throws -> (Data, URLResponse)
 
@@ -64,6 +65,17 @@ struct BusinessAPIClient {
 
     func readAsset(organizationID: String, assetID: String, token: String) async throws -> Asset {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "assets", try Self.id(assetID), "read"], values: [:], token: token)
+    }
+
+    func readOrganization(organizationID: String, token: String) async throws -> OrganizationSettings {
+        try await post(path: ["v1", "organizations", try Self.id(organizationID), "settings", "read"], values: [:], token: token)
+    }
+
+    func updateOrganization(organizationID: String, name: String, contactEmail: String,
+                            photoAssetID: String, token: String) async throws -> OrganizationSettings {
+        if !photoAssetID.isEmpty { _ = try Self.id(photoAssetID) }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "settings", "update"],
+                              values: ["name": name, "contactEmail": contactEmail, "photoAssetId": photoAssetID], token: token)
     }
 
     private func post<T: Decodable>(path: [String], values: [String: String], token: String, maxBodySize: Int = 98304) async throws -> T {

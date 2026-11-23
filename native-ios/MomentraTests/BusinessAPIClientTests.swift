@@ -44,4 +44,16 @@ final class BusinessAPIClientTests: XCTestCase {
             XCTFail("Expected invalid request")
         } catch BusinessAPIClient.Failure.invalidRequest { } catch { XCTFail("Unexpected error") }
     }
+
+    func testOrganizationSettingsAreSentWithoutChangingAccountCredentials() async throws {
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.url?.path, "/v1/organizations/org/settings/update")
+            let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String])
+            XCTAssertEqual(payload, ["name": "Equipe", "contactEmail": "team@example.com", "photoAssetId": "logo-1"])
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"id":"org","name":"Equipe","contactEmail":"team@example.com","photoAssetId":"logo-1"}"#.utf8), response)
+        }
+        let settings = try await client.updateOrganization(organizationID: "org", name: "Equipe", contactEmail: "team@example.com", photoAssetID: "logo-1", token: "token")
+        XCTAssertEqual(settings.photoAssetId, "logo-1")
+    }
 }

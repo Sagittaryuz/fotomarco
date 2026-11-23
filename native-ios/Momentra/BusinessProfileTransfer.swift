@@ -64,7 +64,7 @@ struct BusinessProfileTransfer {
         return profile
     }
 
-    private static func uploadImage(_ original: Data) throws -> Data {
+    static func uploadImage(_ original: Data) throws -> Data {
         if original.count <= 262144 { return original }
         guard let source = CGImageSourceCreateWithData(original as CFData, nil) else { throw Failure.missingImage }
         for size in [768, 512, 384, 256, 128] {
