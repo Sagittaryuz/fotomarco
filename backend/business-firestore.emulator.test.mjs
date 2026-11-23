@@ -6,6 +6,27 @@ import { BusinessService } from './business-service.mjs';
 import { createBusinessApp } from './business-app.mjs';
 import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
+import { createBusinessWorker } from './business-worker.mjs';
+
+test('isolated worker creates a verified owner organization with an emulator', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
+  const projectId = 'demo-photomark-business';
+  const env = { PHOTOMARK_FIREBASE_PROJECT_ID: projectId, BUSINESS_OWNER_EMAIL: 'owner@example.com',
+    BUSINESS_IP_LIMIT: { limit: async () => ({ success: true }) }, BUSINESS_UID_LIMIT: { limit: async () => ({ success: true }) } };
+  let identity = { uid: 'owner', email: 'owner@example.com', emailVerified: true };
+  const worker = createBusinessWorker(env, { authenticate: async () => identity, serverAccessToken: async () => 'owner', emulatorOrigin: origin });
+  const request = body => { const text = JSON.stringify(body); return new Request('https://business.test/v1/organizations', {
+    method: 'POST', body: text, headers: { authorization: 'Bearer token', 'content-type': 'application/json',
+      'content-length': String(Buffer.byteLength(text)), 'cf-connecting-ip': '127.0.0.1' } }); };
+  const response = await worker(request({ name: 'Equipe', contactEmail: 'contact@example.com' }));
+  assert.equal(response.status, 201);
+  const { organizationId } = await response.json();
+  const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents/organizations/${organizationId}`;
+  const member = await fetch(`${root}/members/owner`, { headers: { authorization: 'Bearer owner' } });
+  assert.equal((await member.json()).fields.role.stringValue, 'owner');
+  identity = { ...identity, email: 'other@example.com' };
+  assert.equal((await worker(request({ name: 'Equipe', contactEmail: 'contact@example.com' }))).status, 403);
+});
 
 test('organization bootstrap creates owner and seat counter atomically', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
