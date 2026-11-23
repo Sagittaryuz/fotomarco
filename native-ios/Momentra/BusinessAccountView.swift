@@ -9,7 +9,7 @@ struct BusinessAccountView: View {
 
     var body: some View {
         Group {
-            if let userID = identity.userID {
+            if identity.userID != nil {
                 Form {
                     Section("Conta") {
                         LabeledContent("E-mail", value: identity.email ?? "Indisponível")
@@ -35,7 +35,7 @@ struct BusinessAccountView: View {
                             do { try identity.signOut() }
                             catch { message = "Não foi possível sair da conta." }
                         }
-                        .accessibilityIdentifier("business.signout.\(userID.isEmpty ? "empty" : "available")
+                        .accessibilityIdentifier("business.signout")
                         Text("Suas contas de armazenamento continuam conectadas.").font(.footnote).foregroundStyle(.secondary)
                     }
                 }
