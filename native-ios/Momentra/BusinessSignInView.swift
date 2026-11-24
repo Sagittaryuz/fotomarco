@@ -50,6 +50,10 @@ struct BusinessSignInView: View {
                         .buttonStyle(.borderedProminent).tint(.yellow).foregroundStyle(.black)
                         .disabled(busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty ||
                                   (registering && fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    if !registering {
+                        Button("Esqueci minha senha") { resetPassword() }
+                            .disabled(busy)
+                    }
                     Button(registering ? "Já tenho conta" : "Criar uma conta") {
                         FotomarcoHaptics.play(.buttons); password = ""; registering.toggle()
                     }.disabled(busy)
@@ -76,9 +80,32 @@ struct BusinessSignInView: View {
                 }
             }
         }
-        .alert("Não foi possível entrar", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+        .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK", role: .cancel) { message = nil }
         } message: { Text(message ?? "") }
+    }
+
+    private func resetPassword() {
+        let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !busy else { return }
+        guard !address.isEmpty else {
+            message = "Informe seu e-mail para recuperar a senha."
+            focus = .email
+            return
+        }
+        FotomarcoHaptics.play(.buttons)
+        busy = true; focus = nil
+        Task { @MainActor in
+            defer { busy = false }
+            do {
+                let identity = BusinessIdentity.shared
+                identity.start()
+                try await identity.sendPasswordReset(email: address)
+                message = "Se houver uma conta para este e-mail, as instruções de recuperação serão enviadas."
+            } catch {
+                message = "Não foi possível solicitar a recuperação agora. Confira sua conexão e tente novamente."
+            }
+        }
     }
 
     private func performEmail() {

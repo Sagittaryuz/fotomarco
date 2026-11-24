@@ -87,6 +87,10 @@ final class BusinessIdentity: ObservableObject {
         return try await user.getIDToken(forcingRefresh: false)
     }
 
+    func sendPasswordReset(email: String) async throws {
+        try await auth().sendPasswordReset(withEmail: email)
+    }
+
     func sendVerification() async throws {
         guard let user = try auth().currentUser else { throw IdentityError.signedOut }
         try await user.sendEmailVerification()
