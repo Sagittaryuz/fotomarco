@@ -15,7 +15,7 @@ final class DirectUpdateAccess: ObservableObject {
     static let shared = DirectUpdateAccess()
     private static let service = "br.com.momentra.camera.updates"
     private static let account = "installer-token"
-    private static let currentHost = "momentra-instalacao.vercel.app"
+    private static let currentHost = "momentra-atualizacoes.mrpires72.workers.dev"
     private static let installerPath = "/api/install"
     private static let installerHost = configuredInstallerHost(
         Bundle.main.object(forInfoDictionaryKey: "MomentraInstallerHost") as? String

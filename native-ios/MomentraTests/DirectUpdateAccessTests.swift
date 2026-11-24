@@ -32,7 +32,7 @@ final class DirectUpdateAccessTests: XCTestCase {
         XCTAssertNil(DirectUpdateAccess.manifestURL(manifest))
         XCTAssertNil(DirectUpdateAccess.manifestURL(manifest.replacingOccurrences(of: host, with: host + ".example.org"), expectedHost: host))
         for value in ["", "https://" + host, host + ":443", host + "/ota", "account@" + host] {
-            XCTAssertEqual(DirectUpdateAccess.configuredInstallerHost(value), "momentra-instalacao.vercel.app")
+            XCTAssertEqual(DirectUpdateAccess.configuredInstallerHost(value), "momentra-atualizacoes.mrpires72.workers.dev")
         }
     }
 }
