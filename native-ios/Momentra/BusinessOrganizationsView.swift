@@ -79,6 +79,11 @@ struct BusinessOrganizationsView: View {
                         }
                     }
                 }
+                if org.role == "member" {
+                    NavigationLink("Conectar conta Microsoft") {
+                        BusinessMemberOneDriveView(api: client, organizationID: org.id)
+                    }
+                }
                 Text(org.captureReady == true ? "O carimbo da equipe pode ser selecionado na câmera." :
                      "A pasta da equipe ainda precisa ser configurada para habilitar capturas.")
                     .font(.footnote).foregroundStyle(.secondary)

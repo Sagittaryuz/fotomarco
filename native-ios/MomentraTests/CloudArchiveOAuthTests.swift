@@ -57,6 +57,17 @@ final class CloudArchiveOAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testBusinessMemberIdentityDoesNotRequestFileAccess() throws {
+        let info: [String: Any] = ["MomentraMicrosoftClientID": "4befebdc-2a06-49a0-b14a-13de07c6ac08",
+            "CFBundleURLTypes": [["CFBundleURLSchemes": ["msauth.br.com.momentra.camera"]]]]
+        let member = try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: info, identityOnly: true)
+        XCTAssertEqual(member.requiredScope, "User.Read")
+        XCTAssertTrue(member.includesStorageScope("https://graph.microsoft.com/User.Read"))
+        XCTAssertFalse(member.scopes.contains("Files.ReadWrite"))
+        XCTAssertThrowsError(try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info, identityOnly: true))
+    }
+
+    @MainActor
     func testMicrosoftAppFolderCanResolveWithoutParentReference() throws {
         let folder = try JSONDecoder().decode(CloudArchiveOAuth.OneDriveFolder.self,
             from: Data(#"{"id":"app-folder-id","specialFolder":{"name":"approot"}}"#.utf8))

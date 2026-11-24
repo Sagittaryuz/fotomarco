@@ -24,6 +24,7 @@ struct BusinessAPIClient {
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
     struct FolderProvisioning: Decodable { let ready: Bool }
+    struct MemberProviderBinding: Decodable { let linked: Bool }
     private let endpoint: URL
     private let transport: (URLRequest) async throws -> (Data, URLResponse)
 
@@ -67,6 +68,12 @@ struct BusinessAPIClient {
 
     func provisionOwnerFolder(organizationID: String, token: String) async throws -> FolderProvisioning {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "provision-owner"], values: [:], token: token)
+    }
+
+    func bindMemberOneDrive(organizationID: String, accessToken: String, token: String) async throws -> MemberProviderBinding {
+        guard !accessToken.isEmpty, accessToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "bind-member"],
+                              values: ["accessToken": accessToken], token: token, maxBodySize: 20000)
     }
 
     func connectGoogleMail(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
