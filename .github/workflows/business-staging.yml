@@ -28,6 +28,7 @@ jobs:
           MS_CLIENT: ${{ vars.MOMENTRA_MICROSOFT_CLIENT_ID }}
           GOOGLE_CLIENT: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
         run: |
+          trap 'rm -f "$RUNNER_TEMP/business-secrets.json"' EXIT
           node --input-type=module <<'NODE'
           import { writeFileSync } from 'node:fs';
           const service = JSON.parse(process.env.SERVICE_JSON || '{}');
@@ -36,9 +37,12 @@ jobs:
           writeFileSync(`${process.env.RUNNER_TEMP}/business-secrets.json`, JSON.stringify(values), { mode: 0o600 });
           NODE
           npx --yes wrangler@4.167.0 secret bulk "$RUNNER_TEMP/business-secrets.json" --config backend/wrangler.business.staging.json
-          rm -f "$RUNNER_TEMP/business-secrets.json"
       - name: Confirm unauthenticated access is rejected
         run: |
-          status=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST https://photomark-business-staging.mrpires72.workers.dev/v1/organizations/mine)
+          for attempt in $(seq 1 12); do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST https://photomark-business-staging.mrpires72.workers.dev/v1/organizations/mine)
+            [ "$status" = 401 ] && break
+            sleep 5
+          done
           test "$status" = 401 || { echo "Unexpected HTTP $status"; exit 1; }
           echo 'Anonymous Business API request rejected.'
