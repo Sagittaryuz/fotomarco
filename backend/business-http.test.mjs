@@ -28,3 +28,26 @@ test('fails closed when the limiter is unavailable or the body is oversized', as
   const active = createBusinessHandler({ preAuthLimit: async () => true, authenticate: async () => ({ uid: 'owner' }), rateLimit: async () => true, serviceForIdentity: () => ({}) });
   assert.equal((await active(request('/v1/organizations/org/invitations', 'x'.repeat(4097)))).status, 413);
 });
+
+test('reconciliation requires an authenticated caller and an empty request', async () => {
+  let calls = 0;
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async token => token === 'valid.token' ? { uid: 'member' } : null,
+    rateLimit: async () => true, serviceForIdentity: identity => ({
+      reconcileCapture: async (_, org, capture, variant) => {
+        calls++;
+        assert.equal(identity.uid, 'member');
+        assert.equal(org, 'org');
+        assert.equal(capture, 'capture');
+        assert.equal(variant, 'stamped');
+        return { state: 'verified', nextOffset: 10 };
+      }
+    }) });
+  const path = '/v1/organizations/org/captures/capture/stamped/reconcile';
+  assert.equal((await handler(request(path, '{}', 'bad'))).status, 401);
+  assert.equal((await handler(request(path, '{"role":"owner"}'))).status, 400);
+  const response = await handler(request(path, '{}'));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { state: 'verified', nextOffset: 10 });
+  assert.equal(calls, 1);
+});
