@@ -15,15 +15,25 @@ import UIKit
         ]
         for size in [CGSize(width: 375, height: 812), CGSize(width: 430, height: 932)] {
             for (name, view) in screens {
-                let controller = UIHostingController(rootView: view.frame(width: size.width, height: size.height))
-                controller.overrideUserInterfaceStyle = .dark
-                controller.view.frame = CGRect(origin: .zero, size: size)
-                controller.view.setNeedsLayout()
-                controller.view.layoutIfNeeded()
-                let image = UIGraphicsImageRenderer(size: size).image { context in
-                    controller.view.layer.render(in: context.cgContext)
+                let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height)
+                    .environment(\.colorScheme, .dark))
+                renderer.proposedSize = ProposedViewSize(size)
+                renderer.scale = 1
+                let image = try XCTUnwrap(renderer.uiImage)
+                let cg = try XCTUnwrap(image.cgImage)
+                var pixels = [UInt8](repeating: 0, count: cg.width * cg.height * 4)
+                let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+                    guard let context = CGContext(data: buffer.baseAddress, width: cg.width, height: cg.height,
+                        bitsPerComponent: 8, bytesPerRow: cg.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                    context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+                    return true
                 }
-                XCTAssertGreaterThan(image.pngData()?.count ?? 0, 1_000)
+                XCTAssertTrue(rendered)
+                let visiblePixels = stride(from: 0, to: pixels.count, by: 4).reduce(0) { count, index in
+                    count + (max(pixels[index], pixels[index + 1], pixels[index + 2]) > 30 ? 1 : 0)
+                }
+                XCTAssertGreaterThan(visiblePixels, cg.width * cg.height / 200, "Review image must not be blank")
                 let attachment = XCTAttachment(image: image)
                 attachment.name = "onboarding-\(name)-\(Int(size.width))"
                 attachment.lifetime = .keepAlways
