@@ -172,3 +172,59 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   const finalCount = await fetch(`${root}/organizations/${org}/state/seats`, { headers: { authorization: 'Bearer owner' } });
   assert.equal((await finalCount.json()).fields.count.integerValue, '1');
 });
+
+test('capture reservation binds the authenticated member and protects idempotency', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
+  const projectId = 'demo-photomark-business';
+  const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents`;
+  const org = randomUUID(), capture = randomUUID();
+  const s = stringValue => ({ stringValue });
+  const write = async (path, fields) => {
+    const response = await fetch(`${root}/${path}`, { method: 'PATCH', headers: { authorization: 'Bearer owner', 'content-type': 'application/json' }, body: JSON.stringify({ fields }) });
+    assert.equal(response.status, 200);
+  };
+  await write(`organizations/${org}`, { id: s(org), ownerId: s('owner'), name: s('Equipe') });
+  for (const uid of ['member-a', 'member-b']) {
+    await write(`organizations/${org}/members/${uid}`, { organizationId: s(org), userId: s(uid), role: s('member'), active: { booleanValue: true },
+      storageStatus: s('granted'), oneDriveFolderId: s(`folder-${uid}`), oneDriveParentId: s('parent'), oneDriveMemberIdentityId: s(`graph-${uid}`) });
+  }
+  await write(`organizations/${org}/private/onedrive`, { driveId: s('drive'), providerAccountId: s('owner-graph'),
+    version: { integerValue: '1' }, iv: s('iv'), ciphertext: s('cipher') });
+  const app = createBusinessApp({ projectId, emulatorOrigin: origin, serverAccessToken: async () => 'owner',
+    authenticate: async token => ({ uid: token, emailVerified: true }), preAuthLimit: async () => true, rateLimit: async () => true,
+    prepareUpload: async ({ storage }) => ({ session: { version: 1, iv: 'session-iv', ciphertext: 'encrypted-session' },
+      expiresAt: Date.now() + 60000, ownerCredential: { ...storage, iv: 'new-iv', ciphertext: 'new-cipher' } }),
+    processUploadChunk: async ({ bytes }) => { assert.equal(bytes.length, 123); return { state: 'uploaded-unverified', itemId: 'remote-item' }; },
+    verifyUpload: async ({ storage }) => ({ verified: true, ownerCredential: storage }) });
+  const filename = `23-11-2026 - OneDrive - 18-35-02 - ${capture}.1795470002.${org}.VGVzdGU-stamped.jpg`;
+  const payload = { captureId: capture, filename, byteCount: 123, sha256: 'a'.repeat(64) };
+  const request = (uid, bodyValue) => {
+    const body = JSON.stringify(bodyValue);
+    return new Request(`https://test.invalid/v1/organizations/${org}/captures/reserve`, { method: 'POST', body,
+      headers: { authorization: `Bearer ${uid}`, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(body)) } });
+  };
+  assert.equal((await app(request('member-a', payload))).status, 200);
+  assert.equal((await app(request('member-a', payload))).status, 200);
+  assert.equal((await app(request('member-b', payload))).status, 403);
+  const record = await fetch(`${root}/organizations/${org}/captures/${capture}-stamped`, { headers: { authorization: 'Bearer owner' } });
+  const fields = (await record.json()).fields;
+  assert.equal(fields.authorId.stringValue, 'member-a');
+  assert.equal(fields.folderId.stringValue, 'folder-member-a');
+  const startBody = '{}';
+  const start = uid => new Request(`https://test.invalid/v1/organizations/${org}/captures/${capture}/stamped/start`, { method: 'POST', body: startBody,
+    headers: { authorization: `Bearer ${uid}`, 'content-type': 'application/json', 'content-length': String(startBody.length) } });
+  const started = await app(start('member-a'));
+  assert.deepEqual(await started.json(), { state: 'uploading', nextOffset: 0 });
+  assert.deepEqual(await (await app(start('member-a'))).json(), { state: 'uploading', nextOffset: 0 });
+  assert.equal((await app(start('member-b'))).status, 403);
+  const chunk = uid => new Request(`https://test.invalid/v1/organizations/${org}/captures/${capture}/stamped/chunk`, { method: 'POST', body: new Uint8Array(123),
+    headers: { authorization: `Bearer ${uid}`, 'content-type': 'application/octet-stream', 'content-length': '123', 'x-upload-offset': '0' } });
+  assert.equal((await app(chunk('member-b'))).status, 403);
+  assert.deepEqual(await (await app(chunk('member-a'))).json(), { state: 'verifying', nextOffset: 123 });
+  const after = await fetch(`${root}/organizations/${org}/captures/${capture}-stamped`, { headers: { authorization: 'Bearer owner' } });
+  assert.equal((await after.json()).fields.state.stringValue, 'verifying');
+  const verify = uid => new Request(`https://test.invalid/v1/organizations/${org}/captures/${capture}/stamped/verify`, { method: 'POST', body: startBody,
+    headers: { authorization: `Bearer ${uid}`, 'content-type': 'application/json', 'content-length': String(startBody.length) } });
+  assert.equal((await app(verify('member-b'))).status, 403);
+  assert.deepEqual(await (await app(verify('member-a'))).json(), { state: 'verified', nextOffset: 123 });
+});

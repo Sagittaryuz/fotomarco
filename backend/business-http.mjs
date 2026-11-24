@@ -12,10 +12,14 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const removeMember = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/([A-Za-z0-9_-]{1,128})\/remove$/.exec(new URL(request.url).pathname);
       const connectOneDrive = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/connect$/.exec(new URL(request.url).pathname);
       const connectGoogleMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/gmail\/connect$/.exec(new URL(request.url).pathname);
+      const reserveCapture = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/reserve$/.exec(new URL(request.url).pathname);
+      const startUpload = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/start$/.exec(new URL(request.url).pathname);
+      const uploadChunk = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/chunk$/.exec(new URL(request.url).pathname);
+      const verifyCapture = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/verify$/.exec(new URL(request.url).pathname);
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !connectGoogleMail && !removeMember) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !connectGoogleMail && !removeMember && !reserveCapture && !startUpload && !uploadChunk && !verifyCapture) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -30,9 +34,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       try { allowed = await rateLimit(identity.uid); } catch { return reply(503, { error: 'unavailable' }); }
       if (allowed !== true) return reply(429, { error: 'rate-limited' });
       const size = request.headers.get('content-length');
-      const limit = asset?.[2] === 'upload' ? 360448 : profile?.[2] === 'publish' ? 98304 : (connectOneDrive || connectGoogleMail) ? 20000 : 4096;
-      if (!size || !/^\d{1,6}$/.test(size) || Number(size) > limit) return reply(413, { error: 'invalid-size' });
-      if (!/^application\/json(?:\s*;|\s*$)/i.test(request.headers.get('content-type') ?? '')) return reply(415, { error: 'invalid-content-type' });
+      const limit = uploadChunk ? 320 * 1024 * 10 : asset?.[2] === 'upload' ? 360448 : profile?.[2] === 'publish' ? 98304 : (connectOneDrive || connectGoogleMail) ? 20000 : 4096;
+      if (!size || !/^\d{1,7}$/.test(size) || Number(size) < 1 || Number(size) > limit) return reply(413, { error: 'invalid-size' });
+      const expectedType = uploadChunk ? /^application\/octet-stream(?:\s*;|\s*$)/i : /^application\/json(?:\s*;|\s*$)/i;
+      if (!expectedType.test(request.headers.get('content-type') ?? '')) return reply(415, { error: 'invalid-content-type' });
       if (!request.body) return reply(400, { error: 'invalid-body' });
       const reader = request.body.getReader();
       const chunks = [];
@@ -49,10 +54,30 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
       let payload;
-      try { payload = JSON.parse(new TextDecoder().decode(bytes)); } catch { return reply(400, { error: 'invalid-body' }); }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply(400, { error: 'invalid-body' });
+      if (!uploadChunk) {
+        try { payload = JSON.parse(new TextDecoder().decode(bytes)); } catch { return reply(400, { error: 'invalid-body' }); }
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply(400, { error: 'invalid-body' });
+      }
       const service = serviceForIdentity(identity);
       try {
+        if (verifyCapture) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.verifyCapture(null, verifyCapture[1], verifyCapture[2], verifyCapture[3]));
+        }
+        if (uploadChunk) {
+          const position = request.headers.get('x-upload-offset');
+          if (!position || !/^\d{1,12}$/.test(position) || !Number.isSafeInteger(Number(position))) return reply(400, { error: 'invalid-offset' });
+          return reply(200, await service.sendCaptureChunk(null, uploadChunk[1], uploadChunk[2], uploadChunk[3], Number(position), bytes));
+        }
+        if (startUpload) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.startCaptureUpload(null, startUpload[1], startUpload[2], startUpload[3]));
+        }
+        if (reserveCapture) {
+          if (Object.keys(payload).length !== 4 || typeof payload.captureId !== 'string' || typeof payload.filename !== 'string' ||
+              typeof payload.byteCount !== 'number' || typeof payload.sha256 !== 'string') return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.reserveCapture(null, reserveCapture[1], payload.captureId, payload.filename, payload.byteCount, payload.sha256));
+        }
         if (removeMember) {
           if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
           const result = await service.removeMember(null, removeMember[1], removeMember[2]);
@@ -112,7 +137,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
         if (error?.message === 'storage-account-change-requires-migration') return reply(409, { error: 'storage-account-change-requires-migration' });
         if (error?.message === 'mailbox-mismatch') return reply(422, { error: 'mailbox-mismatch' });
         if (error?.message === 'mail-not-configured') return reply(412, { error: 'mail-not-configured' });
-        if (['invalid-request', 'invalid-invitation', 'already-member', 'revocation-pending', 'forbidden', 'forbidden-or-full', 'full', 'not-found'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
+        if (['invalid-request', 'invalid-invitation', 'already-member', 'revocation-pending', 'capture-conflict', 'forbidden', 'forbidden-or-full', 'full', 'not-found'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
         return reply(503, { error: 'unavailable' });
       }
     } catch { return reply(503, { error: 'unavailable' }); }

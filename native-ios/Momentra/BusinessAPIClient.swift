@@ -18,6 +18,8 @@ struct BusinessAPIClient {
     struct Member: Decodable, Identifiable { let userId: String; let role: String; let email: String?; let displayName: String?; let revocationPending: Bool?; var id: String { userId } }
     struct MemberList: Decodable { let members: [Member] }
     struct MemberRemoval: Decodable { let complete: Bool }
+    struct CaptureReservation: Decodable { let captureId: String; let variant: String; let state: String }
+    struct UploadStart: Decodable { let state: String; let nextOffset: Int64 }
     struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool? }
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
@@ -80,6 +82,32 @@ struct BusinessAPIClient {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "members", try Self.id(userID), "remove"], values: [:], token: token)
     }
 
+    func reserveCapture(organizationID: String, captureID: UUID, filename: String,
+                        fingerprint: CloudFileFingerprint, token: String) async throws -> CaptureReservation {
+        struct Payload: Encodable { let captureId: String; let filename: String; let byteCount: Int64; let sha256: String }
+        let body = try JSONEncoder().encode(Payload(captureId: captureID.uuidString, filename: filename,
+                                                   byteCount: fingerprint.byteCount, sha256: fingerprint.sha256))
+        return try await postBody(path: ["v1", "organizations", try Self.id(organizationID), "captures", "reserve"], body: body, token: token)
+    }
+
+    func startCaptureUpload(organizationID: String, captureID: UUID, variant: String, token: String) async throws -> UploadStart {
+        guard ["original", "stamped"].contains(variant) else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID.uuidString, variant, "start"], values: [:], token: token)
+    }
+
+    func sendCaptureChunk(organizationID: String, captureID: UUID, variant: String, offset: Int64,
+                          bytes: Data, token: String) async throws -> UploadStart {
+        guard ["original", "stamped"].contains(variant), offset >= 0, !bytes.isEmpty, bytes.count <= 320 * 1024 * 10 else { throw Failure.invalidRequest }
+        return try await postBody(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID.uuidString, variant, "chunk"],
+                                  body: bytes, token: token, maxBodySize: 320 * 1024 * 10,
+                                  contentType: "application/octet-stream", uploadOffset: offset)
+    }
+
+    func verifyCapture(organizationID: String, captureID: UUID, variant: String, token: String) async throws -> UploadStart {
+        guard ["original", "stamped"].contains(variant) else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID.uuidString, variant, "verify"], values: [:], token: token)
+    }
+
     func accept(organizationID: String, invitationID: String, token: String) async throws -> OrganizationReceipt {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "invitations", try Self.id(invitationID), "accept"], values: [:], token: token)
     }
@@ -114,16 +142,22 @@ struct BusinessAPIClient {
     }
 
     private func post<T: Decodable>(path: [String], values: [String: String], token: String, maxBodySize: Int = 98304) async throws -> T {
+        let body = try JSONEncoder().encode(values)
+        return try await postBody(path: path, body: body, token: token, maxBodySize: maxBodySize)
+    }
+
+    private func postBody<T: Decodable>(path: [String], body: Data, token: String, maxBodySize: Int = 98304,
+                                         contentType: String = "application/json", uploadOffset: Int64? = nil) async throws -> T {
         guard !token.isEmpty, token.utf8.count <= 16384,
               token.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 46 || $0 == 95 }) else { throw Failure.invalidRequest }
-        let body = try JSONEncoder().encode(values)
         guard body.count <= maxBodySize else { throw Failure.invalidRequest }
         var url = endpoint
         for component in path { url.appendPathComponent(component) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = body
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        if let uploadOffset { request.setValue(String(uploadOffset), forHTTPHeaderField: "X-Upload-Offset") }
         request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.cachePolicy = .reloadIgnoringLocalCacheData

@@ -2,6 +2,33 @@ import XCTest
 @testable import Momentra
 
 final class BusinessAPIClientTests: XCTestCase {
+    func testPhotoChunkIsSentOnlyToBusinessAPI() async throws {
+        let id = UUID(), bytes = Data([1, 2, 3])
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.url?.host, "business.example")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/octet-stream")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Upload-Offset"), "0")
+            XCTAssertEqual(request.httpBody, bytes)
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"state":"verifying","nextOffset":3}"#.utf8), response)
+        }
+        let result = try await client.sendCaptureChunk(organizationID: "org", captureID: id, variant: "stamped", offset: 0, bytes: bytes, token: "token")
+        XCTAssertEqual(result.state, "verifying")
+    }
+    func testCaptureReservationSendsFingerprintAndKeepsOriginalIdentifier() async throws {
+        let id = UUID()
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.url?.path, "/v1/organizations/org/captures/reserve")
+            let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+            XCTAssertEqual(payload["captureId"] as? String, id.uuidString)
+            XCTAssertEqual(payload["byteCount"] as? Int, 123)
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data("{\"captureId\":\"\(id.uuidString)\",\"variant\":\"stamped\",\"state\":\"reserved\"}".utf8), response)
+        }
+        let receipt = try await client.reserveCapture(organizationID: "org", captureID: id, filename: "photo.jpg",
+            fingerprint: CloudFileFingerprint(byteCount: 123, sha256: String(repeating: "a", count: 64)), token: "token")
+        XCTAssertEqual(receipt.captureId, id.uuidString)
+    }
     func testOrganizationDiscoveryUsesAuthenticatedEndpoint() async throws {
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
             XCTAssertEqual(request.url?.path, "/v1/organizations/mine")

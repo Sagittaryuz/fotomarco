@@ -7,6 +7,9 @@ import { invitationLanding } from './business-invitation-landing.mjs';
 import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 import { gmailInvitationSender } from './business-gmail-invitation.mjs';
 import { revokeOneDriveMemberFolder } from './business-onedrive-revoke.mjs';
+import { verifyOneDriveMemberFolder } from './business-onedrive-verify.mjs';
+import { businessUploadOffset, createBusinessUploadSession, sendBusinessUploadChunk, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
+import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -88,8 +91,58 @@ export function createBusinessWorker(env, overrides = {}) {
       memberIdentityId: member.oneDriveMemberIdentityId, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
     return result.revoked === true;
   });
+  const prepareUpload = overrides.prepareUpload ?? (async ({ organizationId, identity, org, capture, storage }) => {
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage);
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.driveId !== storage.driveId) throw new Error('provider-identity-mismatch');
+    await verifyOneDriveMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, expectedParentId: capture.parentId, folderId: capture.folderId,
+      memberIdentityId: capture.memberProviderId, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const session = await createBusinessUploadSession({ ownerToken: verified.accessToken, folderId: capture.folderId,
+      captureId: capture.captureId, filename: capture.filename, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const sessionVault = await createUploadSessionVault(env.BUSINESS_CREDENTIAL_KEY);
+    const encryptedSession = await sessionVault.seal(organizationId, identity.uid, capture.recordId, session);
+    const credential = await vault.seal(organizationId, org.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    return { session: encryptedSession, expiresAt: session.expiresAt,
+      ownerCredential: { ...credential, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
+  });
+  const processUploadChunk = overrides.processUploadChunk ?? (async ({ organizationId, identity, capture, offset, bytes }) => {
+    const vault = await createUploadSessionVault(env.BUSINESS_CREDENTIAL_KEY);
+    const session = await vault.open(organizationId, identity.uid, capture.recordId,
+      { version: capture.sessionVersion, iv: capture.sessionIv, ciphertext: capture.sessionCiphertext });
+    const fetcher = overrides.fetchImpl ?? fetch;
+    const boundedFetch = (url, options = {}) => fetcher(url, { ...options, signal: AbortSignal.timeout(60000) });
+    const providerOffset = await businessUploadOffset({ uploadUrl: session.uploadUrl, total: capture.byteCount, fetchImpl: boundedFetch });
+    if (providerOffset === offset + bytes.length && providerOffset < capture.byteCount) return { state: 'pending', nextOffset: providerOffset };
+    if (providerOffset !== offset) throw new Error('upload-result-uncertain');
+    return sendBusinessUploadChunk({ uploadUrl: session.uploadUrl, bytes, offset, total: capture.byteCount,
+      folderId: capture.folderId, driveId: capture.driveId, filename: capture.filename, fetchImpl: boundedFetch });
+  });
+  const verifyUpload = overrides.verifyUpload ?? (async ({ organizationId, org, capture, storage }) => {
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage);
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const fetcher = overrides.fetchImpl ?? fetch;
+    const boundedFetch = (url, options = {}) => fetcher(url, { ...options, signal: AbortSignal.timeout(300000) });
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID, fetchImpl: boundedFetch });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.driveId !== storage.driveId) throw new Error('provider-identity-mismatch');
+    await verifyOneDriveMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, expectedParentId: capture.parentId, folderId: capture.folderId,
+      memberIdentityId: capture.memberProviderId, fetchImpl: boundedFetch });
+    await verifyBusinessUploadedItem({ ownerToken: verified.accessToken, driveId: capture.driveId, folderId: capture.folderId,
+      itemId: capture.remoteItemId, filename: capture.filename, expectedSize: capture.byteCount, expectedSha256: capture.sha256, fetchImpl: boundedFetch });
+    const credential = await vault.seal(organizationId, org.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    return { verified: true, ownerCredential: { ...credential, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
+  });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage,
+    prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),

@@ -1,4 +1,4 @@
-import { validateMemberFolderPermissions } from './business-onedrive-access.mjs';
+import { validateMemberFolderPermissions, validateOwnerFolderPermissions } from './business-onedrive-access.mjs';
 
 /** All IDs and the delegated owner token must come from trusted server records. */
 export async function verifyOneDriveMemberFolder({ ownerToken, expectedOwnerId, expectedDriveId,
@@ -18,7 +18,10 @@ export async function verifyOneDriveMemberFolder({ ownerToken, expectedOwnerId, 
   if (folder.id !== folderId || !folder.folder || folder.file || folder.remoteItem ||
       folder.parentReference?.driveId !== expectedDriveId || folder.parentReference?.id !== expectedParentId) throw new Error('invalid-member-folder');
   const permissions = await get(path + '/permissions');
-  if (!validateMemberFolderPermissions({ permissionPage: permissions, ownerIdentityId: expectedOwnerId,
-    memberIdentityId, isOwnerListing: true, requireMember, memberMustBeAbsent })) throw new Error('unsafe-folder-permissions');
+  const valid = memberIdentityId === expectedOwnerId ? !memberMustBeAbsent && validateOwnerFolderPermissions({
+    permissionPage: permissions, ownerIdentityId: expectedOwnerId, isOwnerListing: true
+  }) : validateMemberFolderPermissions({ permissionPage: permissions, ownerIdentityId: expectedOwnerId,
+    memberIdentityId, isOwnerListing: true, requireMember, memberMustBeAbsent });
+  if (!valid) throw new Error('unsafe-folder-permissions');
   return { driveId: expectedDriveId, folderId };
 }

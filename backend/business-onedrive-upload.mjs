@@ -4,7 +4,8 @@ const chunkUnit = 320 * 1024;
 const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x20/\\?#]/.test(value);
 const validUuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-function sessionUrl(value) {
+export function graphUploadSessionURL(value) {
+  if (typeof value !== 'string' || value.length > 10000) throw new Error('invalid-upload-session');
   let url;
   try { url = new URL(value); } catch { throw new Error('invalid-upload-session'); }
   const host = url.hostname.toLowerCase();
@@ -13,11 +14,12 @@ function sessionUrl(value) {
   return url.href;
 }
 
-export function validBusinessPhotoName(filename, captureId) {
+export function validBusinessPhotoName(filename, captureId, organizationId) {
   if (!validUuid(captureId) || typeof filename !== 'string' || new TextEncoder().encode(filename).length > 240) return false;
   const pattern = /^(\d{2}-\d{2}-\d{4}) - OneDrive - (\d{2}-\d{2}-\d{2}) - ([0-9a-f-]{36})\.(\d{1,12})(?:\.([0-9a-f-]{36})\.([A-Za-z0-9_-]{0,48}))?-(stamped\.jpg|original\.[a-z0-9]{1,12})$/i;
   const match = pattern.exec(filename);
-  return !!match && validUuid(match[3]) && match[3].toLowerCase() === captureId.toLowerCase() && (!match[5] || validUuid(match[5]));
+  return !!match && validUuid(match[3]) && match[3].toLowerCase() === captureId.toLowerCase() && (!match[5] || validUuid(match[5])) &&
+    (organizationId === undefined || (validUuid(organizationId) && match[5]?.toLowerCase() === organizationId.toLowerCase()));
 }
 
 export async function createBusinessUploadSession({ ownerToken, folderId, captureId, filename, fetchImpl = fetch, now = () => Date.now() }) {
@@ -31,11 +33,11 @@ export async function createBusinessUploadSession({ ownerToken, folderId, captur
   const data = await response.json();
   const expiresAt = Date.parse(data.expirationDateTime);
   if (!Number.isFinite(expiresAt) || expiresAt <= now()) throw new Error('invalid-upload-session');
-  return { uploadUrl: sessionUrl(data.uploadUrl), expiresAt };
+  return { uploadUrl: graphUploadSessionURL(data.uploadUrl), expiresAt };
 }
 
 export async function sendBusinessUploadChunk({ uploadUrl, bytes, offset, total, folderId, driveId, filename, fetchImpl = fetch }) {
-  const url = sessionUrl(uploadUrl);
+  const url = graphUploadSessionURL(uploadUrl);
   if (!(bytes instanceof Uint8Array) || !Number.isSafeInteger(offset) || !Number.isSafeInteger(total) || offset < 0 || total < 1 ||
       offset >= total || bytes.length < 1 || bytes.length > 10 * chunkUnit || offset % chunkUnit !== 0 || offset + bytes.length > total ||
       (offset + bytes.length < total && bytes.length % chunkUnit !== 0) || !validId(folderId) || !validId(driveId) ||
@@ -61,7 +63,7 @@ export async function sendBusinessUploadChunk({ uploadUrl, bytes, offset, total,
 
 /** A lost response may have uploaded bytes; ask Graph before any retry. */
 export async function businessUploadOffset({ uploadUrl, total, fetchImpl = fetch }) {
-  const url = sessionUrl(uploadUrl);
+  const url = graphUploadSessionURL(uploadUrl);
   if (!Number.isSafeInteger(total) || total < 1) throw new Error('invalid-upload-request');
   const response = await fetchImpl(url, { redirect: 'manual' });
   if (response.status !== 200) throw new Error('upload-result-uncertain');

@@ -1,4 +1,5 @@
 import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } from './business-policy.mjs';
+import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
 
 /**
  * Transactional service. The adapter must verify Firebase ID tokens and load records
@@ -7,7 +8,7 @@ import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } fr
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -17,6 +18,9 @@ export class BusinessService {
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMailDelivery = prepareMailDelivery;
     this.revokeMemberStorage = revokeMemberStorage;
+    this.prepareUpload = prepareUpload;
+    this.processUploadChunk = processUploadChunk;
+    this.verifyUpload = verifyUpload;
   }
 
   async createOrganization(token, name, contactEmail) {
@@ -209,6 +213,147 @@ export class BusinessService {
       }
       await tx.setOneDriveCredential(organizationId, record);
       return { connected: true };
+    });
+  }
+
+  async reserveCapture(token, organizationId, captureId, filename, byteCount, sha256) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || !validBusinessPhotoName(filename, captureId, organizationId) ||
+        !Number.isSafeInteger(byteCount) || byteCount < 1 || byteCount > 200 * 1024 * 1024 ||
+        typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) throw new Error('invalid-request');
+    const variant = /-stamped\.jpg$/i.test(filename) ? 'stamped' : 'original';
+    const recordId = `${captureId.toLowerCase()}-${variant}`;
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member) || member.storageStatus !== 'granted' ||
+          typeof member.oneDriveFolderId !== 'string' || !member.oneDriveFolderId ||
+          typeof member.oneDriveParentId !== 'string' || !member.oneDriveParentId ||
+          typeof member.oneDriveMemberIdentityId !== 'string' || !member.oneDriveMemberIdentityId) throw new Error('forbidden');
+      const ownerStorage = await tx.oneDriveCredential(organizationId);
+      if (!ownerStorage?.driveId || !ownerStorage?.providerAccountId) throw new Error('storage-unavailable');
+      const existing = await tx.capture(organizationId, recordId);
+      if (existing) {
+        if (existing.authorId !== identity.uid || existing.filename !== filename || existing.byteCount !== byteCount ||
+            existing.sha256 !== sha256 || existing.folderId !== member.oneDriveFolderId || existing.driveId !== ownerStorage.driveId ||
+            !['reserved', 'uploading', 'verifying', 'verified', 'uncertain'].includes(existing.state)) throw new Error('capture-conflict');
+        return { captureId, variant, state: existing.state };
+      }
+      await tx.createCapture({ organizationId, captureId, recordId, variant, authorId: identity.uid, filename, byteCount, sha256,
+        folderId: member.oneDriveFolderId, parentId: member.oneDriveParentId, memberProviderId: member.oneDriveMemberIdentityId,
+        driveId: ownerStorage.driveId, ownerProviderId: ownerStorage.providerAccountId, state: 'reserved', createdAt: this.clock() });
+      return { captureId, variant, state: 'reserved' };
+    });
+  }
+
+  async captureContext(tx, identity, organizationId, recordId) {
+    const org = await tx.organization(organizationId);
+    const member = await tx.membership(organizationId, identity.uid);
+    const capture = await tx.capture(organizationId, recordId);
+    const storage = await tx.oneDriveCredential(organizationId);
+    if (identity.emailVerified !== true || !mayReadPublishedProfile(identity, org, member) || member.storageStatus !== 'granted' ||
+        !capture || capture.organizationId !== organizationId || capture.recordId !== recordId || capture.authorId !== identity.uid ||
+        capture.folderId !== member.oneDriveFolderId || capture.parentId !== member.oneDriveParentId ||
+        capture.memberProviderId !== member.oneDriveMemberIdentityId || capture.driveId !== storage?.driveId ||
+        capture.ownerProviderId !== storage?.providerAccountId) throw new Error('forbidden');
+    return { org, member, capture, storage };
+  }
+
+  async startCaptureUpload(token, organizationId, captureId, variant) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || typeof captureId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(captureId) ||
+        !['original', 'stamped'].includes(variant) || typeof this.prepareUpload !== 'function') throw new Error('invalid-request');
+    const recordId = `${captureId.toLowerCase()}-${variant}`;
+    const context = await this.transaction(tx => this.captureContext(tx, identity, organizationId, recordId));
+    if (context.capture.state === 'uploading') {
+      if (!Number.isSafeInteger(context.capture.nextOffset) || context.capture.nextOffset < 0 ||
+          context.capture.nextOffset >= context.capture.byteCount || !Number.isSafeInteger(context.capture.sessionExpiresAt) || context.capture.sessionExpiresAt <= this.clock()) throw new Error('upload-result-uncertain');
+      return { state: 'uploading', nextOffset: context.capture.nextOffset };
+    }
+    if (context.capture.state === 'verified') return { state: 'verified', nextOffset: context.capture.byteCount };
+    if (context.capture.state !== 'reserved') throw new Error('upload-result-uncertain');
+    const prepared = await this.prepareUpload({ organizationId, identity, ...context });
+    if (!prepared || !prepared.session || prepared.session.version !== 1 || !prepared.session.iv || !prepared.session.ciphertext ||
+        !Number.isSafeInteger(prepared.expiresAt) || prepared.expiresAt <= this.clock() || !prepared.ownerCredential ||
+        prepared.ownerCredential.version !== 1 || !prepared.ownerCredential.iv || !prepared.ownerCredential.ciphertext ||
+        prepared.ownerCredential.driveId !== context.storage.driveId || prepared.ownerCredential.providerAccountId !== context.storage.providerAccountId) throw new Error('invalid-upload-session');
+    return this.transaction(async tx => {
+      const current = await this.captureContext(tx, identity, organizationId, recordId);
+      if (current.capture.state === 'uploading') {
+        if (!Number.isSafeInteger(current.capture.nextOffset) || current.capture.nextOffset < 0 ||
+            current.capture.nextOffset >= current.capture.byteCount || !Number.isSafeInteger(current.capture.sessionExpiresAt) || current.capture.sessionExpiresAt <= this.clock()) throw new Error('upload-result-uncertain');
+        return { state: 'uploading', nextOffset: current.capture.nextOffset };
+      }
+      if (current.capture.state !== 'reserved' || current.storage.ciphertext !== context.storage.ciphertext ||
+          current.storage.iv !== context.storage.iv) throw new Error('upload-configuration-changed');
+      await tx.setOneDriveCredential(organizationId, prepared.ownerCredential);
+      await tx.beginCaptureUpload(organizationId, recordId, prepared.session, prepared.expiresAt);
+      return { state: 'uploading', nextOffset: 0 };
+    });
+  }
+
+  async sendCaptureChunk(token, organizationId, captureId, variant, offset, bytes) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || typeof captureId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(captureId) ||
+        !['original', 'stamped'].includes(variant) || !Number.isSafeInteger(offset) || offset < 0 ||
+        !(bytes instanceof Uint8Array) || bytes.length < 1 || bytes.length > 320 * 1024 * 10 ||
+        typeof this.processUploadChunk !== 'function') throw new Error('invalid-request');
+    const recordId = `${captureId.toLowerCase()}-${variant}`;
+    const leaseId = this.newId();
+    if (typeof leaseId !== 'string' || !leaseId) throw new Error('invalid-id');
+    const acquired = await this.transaction(async tx => {
+      const context = await this.captureContext(tx, identity, organizationId, recordId);
+      const capture = context.capture;
+      if (capture.state !== 'uploading' || !Number.isSafeInteger(capture.nextOffset) ||
+          !Number.isSafeInteger(capture.sessionExpiresAt) || capture.sessionExpiresAt <= this.clock()) throw new Error('upload-result-uncertain');
+      if (offset !== capture.nextOffset) return { state: 'uploading', nextOffset: capture.nextOffset };
+      const chunkUnit = 320 * 1024;
+      if (offset % chunkUnit !== 0 || offset + bytes.length > capture.byteCount ||
+          (offset + bytes.length < capture.byteCount && bytes.length % chunkUnit !== 0)) throw new Error('invalid-request');
+      if (capture.leaseId && (!Number.isSafeInteger(capture.leaseExpiresAt) || capture.leaseExpiresAt > this.clock())) throw new Error('upload-busy');
+      await tx.leaseCaptureChunk(organizationId, recordId, leaseId, this.clock() + 120000);
+      return context;
+    });
+    if (acquired.state === 'uploading') return acquired;
+    const result = await this.processUploadChunk({ organizationId, identity, ...acquired, offset, bytes });
+    if (!result || !['pending', 'uploaded-unverified'].includes(result.state) ||
+        (result.state === 'pending' && (!Number.isSafeInteger(result.nextOffset) || result.nextOffset !== offset + bytes.length || result.nextOffset >= acquired.capture.byteCount)) ||
+        (result.state === 'uploaded-unverified' && (typeof result.itemId !== 'string' || !result.itemId || offset + bytes.length !== acquired.capture.byteCount))) throw new Error('upload-result-uncertain');
+    return this.transaction(async tx => {
+      const current = await this.captureContext(tx, identity, organizationId, recordId);
+      if (current.capture.state !== 'uploading' || current.capture.leaseId !== leaseId || current.capture.nextOffset !== offset ||
+          current.capture.sessionCiphertext !== acquired.capture.sessionCiphertext) throw new Error('upload-configuration-changed');
+      await tx.completeCaptureChunk(organizationId, recordId, result, current.capture.byteCount);
+      return result.state === 'pending' ? { state: 'uploading', nextOffset: result.nextOffset } :
+        { state: 'verifying', nextOffset: current.capture.byteCount };
+    });
+  }
+
+  async verifyCapture(token, organizationId, captureId, variant) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || typeof captureId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(captureId) ||
+        !['original', 'stamped'].includes(variant) || typeof this.verifyUpload !== 'function') throw new Error('invalid-request');
+    const recordId = `${captureId.toLowerCase()}-${variant}`;
+    const context = await this.transaction(tx => this.captureContext(tx, identity, organizationId, recordId));
+    if (context.capture.state === 'verified') return { state: 'verified', nextOffset: context.capture.byteCount };
+    if (context.capture.state !== 'verifying' || typeof context.capture.remoteItemId !== 'string' || !context.capture.remoteItemId) throw new Error('upload-result-uncertain');
+    const result = await this.verifyUpload({ organizationId, identity, ...context });
+    if (!result || result.verified !== true || !result.ownerCredential || result.ownerCredential.version !== 1 ||
+        !result.ownerCredential.iv || !result.ownerCredential.ciphertext || result.ownerCredential.driveId !== context.storage.driveId ||
+        result.ownerCredential.providerAccountId !== context.storage.providerAccountId) throw new Error('upload-verification-unavailable');
+    return this.transaction(async tx => {
+      const current = await this.captureContext(tx, identity, organizationId, recordId);
+      if (current.capture.state === 'verified') return { state: 'verified', nextOffset: current.capture.byteCount };
+      if (current.capture.state !== 'verifying' || current.capture.remoteItemId !== context.capture.remoteItemId ||
+          current.capture.sha256 !== context.capture.sha256 || current.capture.byteCount !== context.capture.byteCount) throw new Error('upload-configuration-changed');
+      if (current.storage.ciphertext === context.storage.ciphertext && current.storage.iv === context.storage.iv) {
+        await tx.setOneDriveCredential(organizationId, result.ownerCredential);
+      }
+      await tx.markCaptureVerified(organizationId, recordId, this.clock());
+      return { state: 'verified', nextOffset: current.capture.byteCount };
     });
   }
 

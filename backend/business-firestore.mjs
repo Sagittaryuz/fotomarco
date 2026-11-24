@@ -98,6 +98,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       invitation: (org, id) => read(path(org, 'invitations', id)),
       asset: (org, id) => read(path(org, 'assets', id)),
+      capture: (org, id) => read(path(org, 'captures', id)),
       oneDriveCredential: org => read(path(org, 'private', 'onedrive')),
       googleMailCredential: org => read(path(org, 'private', 'gmail')),
       latestProfile: async org => {
@@ -114,6 +115,29 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       createInvitation: async invitation => put(path(invitation.organizationId, 'invitations', invitation.id), invitation, { exists: false }),
       createAsset: async asset => put(path(asset.organizationId, 'assets', asset.assetId), asset, { exists: false }),
+      createCapture: async capture => put(path(capture.organizationId, 'captures', capture.recordId), capture, { exists: false }),
+      beginCaptureUpload: async (org, recordId, session, expiresAt) => {
+        const data = { state: 'uploading', nextOffset: 0, sessionVersion: session.version,
+          sessionIv: session.iv, sessionCiphertext: session.ciphertext, sessionExpiresAt: expiresAt };
+        writes.push({ update: { name: path(org, 'captures', recordId), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
+      leaseCaptureChunk: async (org, recordId, leaseId, expiresAt) => {
+        const data = { leaseId, leaseExpiresAt: expiresAt };
+        writes.push({ update: { name: path(org, 'captures', recordId), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
+      completeCaptureChunk: async (org, recordId, result, byteCount) => {
+        const data = result.state === 'pending' ? { state: 'uploading', nextOffset: result.nextOffset, leaseId: '', leaseExpiresAt: 0 } :
+          { state: 'verifying', nextOffset: byteCount, remoteItemId: result.itemId, leaseId: '', leaseExpiresAt: 0 };
+        writes.push({ update: { name: path(org, 'captures', recordId), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
+      markCaptureVerified: async (org, recordId, verifiedAt) => {
+        const data = { state: 'verified', verifiedAt };
+        writes.push({ update: { name: path(org, 'captures', recordId), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
       setOneDriveCredential: async (org, record) => put(path(org, 'private', 'onedrive'), record),
       setGoogleMailCredential: async (org, record) => put(path(org, 'private', 'gmail'), record),
       publishProfile: async profile => {

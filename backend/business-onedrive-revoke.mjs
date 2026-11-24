@@ -4,6 +4,7 @@ import { validateMemberFolderPermissions } from './business-onedrive-access.mjs'
 /** Revoke only the verified member's explicit permission; retain the folder and photos. */
 export async function revokeOneDriveMemberFolder(configuration) {
   const { ownerToken, expectedOwnerId, memberIdentityId, folderId, fetchImpl = fetch } = configuration;
+  if (expectedOwnerId === memberIdentityId) throw new Error('invalid-member-identity');
   await verifyOneDriveMemberFolder({ ...configuration, requireMember: false });
   const base = `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folderId)}`;
   const headers = { authorization: `Bearer ${ownerToken}` };
