@@ -146,6 +146,45 @@ struct OneDriveArchive {
         guard status == 204 || status == 404 else { throw Failure.http(status) }
     }
 
+    /// Renames only an existing app-owned item, preserving its immutable ID and bytes.
+    func renamePhoto(id: String, from oldName: String, to newName: String, accessToken: String,
+                     transport: ((URLRequest) async throws -> (Data, URLResponse))? = nil) async throws {
+        guard Self.validID(id), Self.validName(oldName), Self.validName(newName),
+              let old = CloudArchiveFilename(oldName), let new = CloudArchiveFilename(newName),
+              old.captureID == new.captureID, old.isOriginal == new.isOriginal,
+              (oldName as NSString).pathExtension.lowercased() == (newName as NSString).pathExtension.lowercased() else { throw Failure.invalidName }
+        let send: (URLRequest) async throws -> (Data, URLResponse) = transport ?? { try await Self.session.data(for: $0) }
+        func read(_ url: URL) async throws -> DriveItem {
+            let (data, response) = try await send(authorizedRequest(url, accessToken: accessToken))
+            let status = try Self.status(response)
+            guard status == 200 else { throw Failure.http(status) }
+            return try JSONDecoder().decode(DriveItem.self, from: data)
+        }
+        let rootURL = Self.graph.appendingPathComponent("special").appendingPathComponent("approot")
+        let root = try await read(rootURL)
+        guard root.folder != nil, Self.validID(root.id) else { throw Failure.integrity }
+        let folder = root.id, url = itemURL(id)
+        let item = try await read(Self.query(url, items: [Self.fields]))
+        guard item.id == id, item.file != nil, item.folder == nil, item.parentReference?.id == folder else { throw Failure.integrity }
+        if item.name == newName { return }
+        guard item.name == oldName, let eTag = item.eTag, !eTag.isEmpty else { throw Failure.integrity }
+        let namedURL = path(name: newName, in: folder).deletingLastPathComponent().appendingPathComponent(newName)
+        do {
+            let conflict = try await read(Self.query(namedURL, items: [Self.fields]))
+            if conflict.id != id { throw Failure.integrity }
+        } catch Failure.http(404) { /* available */ }
+        var update = try authorizedRequest(url, accessToken: accessToken)
+        update.httpMethod = "PATCH"
+        update.setValue(eTag, forHTTPHeaderField: "If-Match")
+        update.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        update.httpBody = try JSONSerialization.data(withJSONObject: ["name": newName])
+        let (_, response) = try await send(update)
+        guard try Self.status(response) == 200 else { throw Failure.http(try Self.status(response)) }
+        let checked = try await read(Self.query(url, items: [Self.fields]))
+        guard checked.id == id, checked.name == newName, checked.file != nil, checked.folder == nil,
+              checked.parentReference?.id == folder, checked.size == item.size else { throw Failure.integrity }
+    }
+
     func list(accessToken: String, nextPage: String? = nil) async throws -> Page {
         let folder = try await folderID(accessToken: accessToken)
         let children = itemURL(folder).appendingPathComponent("children")

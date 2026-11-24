@@ -8,9 +8,15 @@ struct CloudArchiveFilename {
 
     /// Keep the existing identity suffix so renamed archives remain discoverable.
     static func renamed(_ existingName: String, provider: CloudDeliveryPlan.Provider,
-                        timeZone: TimeZone) -> String? {
-        guard let metadata = CloudArchiveFilename(existingName), let date = metadata.capturedAt else { return nil }
-        let legacy = legacyName(existingName)
+                        timeZone: TimeZone, knownCaptureDate: Date? = nil) -> String? {
+        guard let metadata = CloudArchiveFilename(existingName), let date = metadata.capturedAt ?? knownCaptureDate else { return nil }
+        let legacy: String
+        if metadata.capturedAt == nil {
+            let ext = metadata.isOriginal ? (existingName as NSString).pathExtension.lowercased() : nil
+            legacy = make(captureID: metadata.captureID, capturedAt: date, profile: metadata.profile, originalExtension: ext)
+        } else {
+            legacy = legacyName(existingName)
+        }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)

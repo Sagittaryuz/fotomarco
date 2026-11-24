@@ -62,7 +62,7 @@ fileprivate struct ArchiveGalleryPhoto: Identifiable {
         guard let metadata = CloudArchiveFilename(name) else { return nil }
         self.id = id
         self.name = name
-        self.date = metadata.capturedAt ?? date
+        self.date = metadata.capturedAt ?? providerCaptureDate ?? date
         self.captureID = metadata.captureID
         isOriginal = metadata.isOriginal
         profile = metadata.profile
@@ -119,6 +119,17 @@ struct GalleryCloudItem: Identifiable {
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
         if provider == .googleDrive { return try await images.drive.mapLocation(id: photo.id, accessToken: token) }
         return try await OneDriveArchive().mapLocation(id: photo.id, accessToken: token)
+    }
+
+    @MainActor func renameForCaptureDate(_ date: Date) async throws {
+        guard let updated = CloudArchiveFilename.renamed(name, provider: provider, timeZone: .current, knownCaptureDate: date) else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        guard updated != name else { return }
+        let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
+        if provider == .googleDrive { try await images.drive.renamePhoto(id: photo.id, from: name, to: updated, accessToken: token) }
+        else { try await OneDriveArchive().renamePhoto(id: photo.id, from: name, to: updated, accessToken: token) }
+        await CloudGalleryCatalog.shared.invalidate(destination)
     }
 
     @MainActor

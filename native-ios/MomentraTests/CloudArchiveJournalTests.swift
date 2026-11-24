@@ -18,6 +18,12 @@ final class CloudArchiveJournalTests: XCTestCase {
             XCTAssertEqual(CloudArchiveFilename.renamed(renamed, provider: provider, timeZone: zone), renamed)
         }
         XCTAssertNil(CloudArchiveFilename.renamed("\(id.uuidString)-stamped.jpg", provider: .oneDrive, timeZone: zone))
+        let oldWithoutDate = "\(id.uuidString)-stamped.jpg"
+        let fromProvider = try XCTUnwrap(CloudArchiveFilename.renamed(oldWithoutDate, provider: .oneDrive, timeZone: zone,
+                                                                      knownCaptureDate: date))
+        XCTAssertTrue(fromProvider.hasPrefix("01-01-1970 - OneDrive - 00-20-34 - "))
+        XCTAssertEqual(CloudArchiveFilename(fromProvider)?.captureID, id)
+        XCTAssertEqual(CloudArchiveFilename(fromProvider)?.capturedAt, date)
     }
 
     func testArchiveNameCarriesCaptureDateAndProfileAcrossDevices() throws {

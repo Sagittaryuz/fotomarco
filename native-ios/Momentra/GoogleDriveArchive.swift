@@ -237,6 +237,34 @@ final class GoogleDriveArchive {
         guard result.id == id, result.trashed == true else { throw ArchiveError.invalidResponse }
     }
 
+    /// Updates metadata by immutable ID only when the app marker and version match.
+    func renamePhoto(id: String, from oldName: String, to newName: String, accessToken: String) async throws {
+        guard Self.validID(id), let old = CloudArchiveFilename(oldName), let new = CloudArchiveFilename(newName),
+              old.captureID == new.captureID, old.isOriginal == new.isOriginal,
+              (oldName as NSString).pathExtension.lowercased() == (newName as NSString).pathExtension.lowercased() else { throw ArchiveError.invalidRequest }
+        let path = "/drive/v3/files/\(id)", query = ["fields": Self.fields]
+        let check = try request(path: path, query: query, accessToken: accessToken)
+        let (data, response) = try await session.data(for: check)
+        try Self.check(response, body: data)
+        let existing = try JSONDecoder().decode(Item.self, from: data)
+        guard existing.id == id, existing.mimeType.hasPrefix("image/"), existing.trashed == false,
+              existing.appProperties?["momentraArchivePhoto"] == "1" else { throw ArchiveError.integrity }
+        if existing.name == newName { return }
+        guard existing.name == oldName, let eTag = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"), !eTag.isEmpty else { throw ArchiveError.integrity }
+        var update = try request(path: path, query: query, method: "PATCH", accessToken: accessToken)
+        update.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        update.setValue(eTag, forHTTPHeaderField: "If-Match")
+        update.httpBody = try JSONSerialization.data(withJSONObject: ["name": newName])
+        let result: Item = try await decode(update)
+        guard result.id == id, result.name == newName, result.trashed == false,
+              result.appProperties?["momentraArchivePhoto"] == "1", result.size == existing.size,
+              result.parents == existing.parents, result.sha256Checksum == existing.sha256Checksum else { throw ArchiveError.integrity }
+        let verified: Item = try await decode(check)
+        guard verified.id == id, verified.name == newName, verified.trashed == false,
+              verified.appProperties?["momentraArchivePhoto"] == "1", verified.size == existing.size,
+              verified.parents == existing.parents, verified.sha256Checksum == existing.sha256Checksum else { throw ArchiveError.integrity }
+    }
+
     func restorePhoto(id: String, name: String, accessToken: String) async throws {
         guard Self.validID(id), CloudArchiveFilename(name) != nil else { throw ArchiveError.invalidRequest }
         let path = "/drive/v3/files/\(id)"
