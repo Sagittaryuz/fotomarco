@@ -35,7 +35,7 @@ jobs:
         run: xcodegen generate
       - name: Compile unsigned app for iPhone
         working-directory: native-ios
-        run: xcodebuild -jobs 1 -project Fotomarco.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -jobs 2 -project Fotomarco.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO SWIFT_COMPILATION_MODE=incremental build
       - name: Preserve Xcode crash diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -159,7 +159,7 @@ jobs:
         run: xcodegen generate
       - name: Compile for iOS Simulator
         working-directory: native-ios
-        run: xcodebuild -jobs 1 -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/momentra-simulator" CODE_SIGNING_ALLOWED=NO -quiet build
+        run: xcodebuild -jobs 2 -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/momentra-simulator" CODE_SIGNING_ALLOWED=NO -quiet build
       - name: Configure Business authentication callback
         run: python3 native-ios/scripts/configure-business-auth.py "$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app"
       - name: Configure Business API endpoint
@@ -171,7 +171,7 @@ jobs:
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
           echo "MOMENTRA_SIM_ID=$DEVICE_ID" >> "$GITHUB_ENV"
-          xcodebuild -jobs 1 -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/momentra-simulator" -resultBundlePath "$RUNNER_TEMP/Momentra.xcresult" CODE_SIGNING_ALLOWED=NO -quiet test
+          xcodebuild -jobs 2 -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/momentra-simulator" -resultBundlePath "$RUNNER_TEMP/Momentra.xcresult" CODE_SIGNING_ALLOWED=NO -quiet test
       - name: Summarize native test results
         if: always()
         run: |
