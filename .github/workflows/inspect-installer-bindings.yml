@@ -14,3 +14,5 @@ jobs:
         run: |
           curl -fsS -H "Authorization: Bearer $CF_TOKEN" 'https://api.cloudflare.com/client/v4/accounts/ceefd8797579fdd37486700792669302/workers/scripts/momentra-atualizacoes/settings' | node -e '
           let s=""; process.stdin.on("data",x=>s+=x).on("end",()=>{const j=JSON.parse(s); if(!j.success) process.exit(1); for(const x of j.result.bindings||[]) if(x.name === "RELEASE") console.log(JSON.stringify({name:x.name,type:x.type,text:x.type === "plain_text" ? x.text : undefined}));});'
+          curl -fsS -H "Authorization: Bearer $CF_TOKEN" 'https://api.cloudflare.com/client/v4/accounts/ceefd8797579fdd37486700792669302/workers/scripts/momentra-atualizacoes' > "$RUNNER_TEMP/installer-source"
+          node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8"); console.log(JSON.stringify({usesLatestEndpoint:s.includes("/latest"), checksSignedFilename:s.includes("assinado.ipa"), usesConfiguredRelease:s.includes("env.RELEASE")}))' "$RUNNER_TEMP/installer-source"
