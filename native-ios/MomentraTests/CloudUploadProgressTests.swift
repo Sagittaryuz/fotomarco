@@ -4,6 +4,18 @@ import SwiftUI
 
 @MainActor
 final class CloudUploadProgressTests: XCTestCase {
+    func testPersonalAndOrganizationPendingQueuesDoNotEraseEachOther() {
+        let tracker = CloudUploadProgress.shared
+        let personal = UUID(), business = UUID()
+        defer { tracker.preparePending([]); tracker.prepareBusinessPending([]); tracker.discard(personal); tracker.discard(business) }
+        tracker.prepareBusinessPending([business])
+        tracker.preparePending([personal])
+        XCTAssertEqual(tracker.values[business], 0)
+        XCTAssertEqual(tracker.values[personal], 0)
+        tracker.preparePending([])
+        XCTAssertEqual(tracker.values[business], 0)
+        XCTAssertNil(tracker.values[personal])
+    }
     func testTransferDoesNotClaimCompletionBeforeVerification() {
         let tracker = CloudUploadProgress.shared
         let id = UUID()

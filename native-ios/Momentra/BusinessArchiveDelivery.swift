@@ -81,6 +81,12 @@ actor BusinessArchiveDelivery {
         case "verifying": status = .init(state: "verifying", nextOffset: fingerprint.byteCount)
         default: throw BusinessAPIClient.Failure.unavailable
         }
+        if status.state == "uncertain" {
+            status = try await api.reconcileCapture(organizationID: org, captureID: item.id, variant: variant, token: token)
+            if status.state == "reserved" {
+                status = try await api.startCaptureUpload(organizationID: org, captureID: item.id, variant: variant, token: token)
+            }
+        }
         let fileHandle = try FileHandle(forReadingFrom: file)
         defer { try? fileHandle.close() }
         while status.state == "uploading" {

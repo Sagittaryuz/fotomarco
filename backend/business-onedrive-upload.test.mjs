@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { businessUploadOffset, createBusinessUploadSession, sendBusinessUploadChunk, validBusinessPhotoName, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
+import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusinessUpload, sendBusinessUploadChunk, validBusinessPhotoName, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
 import { createHash } from 'node:crypto';
 
 const captureId = '11111111-1111-4111-8111-111111111111';
@@ -77,4 +77,12 @@ test('acknowledges only the exact remote bytes and never forwards the owner toke
     expectedSize: bytes.length, expectedSha256: hash, fetchImpl, makeDigest };
   assert.deepEqual(await verifyBusinessUploadedItem(input), { verified: true, itemId: 'item' });
   await assert.rejects(verifyBusinessUploadedItem({ ...input, expectedSha256: '0'.repeat(64) }), /upload-verification-mismatch/);
+});
+
+test('lost upload response is not treated as success from filename alone', async () => {
+  const input = { ownerToken: 'owner', driveId: 'drive', folderId: 'folder', captureId, filename,
+    expectedSize: 3, expectedSha256: '0'.repeat(64) };
+  assert.equal(await findVerifiedBusinessUpload({ ...input, fetchImpl: async () => ({ status: 404 }) }), null);
+  await assert.rejects(findVerifiedBusinessUpload({ ...input, fetchImpl: async () => ({ status: 200,
+    json: async () => ({ id: 'item', name: filename, size: 2, file: {}, parentReference: { id: 'folder', driveId: 'drive' } }) }) }), /upload-verification-mismatch/);
 });

@@ -108,6 +108,11 @@ struct BusinessAPIClient {
         return try await post(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID.uuidString, variant, "verify"], values: [:], token: token)
     }
 
+    func reconcileCapture(organizationID: String, captureID: UUID, variant: String, token: String) async throws -> UploadStart {
+        guard ["original", "stamped"].contains(variant) else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID.uuidString, variant, "reconcile"], values: [:], token: token)
+    }
+
     func accept(organizationID: String, invitationID: String, token: String) async throws -> OrganizationReceipt {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "invitations", try Self.id(invitationID), "accept"], values: [:], token: token)
     }

@@ -138,6 +138,13 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         writes.push({ update: { name: path(org, 'captures', recordId), fields: fields(data) },
           updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
       },
+      reconcileCapture: async (org, recordId, result, byteCount, verifiedAt) => {
+        const data = result.state === 'verified' ? { state: 'verified', nextOffset: byteCount, remoteItemId: result.itemId, verifiedAt, leaseId: '', leaseExpiresAt: 0 } :
+          result.state === 'restart' ? { state: 'reserved', nextOffset: 0, leaseId: '', leaseExpiresAt: 0 } :
+          { state: 'uploading', nextOffset: result.nextOffset, leaseId: '', leaseExpiresAt: 0 };
+        writes.push({ update: { name: path(org, 'captures', recordId), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
       setOneDriveCredential: async (org, record) => put(path(org, 'private', 'onedrive'), record),
       setGoogleMailCredential: async (org, record) => put(path(org, 'private', 'gmail'), record),
       publishProfile: async profile => {

@@ -122,3 +122,19 @@ export async function verifyBusinessUploadedItem({ ownerToken, driveId, folderId
     throw error;
   }
 }
+
+/** Used after a lost final response: never infer success from a name or size alone. */
+export async function findVerifiedBusinessUpload({ ownerToken, driveId, folderId, captureId, filename,
+  expectedSize, expectedSha256, fetchImpl = fetch, makeDigest }) {
+  if (typeof ownerToken !== 'string' || !ownerToken || !validId(folderId) || !validId(driveId) ||
+      !validBusinessPhotoName(filename, captureId)) throw new Error('invalid-upload-request');
+  const url = `${graphRoot}/items/${encodeURIComponent(folderId)}:/${encodeURIComponent(filename)}`;
+  const response = await fetchImpl(url, { redirect: 'manual', headers: { authorization: `Bearer ${ownerToken}` } });
+  if (response.status === 404) return null;
+  if (response.status !== 200) throw new Error('upload-verification-unavailable');
+  const item = await response.json();
+  if (!validId(item.id) || item.name !== filename || item.size !== expectedSize || !item.file || item.folder || item.remoteItem ||
+      item.parentReference?.id !== folderId || item.parentReference?.driveId !== driveId) throw new Error('upload-verification-mismatch');
+  return verifyBusinessUploadedItem({ ownerToken, driveId, folderId, itemId: item.id, filename, expectedSize, expectedSha256,
+    fetchImpl, ...(makeDigest ? { makeDigest } : {}) });
+}

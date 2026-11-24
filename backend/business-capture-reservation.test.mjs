@@ -23,11 +23,27 @@ function fixture() {
     completeCaptureChunk: async (_, id, result, size) => { Object.assign(captures.get(id), result.state === 'pending' ?
       { state: 'uploading', nextOffset: result.nextOffset, leaseId: '', leaseExpiresAt: 0 } :
       { state: 'verifying', nextOffset: size, remoteItemId: result.itemId, leaseId: '', leaseExpiresAt: 0 }); },
-    markCaptureVerified: async (_, id, verifiedAt) => { Object.assign(captures.get(id), { state: 'verified', verifiedAt }); } };
+    markCaptureVerified: async (_, id, verifiedAt) => { Object.assign(captures.get(id), { state: 'verified', verifiedAt }); },
+    reconcileCapture: async (_, id, result, size, verifiedAt) => { Object.assign(captures.get(id), result.state === 'verified' ?
+      { state: 'verified', nextOffset: size, remoteItemId: result.itemId, verifiedAt, leaseId: '', leaseExpiresAt: 0 } :
+      { state: result.state === 'restart' ? 'reserved' : 'uploading', nextOffset: result.state === 'restart' ? 0 : result.nextOffset, leaseId: '', leaseExpiresAt: 0 }); } };
   const service = new BusinessService({ verifyToken: async identity => identity, transaction: action => action(tx),
     newId: () => 'unused', clock: () => 100 });
   return { service, captures, members };
 }
+
+test('reconciles a lost final response only after the provider verifies the file and membership', async () => {
+  const { service, captures, members } = fixture();
+  const user = { uid: 'member', emailVerified: true };
+  await service.reserveCapture(user, orgId, captureId, name, 1, sha);
+  service.prepareUpload = async ({ storage }) => ({ session: { version: 1, iv: 'iv', ciphertext: 'secret' }, expiresAt: 1000, ownerCredential: storage });
+  await service.startCaptureUpload(user, orgId, captureId, 'stamped');
+  service.reconcileUpload = async ({ storage }) => ({ state: 'verified', itemId: 'verified-item', ownerCredential: storage });
+  assert.deepEqual(await service.reconcileCapture(user, orgId, captureId, 'stamped'), { state: 'verified', nextOffset: 1 });
+  assert.equal(captures.get(`${captureId}-stamped`).remoteItemId, 'verified-item');
+  members.get('member').active = false;
+  await assert.rejects(service.reconcileCapture(user, orgId, captureId, 'stamped'), /forbidden/);
+});
 
 test('reserves original and stamped files separately and idempotently for their author', async () => {
   const { service, captures } = fixture();

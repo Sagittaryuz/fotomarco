@@ -8,7 +8,7 @@ import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 import { gmailInvitationSender } from './business-gmail-invitation.mjs';
 import { revokeOneDriveMemberFolder } from './business-onedrive-revoke.mjs';
 import { verifyOneDriveMemberFolder } from './business-onedrive-verify.mjs';
-import { businessUploadOffset, createBusinessUploadSession, sendBusinessUploadChunk, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
+import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusinessUpload, sendBusinessUploadChunk, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
 import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
@@ -141,8 +141,34 @@ export function createBusinessWorker(env, overrides = {}) {
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
     return { verified: true, ownerCredential: { ...credential, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
   });
+  const reconcileUpload = overrides.reconcileUpload ?? (async ({ organizationId, identity, org, capture, storage }) => {
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage);
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const fetcher = overrides.fetchImpl ?? fetch;
+    const boundedFetch = (url, options = {}) => fetcher(url, { ...options, signal: AbortSignal.timeout(300000) });
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID, fetchImpl: boundedFetch });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.driveId !== storage.driveId) throw new Error('provider-identity-mismatch');
+    await verifyOneDriveMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, expectedParentId: capture.parentId, folderId: capture.folderId,
+      memberIdentityId: capture.memberProviderId, fetchImpl: boundedFetch });
+    const found = await findVerifiedBusinessUpload({ ownerToken: verified.accessToken, driveId: capture.driveId, folderId: capture.folderId,
+      captureId: capture.captureId, filename: capture.filename, expectedSize: capture.byteCount, expectedSha256: capture.sha256, fetchImpl: boundedFetch });
+    const credential = await vault.seal(organizationId, org.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    const ownerCredential = { ...credential, providerAccountId: verified.providerAccountId, driveId: verified.driveId };
+    if (found?.verified) return { state: 'verified', itemId: found.itemId, ownerCredential };
+    if (Date.now() >= capture.sessionExpiresAt + 120000) return { state: 'restart', ownerCredential };
+    if (Date.now() >= capture.sessionExpiresAt) throw new Error('upload-result-uncertain');
+    const sessionVault = await createUploadSessionVault(env.BUSINESS_CREDENTIAL_KEY);
+    const session = await sessionVault.open(organizationId, identity.uid, capture.recordId,
+      { version: capture.sessionVersion, iv: capture.sessionIv, ciphertext: capture.sessionCiphertext });
+    const nextOffset = await businessUploadOffset({ uploadUrl: session.uploadUrl, total: capture.byteCount, fetchImpl: boundedFetch });
+    return { state: 'uploading', nextOffset, ownerCredential };
+  });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload,
+    prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),
