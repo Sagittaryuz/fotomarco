@@ -36,6 +36,12 @@ jobs:
       - name: Compile unsigned app for iPhone
         working-directory: native-ios
         run: xcodebuild -jobs 2 -project Fotomarco.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO SWIFT_COMPILATION_MODE=incremental build
+      - name: Inspect build service termination
+        if: failure()
+        run: |
+          df -h / /Users/runner/work
+          /usr/bin/log show --last 15m --style compact --predicate 'process == "SWBBuildService" OR eventMessage CONTAINS "SWBBuildService"' 2>/dev/null | tail -150 || true
+          find ~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports -maxdepth 1 -iname '*build*' -print 2>/dev/null || true
       - name: Preserve Xcode crash diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -139,6 +145,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
   simulator-build:
+    needs: device-package-check
     runs-on: macos-26-intel
     timeout-minutes: 30
     steps:
