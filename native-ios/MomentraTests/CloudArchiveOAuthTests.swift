@@ -52,6 +52,8 @@ final class CloudArchiveOAuthTests: XCTestCase {
         let business = try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: info, forBusiness: true)
         XCTAssertEqual(personal.requiredScope, "Files.ReadWrite.AppFolder")
         XCTAssertEqual(business.requiredScope, "Files.ReadWrite")
+        XCTAssertFalse(personal.businessStorage)
+        XCTAssertTrue(business.businessStorage)
         XCTAssertTrue(business.includesStorageScope("https://graph.microsoft.com/Files.ReadWrite"))
         XCTAssertFalse(business.includesStorageScope("Files.ReadWrite.AppFolder"))
     }

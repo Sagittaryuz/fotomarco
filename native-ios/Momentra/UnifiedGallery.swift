@@ -283,6 +283,13 @@ struct OriginalsView: View {
                         .accessibilityHidden(latest == nil)
                 }
                 Spacer()
+                Button {
+                    FotomarcoHaptics.play(.gallery)
+                    showDateFilter = true
+                } label: {
+                    Image(systemName: "calendar").frame(width: 42, height: 42)
+                        .modifier(GalleryControlSurface(rounded: true, tint: dateFilter == nil ? .primary : .yellow))
+                }.accessibilityLabel(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data")
                 if tab != .trash, tab != .map, total > 0 {
                     Button {
                         FotomarcoHaptics.play(.gallery)
@@ -305,10 +312,6 @@ struct OriginalsView: View {
             ForEach(GalleryOrigin.allCases) { source in
                 Button { FotomarcoHaptics.play(.gallery); origin = source } label: { menuLabel(source.title, active: origin == source) }
             }
-            Button { FotomarcoHaptics.play(.gallery); showDateFilter = true } label: {
-                Label(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data", systemImage: "calendar")
-            }
-            if dateFilter != nil { Button("Limpar filtro de data") { dateFilter = nil } }
             if authorization == .notDetermined {
                 Button("Permitir acesso ao Fotos") {
                     FotomarcoHaptics.play(.gallery)
@@ -319,7 +322,7 @@ struct OriginalsView: View {
             }
         } label: {
             Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
-                .modifier(GalleryControlSurface(rounded: true, tint: origin == nil && dateFilter == nil ? .primary : .yellow))
+                .modifier(GalleryControlSurface(rounded: true, tint: origin == nil ? .primary : .yellow))
         }
         .accessibilityLabel("Filtrar por origem")
         .accessibilityValue(origin?.title ?? "Todos")

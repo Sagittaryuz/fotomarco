@@ -57,6 +57,8 @@ struct BusinessOneDriveView: View {
             let account = try await oauth.connect(configuration, presenting: window, knownDestinations: [])
             pendingAccount = account
             confirmAccount = true
+        } catch let error as CloudArchiveOAuth.Failure {
+            message = error.errorDescription
         } catch {
             message = "Não foi possível conectar a conta. Confira as permissões e tente novamente."
         }

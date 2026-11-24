@@ -43,10 +43,12 @@ final class CloudArchiveOAuth {
         let requiredScope: String
         let scopes: String
         let identityOnly: Bool
+        let businessStorage: Bool
 
         init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:], forBusiness: Bool = false, identityOnly: Bool = false) throws {
             self.provider = provider
             self.identityOnly = identityOnly
+            self.businessStorage = provider == .oneDrive && forBusiness && !identityOnly
             guard !identityOnly || provider == .oneDrive else { throw Failure.notConfigured }
             let urlTypes = info["CFBundleURLTypes"] as? [[String: Any]] ?? []
             let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
@@ -259,7 +261,9 @@ final class CloudArchiveOAuth {
         case .googleDrive:
             bindings = [identity.sub]
         case .oneDrive:
-            if configuration.identityOnly {
+            // Business storage is verified and bound by the server to the
+            // organization's actual drive; it does not use the personal app folder.
+            if configuration.identityOnly || configuration.businessStorage {
                 bindings = [identity.sub]
                 break
             }

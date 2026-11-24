@@ -3,11 +3,10 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.49"
+    static let version = "0.1.50"
     static let items = [
-        "Filtre as capturas, favoritos, mapa e lixeira por data ou intervalo.",
-        "Conheça as opções de conta, perfis e organização.",
-        "Veja os planos Pro e Business na apresentação inicial."
+        "Acesse o calendário ao lado de Selecionar na galeria.",
+        "Melhorias na conexão do OneDrive da organização."
     ]
 
     static func items(for version: String) -> [String] {
