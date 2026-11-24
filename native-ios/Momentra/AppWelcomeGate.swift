@@ -28,11 +28,35 @@ struct AppWelcomeGate: View {
             if completed {
                 CameraScreen()
                     .sheet(isPresented: $showNews) { news }
+            } else if page == 0 {
+                accountWelcome
             } else {
                 welcome
             }
         }
         .onAppear { restoreExistingUser() }
+    }
+
+    private var accountWelcome: some View {
+        BusinessSignInView(submit: { email, password, name, registering in
+            let identity = BusinessIdentity.shared
+            identity.start()
+            if registering { try await identity.register(email: email, password: password, fullName: name) }
+            else { try await identity.signIn(email: email, password: password) }
+            page = 1
+        }, signInWithProvider: { provider in
+            let identity = BusinessIdentity.shared
+            identity.start()
+            switch provider {
+            case .microsoft: try await identity.signInMicrosoft()
+            case .google:
+                guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+                      var controller = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else { throw BusinessIdentity.IdentityError.notConfigured }
+                while let presented = controller.presentedViewController { controller = presented }
+                try await identity.signInGoogle(presenting: controller)
+            }
+            page = 1
+        }, continueWithoutAccount: { page = 1 })
     }
 
     private var welcome: some View {
