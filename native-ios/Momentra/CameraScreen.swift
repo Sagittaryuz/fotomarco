@@ -1461,7 +1461,8 @@ struct CameraScreen: View {
     private func showCapturedPhoto(_ capture: CameraService.CapturePreview) {
         finishPhotoFlight()
         sessionCaptureCount += 1
-        sessionCaptures.insert(capture, at: 0)
+        let thumbnail = capture.image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? capture.image
+        sessionCaptures.insert(.init(image: thumbnail, file: capture.file), at: 0)
         if sessionCaptures.count > 3 { sessionCaptures.removeLast() }
         galleryThumbnailRevision = UUID()
         guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel,
