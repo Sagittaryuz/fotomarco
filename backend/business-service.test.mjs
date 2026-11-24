@@ -2,14 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BusinessService } from './business-service.mjs';
 
-function fixture() {
+function fixture(withMail = true) {
   const organization = { id: 'org', ownerId: 'owner', name: 'Equipe', contactEmail: 'owner@example.com' };
   const records = new Map([['owner', { organizationId: 'org', userId: 'owner', role: 'owner', active: true }]]);
   const invites = new Map();
   let profile;
   let asset;
   let storedCredential;
-  let storedMail;
+  let storedMail = withMail ? { version: 1, iv: 'iv', ciphertext: 'cipher', providerAccountId: 'id', email: 'owner@example.com' } : undefined;
+  const sent = [];
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
@@ -28,22 +29,35 @@ function fixture() {
     setOneDriveCredential: async (_, value) => { storedCredential = value; },
     oneDriveCredential: async () => storedCredential,
     setGoogleMailCredential: async (_, value) => { storedMail = value; },
+    googleMailCredential: async () => storedMail,
   };
-  const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100 });
-  return { service, records, invites, storedCredential: () => storedCredential, storedMail: () => storedMail };
+  const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100,
+    prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async values => { sent.push(values); } }) });
+  return { service, records, invites, sent, storedCredential: () => storedCredential, storedMail: () => storedMail };
 }
 
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
-  const { service, records } = fixture();
+  const { service, records, sent } = fixture();
   await service.invite({ uid: 'owner' }, 'org', ' PERSON@example.com ');
+  assert.equal(sent[0].recipientEmail, 'person@example.com');
   const recipient = { uid: 'member', email: 'person@example.com', emailVerified: true };
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
 });
 
+test('a revoked inviter cannot admit a user and missing mail cannot create an invitation', async () => {
+  const { service, records } = fixture();
+  await service.invite({ uid: 'owner' }, 'org', 'person@example.com');
+  records.get('owner').active = false;
+  await assert.rejects(service.accept({ uid: 'member', email: 'person@example.com', emailVerified: true }, 'org', 'invite'), /invalid-invitation/);
+  const missing = fixture(false);
+  await assert.rejects(missing.service.invite({ uid: 'owner' }, 'org', 'person@example.com'), /mail-not-configured/);
+  assert.equal(missing.invites.size, 0);
+});
+
 test('only the owner may connect the verified organization sender', async () => {
-  const { service, records, storedMail } = fixture();
+  const { service, records, storedMail } = fixture(false);
   service.prepareGoogleMail = async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'id', email: 'other@example.com' });
   records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
   await assert.rejects(service.connectGoogleMail({ uid: 'member' }, 'org', 'secret'), /forbidden/);

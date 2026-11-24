@@ -52,11 +52,13 @@ test('Firestore emulator commits a real invitation and member transaction', { sk
     assert.equal(res.ok, true, `seed failed: ${res.status}`);
   };
   const s = stringValue => ({ stringValue });
-  await write(`organizations/${org}`, { id: s(org), ownerId: s('owner') });
+  await write(`organizations/${org}`, { id: s(org), ownerId: s('owner'), name: s('Equipe'), contactEmail: s('org@example.com') });
   await write(`organizations/${org}/members/owner`, { organizationId: s(org), userId: s('owner'), role: s('owner'), active: { booleanValue: true } });
   await write(`organizations/${org}/state/seats`, { count: { integerValue: '1' } });
+  await write(`organizations/${org}/private/gmail`, { version: { integerValue: '1' }, iv: s('iv'), ciphertext: s('cipher'), providerAccountId: s('google'), email: s('org@example.com') });
   const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
-  const service = new BusinessService({ transaction, verifyToken: async token => token, newId: () => 'test-invite', clock: () => 100 });
+  const service = new BusinessService({ transaction, verifyToken: async token => token, newId: () => 'test-invite', clock: () => 100,
+    prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async () => {} }) });
   await service.invite({ uid: 'owner' }, org, 'member@example.com');
   await service.accept({ uid: 'member', email: 'member@example.com', emailVerified: true }, org, 'test-invite');
   await service.publishProfile({ uid: 'owner' }, org, '{"template":"original"}');
@@ -83,13 +85,16 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   await write(`organizations/${org}`, { id: s(org), ownerId: s('owner') });
   await write(`organizations/${org}/members/owner`, { organizationId: s(org), userId: s('owner'), role: s('owner'), active: { booleanValue: true } });
   await write(`organizations/${org}/state/seats`, { count: { integerValue: '1' } });
+  await write(`organizations/${org}`, { id: s(org), ownerId: s('owner'), name: s('Equipe'), contactEmail: s('org@example.com') });
+  await write(`organizations/${org}/private/gmail`, { version: { integerValue: '1' }, iv: s('iv'), ciphertext: s('encrypted-mail'), providerAccountId: s('google'), email: s('org@example.com') });
   const keys = await generateKeyPair('RS256');
   const seconds = 1800000000;
   const authenticate = createFirebaseVerifier({ projectId, now: () => seconds * 1000, resolveKey: async () => keys.publicKey });
   const app = createBusinessApp({ projectId, authenticate, serverAccessToken: async () => 'owner', emulatorOrigin: origin,
     preAuthLimit: async () => true, rateLimit: async () => true, newId: () => 'invite', clock: () => 100,
     prepareOneDrive: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'account', driveId: 'drive' }),
-    prepareGoogleMail: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted-mail', providerAccountId: 'google', email: 'org@example.com' }) });
+    prepareGoogleMail: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted-mail', providerAccountId: 'google', email: 'org@example.com' }),
+    prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async () => {} }) });
   const token = async (uid, email) => new SignJWT({ auth_time: seconds - 1, email, email_verified: true })
     .setProtectedHeader({ alg: 'RS256', kid: 'key1' }).setIssuer(`https://securetoken.google.com/${projectId}`)
     .setAudience(projectId).setSubject(uid).setIssuedAt(seconds - 1).setExpirationTime(seconds + 60).sign(keys.privateKey);

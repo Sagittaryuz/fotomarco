@@ -5,6 +5,7 @@ import { createCredentialVault } from './business-credential-vault.mjs';
 import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
 import { invitationLanding } from './business-invitation-landing.mjs';
 import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
+import { gmailInvitationSender } from './business-gmail-invitation.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -40,8 +41,25 @@ export function createBusinessWorker(env, overrides = {}) {
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'gmail');
     return { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email };
   });
+  const prepareMailDelivery = overrides.prepareMailDelivery ?? (async ({ organizationId, organization, mail }) => {
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, organization.ownerId, mail, 'gmail');
+    if (saved.providerAccountId !== mail.providerAccountId) throw new Error('provider-identity-mismatch');
+    const exchange = googleBusinessMailCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== mail.providerAccountId || verified.email !== organization.contactEmail) throw new Error('mailbox-mismatch');
+    const sealed = await vault.seal(organizationId, organization.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'gmail');
+    const sender = gmailInvitationSender({ invitationOrigin: env.BUSINESS_PUBLIC_ORIGIN,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    return { record: { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email },
+      send: ({ recipientEmail, organizationName, organizationId: org, invitationId }) => sender({
+        accessToken: verified.accessToken, senderEmail: verified.email, recipientEmail, organizationName, organizationId: org, invitationId
+      }) };
+  });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareGoogleMail,
+    prepareOneDrive, prepareGoogleMail, prepareMailDelivery,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),

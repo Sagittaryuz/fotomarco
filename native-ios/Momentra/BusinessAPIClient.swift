@@ -7,7 +7,7 @@ struct BusinessAPIClient {
               !raw.contains("$"), let url = URL(string: raw) else { return nil }
         return try? BusinessAPIClient(endpoint: url)
     }
-    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch }
+    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch, mailNotConfigured }
     struct OrganizationReceipt: Decodable { let organizationId: String }
     struct InvitationReceipt: Decodable { let id: String; let expiresAt: Int64 }
     struct ProfileReceipt: Decodable { let organizationId: String; let versionId: String; let layoutJSON: String }
@@ -125,6 +125,7 @@ struct BusinessAPIClient {
         let (data, response) = try await transport(request)
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidResponse }
         if http.statusCode == 409 { throw Failure.storageAccountChangeRequiresMigration }
+        if http.statusCode == 412 { throw Failure.mailNotConfigured }
         if http.statusCode == 422 { throw Failure.mailboxMismatch }
         if http.statusCode == 401 || http.statusCode == 403 { throw Failure.unauthorized }
         guard (200...299).contains(http.statusCode), data.count <= 400000 else { throw Failure.unavailable }

@@ -105,6 +105,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       } catch (error) {
         if (error?.message === 'storage-account-change-requires-migration') return reply(409, { error: 'storage-account-change-requires-migration' });
         if (error?.message === 'mailbox-mismatch') return reply(422, { error: 'mailbox-mismatch' });
+        if (error?.message === 'mail-not-configured') return reply(412, { error: 'mail-not-configured' });
         if (['invalid-request', 'invalid-invitation', 'already-member', 'forbidden', 'forbidden-or-full', 'full', 'not-found'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
         return reply(503, { error: 'unavailable' });
       }
