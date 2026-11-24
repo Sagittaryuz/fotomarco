@@ -6,7 +6,8 @@ enum ReleaseNews {
     static let version = "0.1.50"
     static let items = [
         "Acesse o calendário ao lado de Selecionar na galeria.",
-        "Melhorias na conexão do OneDrive da organização."
+        "Melhorias na conexão do OneDrive da organização.",
+        "Veja as capturas recentes da sessão empilhadas na câmera."
     ]
 
     static func items(for version: String) -> [String] {

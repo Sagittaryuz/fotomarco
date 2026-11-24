@@ -166,6 +166,8 @@ struct CameraScreen: View {
     @State private var extraLogos: [UIImage?] = []
     @State private var loadedLogoNames: [String] = []
     @State private var galleryThumbnail: CameraService.CapturePreview?
+    @State private var sessionCaptures: [CameraService.CapturePreview] = []
+    @State private var sessionCaptureCount = 0
     @State private var cameraShareTask: Task<Void, Never>?
     @State private var cameraShare: GalleryShareBatch?
     @State private var cameraShareFailed = false
@@ -615,15 +617,44 @@ struct CameraScreen: View {
                     } else {
                     HStack(spacing: 10) {
                         Button { FotomarcoHaptics.play(.buttons); openGallery() } label: {
-                            Group {
-                                if let galleryThumbnail {
-                                    Image(uiImage: galleryThumbnail.image).resizable().scaledToFill()
-                                } else {
-                                    Image(systemName: "photo.on.rectangle").font(.title2)
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        .background(.white.opacity(0.16))
+                            ZStack {
+                                if sessionCaptureCount > 3 {
+                                    ForEach(0..<min(sessionCaptureCount - 3, 3), id: \.self) { index in
+                                        RoundedRectangle(cornerRadius: 11)
+                                            .fill(.black.opacity(0.55))
+                                            .overlay(RoundedRectangle(cornerRadius: 11).stroke(.white.opacity(0.16), lineWidth: 1))
+                                            .rotationEffect(.degrees(Double(index - 1) * 5))
+                                            .offset(y: CGFloat(-index - 2))
+                                    }
                                 }
-                            }.frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 11))
+                                ForEach(Array(sessionCaptures.enumerated()).reversed(), id: \.offset) { index, capture in
+                                    Image(uiImage: capture.image).resizable().scaledToFill()
+                                        .frame(width: 52, height: 52)
+                                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                                        .rotationEffect(.degrees(index == 0 ? 0 : (index == 1 ? -10 : 10)))
+                                        .offset(x: index == 0 ? 0 : (index == 1 ? -4 : 4), y: index == 0 ? 0 : -3)
+                                }
+                                if sessionCaptures.isEmpty {
+                                    Group {
+                                        if let galleryThumbnail {
+                                            Image(uiImage: galleryThumbnail.image).resizable().scaledToFill()
+                                        } else {
+                                            Image(systemName: "photo.on.rectangle").font(.title2)
+                                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                                .background(.white.opacity(0.16))
+                                        }
+                                    }.frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 11))
+                                }
+                            }.frame(width: 52, height: 52)
+                                .overlay(alignment: .topTrailing) {
+                                    if sessionCaptureCount > 0 {
+                                        Text(sessionCaptureCount.formatted())
+                                            .font(.system(size: 11, weight: .bold)).foregroundStyle(.black)
+                                            .padding(.horizontal, 5).frame(minWidth: 19, minHeight: 19)
+                                            .background(.yellow, in: Capsule())
+                                            .offset(x: 7, y: -7).accessibilityHidden(true)
+                                    }
+                                }
                                 .overlay { if cameraShareTask != nil { Color.black.opacity(0.45).clipShape(RoundedRectangle(cornerRadius: 11)); ProgressView().tint(.white) } }
                                 .onGeometryChange(for: CGRect.self) { proxy in
                                     proxy.frame(in: .named("MomentraCamera"))
@@ -633,6 +664,7 @@ struct CameraScreen: View {
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing ||
                                   countdown > 0 || cameraShareTask != nil || cameraShare != nil)
                         .accessibilityLabel("Abrir capturas")
+                        .accessibilityValue(sessionCaptureCount > 0 ? "\(sessionCaptureCount) capturas nesta sessão" : "")
                         .accessibilityActions {
                             if galleryThumbnail != nil {
                                 Button("Compartilhar foto exibida", action: shareCameraThumbnail)
@@ -1428,6 +1460,9 @@ struct CameraScreen: View {
 
     private func showCapturedPhoto(_ capture: CameraService.CapturePreview) {
         finishPhotoFlight()
+        sessionCaptureCount += 1
+        sessionCaptures.insert(capture, at: 0)
+        if sessionCaptures.count > 3 { sessionCaptures.removeLast() }
         galleryThumbnailRevision = UUID()
         guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel,
               !reduceMotion, !galleryThumbnailFrame.isEmpty else {
