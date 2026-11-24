@@ -3,6 +3,7 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { googleServiceAccountToken } from './business-google-credential.mjs';
 import { createCredentialVault } from './business-credential-vault.mjs';
 import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
+import { invitationLanding } from './business-invitation-landing.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -29,13 +30,21 @@ export function createBusinessWorker(env, overrides = {}) {
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
     return { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId };
   });
-  return createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
+  const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
     prepareOneDrive,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),
     ...(overrides.emulatorOrigin ? { emulatorOrigin: overrides.emulatorOrigin } : {}),
   });
+  return async request => {
+    if (new URL(request.url).pathname === '/convite') {
+      try { if (!await preAuthLimit(request)) return new Response('Indisponível.', { status: 429 }); }
+      catch { return new Response('Indisponível.', { status: 503 }); }
+      return invitationLanding(request);
+    }
+    return api(request);
+  };
 }
 
 const workers = new WeakMap();

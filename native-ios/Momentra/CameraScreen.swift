@@ -862,6 +862,9 @@ struct CameraScreen: View {
             stampProfiles.replaceOrganizationProfiles([])
             await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .businessOrganizationsDidChange)) { _ in
+            Task { await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity) }
+        }
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(item: $cameraShare) { batch in
