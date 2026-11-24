@@ -23,6 +23,7 @@ struct BusinessAPIClient {
     struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool? }
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
+    struct FolderProvisioning: Decodable { let ready: Bool }
     private let endpoint: URL
     private let transport: (URLRequest) async throws -> (Data, URLResponse)
 
@@ -62,6 +63,10 @@ struct BusinessAPIClient {
         guard !refreshToken.isEmpty, refreshToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
         return try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "connect"],
                               values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
+    }
+
+    func provisionOwnerFolder(organizationID: String, token: String) async throws -> FolderProvisioning {
+        try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "provision-owner"], values: [:], token: token)
     }
 
     func connectGoogleMail(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {

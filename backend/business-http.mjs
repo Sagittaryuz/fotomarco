@@ -11,6 +11,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const members = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/list$/.exec(new URL(request.url).pathname);
       const removeMember = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/([A-Za-z0-9_-]{1,128})\/remove$/.exec(new URL(request.url).pathname);
       const connectOneDrive = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/connect$/.exec(new URL(request.url).pathname);
+      const provisionOwnerFolder = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/provision-owner$/.exec(new URL(request.url).pathname);
       const connectGoogleMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/gmail\/connect$/.exec(new URL(request.url).pathname);
       const reserveCapture = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/reserve$/.exec(new URL(request.url).pathname);
       const startUpload = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/start$/.exec(new URL(request.url).pathname);
@@ -20,7 +21,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !connectGoogleMail && !removeMember && !reserveCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !provisionOwnerFolder && !connectGoogleMail && !removeMember && !reserveCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -61,6 +62,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       }
       const service = serviceForIdentity(identity);
       try {
+        if (provisionOwnerFolder) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.provisionOwnerFolder(null, provisionOwnerFolder[1]));
+        }
         if (reconcileCapture) {
           if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
           return reply(200, await service.reconcileCapture(null, reconcileCapture[1], reconcileCapture[2], reconcileCapture[3]));

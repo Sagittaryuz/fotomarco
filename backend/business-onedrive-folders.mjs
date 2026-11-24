@@ -1,9 +1,12 @@
 /** Prepare only private folders; never rename or change existing sharing. */
-export async function ensurePrivateMemberFolder({ ownerToken, expectedOwnerId, expectedDriveId, memberIdentityId, memberName, memberEmail, knownMemberFolderId, fetchImpl = fetch }) {
+export async function ensurePrivateMemberFolder({ ownerToken, expectedOwnerId, expectedDriveId, memberIdentityId, memberName, memberEmail, knownMemberFolderId, creationMarker, fetchImpl = fetch }) {
   const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x20/\\?#]/.test(value);
   if (typeof ownerToken !== 'string' || !ownerToken || !validId(expectedOwnerId) || !validId(expectedDriveId) || !validId(memberIdentityId) ||
       typeof memberName !== 'string' || typeof memberEmail !== 'string') throw new Error('invalid-storage-configuration');
   if (knownMemberFolderId !== undefined && !validId(knownMemberFolderId)) throw new Error('invalid-storage-configuration');
+  // This marker must be generated and persisted in trusted storage before the Graph request.
+  if (creationMarker !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(creationMarker)) throw new Error('invalid-storage-configuration');
+  const marker = creationMarker ? `Photomark:${creationMarker.toLowerCase()}` : undefined;
   const name = memberName.trim().replace(/\s+/g, ' ');
   const email = memberEmail.trim().toLowerCase();
   if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120 ||
@@ -36,12 +39,12 @@ export async function ensurePrivateMemberFolder({ ownerToken, expectedOwnerId, e
   async function child(parent, childName, allowedMemberId, isMemberFolder = false) {
     const relative = `/items/${encodeURIComponent(parent)}:/${encodeURIComponent(childName)}`;
     let folder = await read(relative);
-    if (isMemberFolder && folder && (!knownMemberFolderId || folder.id !== knownMemberFolderId)) throw new Error('folder-name-in-use');
+    if (isMemberFolder && folder && (knownMemberFolderId ? folder.id !== knownMemberFolderId : !marker || folder.description !== marker)) throw new Error('folder-name-in-use');
     if (isMemberFolder && !folder && knownMemberFolderId) throw new Error('missing-bound-folder');
     if (!folder) {
       const response = await fetchImpl(`${base}/items/${encodeURIComponent(parent)}/children`, {
         method: 'POST', redirect: 'manual', headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({ name: childName, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
+        body: JSON.stringify({ name: childName, folder: {}, ...(isMemberFolder && marker ? { description: marker } : {}), '@microsoft.graph.conflictBehavior': 'fail' })
       });
       if (response.status === 201) folder = await response.json();
       else if (response.status === 409 && !isMemberFolder) folder = await read(relative);
@@ -50,6 +53,7 @@ export async function ensurePrivateMemberFolder({ ownerToken, expectedOwnerId, e
     }
     if (!folder || !validId(folder.id) || folder.name !== childName || !folder.folder || folder.file || folder.remoteItem ||
         folder.parentReference?.id !== parent || folder.parentReference?.driveId !== expectedDriveId) throw new Error('invalid-member-folder');
+    if (isMemberFolder && marker && !knownMemberFolderId && folder.description !== marker) throw new Error('folder-identity-unconfirmed');
     await privateOwnerFolder(folder.id, allowedMemberId);
     return folder.id;
   }

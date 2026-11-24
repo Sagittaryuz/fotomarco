@@ -51,3 +51,16 @@ test('reconciliation requires an authenticated caller and an empty request', asy
   assert.deepEqual(await response.json(), { state: 'verified', nextOffset: 10 });
   assert.equal(calls, 1);
 });
+
+test('owner folder provisioning refuses client supplied identities or folder paths', async () => {
+  let calls = 0;
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async () => ({ uid: 'owner' }), rateLimit: async () => true,
+    serviceForIdentity: identity => ({ provisionOwnerFolder: async (_, org) => {
+      assert.equal(identity.uid, 'owner'); assert.equal(org, 'org'); calls++; return { ready: true };
+    } }) });
+  const path = '/v1/organizations/org/storage/onedrive/provision-owner';
+  assert.equal((await handler(request(path, '{"folderId":"someone-elses"}'))).status, 400);
+  assert.equal((await handler(request(path, '{}'))).status, 200);
+  assert.equal(calls, 1);
+});

@@ -8,13 +8,14 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
     this.clock = clock;
     this.canCreateOrganization = canCreateOrganization;
     this.prepareOneDrive = prepareOneDrive;
+    this.prepareOwnerFolder = prepareOwnerFolder;
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMailDelivery = prepareMailDelivery;
     this.revokeMemberStorage = revokeMemberStorage;
@@ -214,6 +215,55 @@ export class BusinessService {
       }
       await tx.setOneDriveCredential(organizationId, record);
       return { connected: true };
+    });
+  }
+
+  async provisionOwnerFolder(token, organizationId) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof organizationId !== 'string' || !organizationId ||
+        typeof this.prepareOwnerFolder !== 'function') throw new Error('invalid-request');
+    const proposedMarker = this.newId();
+    if (typeof proposedMarker !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proposedMarker)) throw new Error('invalid-id');
+    const getContext = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      const storage = await tx.oneDriveCredential(organizationId);
+      if (!mayManage(identity, org, member) || member.role !== 'owner' || org.ownerId !== identity.uid) throw new Error('forbidden');
+      if (!storage?.providerAccountId || !storage?.driveId) throw new Error('storage-unavailable');
+      return { org, member, storage };
+    };
+    const context = await this.transaction(async tx => {
+      const current = await getContext(tx);
+      if (current.member.storageStatus === 'granted') return { ready: true };
+      if (!['not-started', 'provisioning'].includes(current.member.storageStatus)) throw new Error('storage-unavailable');
+      const marker = current.member.storageStatus === 'provisioning' ? current.member.oneDriveCreationMarker : proposedMarker;
+      if (typeof marker !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(marker)) throw new Error('invalid-storage-configuration');
+      const email = current.member.storageStatus === 'provisioning' ? current.member.oneDriveProvisionEmail : current.member.email;
+      const name = current.member.storageStatus === 'provisioning' ? current.member.oneDriveProvisionName :
+        (typeof current.member.displayName === 'string' && current.member.displayName.trim() ? current.member.displayName : email?.split('@')[0]);
+      if (typeof email !== 'string' || !email || typeof name !== 'string' || !name) throw new Error('invalid-storage-configuration');
+      if (current.member.storageStatus === 'not-started') await tx.setOwnerFolderProvisioning(organizationId, identity.uid, marker, name, email);
+      return { ...current, marker, name, email };
+    });
+    if (context.ready) return { ready: true };
+    const result = await this.prepareOwnerFolder({ organizationId, identity, ...context });
+    if (!result || typeof result.folderId !== 'string' || !result.folderId || typeof result.parentId !== 'string' || !result.parentId ||
+        result.memberIdentityId !== context.storage.providerAccountId || result.driveId !== context.storage.driveId ||
+        !result.ownerCredential || result.ownerCredential.version !== 1 || !result.ownerCredential.iv || !result.ownerCredential.ciphertext ||
+        result.ownerCredential.providerAccountId !== context.storage.providerAccountId || result.ownerCredential.driveId !== context.storage.driveId) throw new Error('invalid-storage-configuration');
+    return this.transaction(async tx => {
+      const current = await getContext(tx);
+      if (current.member.storageStatus === 'granted') {
+        if (current.member.oneDriveFolderId !== result.folderId || current.member.oneDriveParentId !== result.parentId ||
+            current.member.oneDriveMemberIdentityId !== result.memberIdentityId) throw new Error('storage-configuration-changed');
+        return { ready: true };
+      }
+      if (current.member.storageStatus !== 'provisioning' || current.member.oneDriveCreationMarker !== context.marker ||
+          current.member.oneDriveProvisionName !== context.name || current.member.oneDriveProvisionEmail !== context.email ||
+          current.storage.providerAccountId !== context.storage.providerAccountId || current.storage.driveId !== context.storage.driveId) throw new Error('storage-configuration-changed');
+      if (current.storage.ciphertext === context.storage.ciphertext && current.storage.iv === context.storage.iv) await tx.setOneDriveCredential(organizationId, result.ownerCredential);
+      await tx.setOwnerFolderReady(organizationId, identity.uid, result);
+      return { ready: true };
     });
   }
 

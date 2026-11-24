@@ -24,7 +24,7 @@ function fakeDrive({ sharedRoot = false } = {}) {
     if (children && request.method === 'POST') {
       const body = JSON.parse(request.body);
       assert.equal(body['@microsoft.graph.conflictBehavior'], 'fail');
-      const folder = { id: `folder-${++created}`, name: body.name, folder: {}, parentReference: { id: children[1], driveId: 'drive' } };
+      const folder = { id: `folder-${++created}`, name: body.name, folder: {}, ...(body.description ? { description: body.description } : {}), parentReference: { id: children[1], driveId: 'drive' } };
       folders.set(`${children[1]}:${body.name}`, folder);
       return response(201, folder);
     }
@@ -50,4 +50,14 @@ test('refuses to create folders under a shared parent or for an unsafe name', as
   await assert.rejects(ensurePrivateMemberFolder({ ...config, fetchImpl: drive.fetch }), /unsafe-parent-permissions/);
   assert.equal(drive.count(), 0);
   await assert.rejects(ensurePrivateMemberFolder({ ...config, memberName: '../X', fetchImpl: drive.fetch }), /invalid-member-name/);
+});
+
+test('recovers an interrupted folder creation only with the original persisted marker', async () => {
+  const drive = fakeDrive();
+  const marker = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const first = await ensurePrivateMemberFolder({ ...config, creationMarker: marker, fetchImpl: drive.fetch });
+  assert.deepEqual(await ensurePrivateMemberFolder({ ...config, creationMarker: marker, fetchImpl: drive.fetch }), first);
+  await assert.rejects(ensurePrivateMemberFolder({ ...config, creationMarker: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', fetchImpl: drive.fetch }), /folder-name-in-use/);
+  await assert.rejects(ensurePrivateMemberFolder({ ...config, creationMarker: 'untrusted-marker', fetchImpl: drive.fetch }), /invalid-storage-configuration/);
+  assert.equal(drive.count(), 3);
 });

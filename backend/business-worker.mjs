@@ -10,6 +10,7 @@ import { revokeOneDriveMemberFolder } from './business-onedrive-revoke.mjs';
 import { verifyOneDriveMemberFolder } from './business-onedrive-verify.mjs';
 import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusinessUpload, sendBusinessUploadChunk, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
 import { createUploadSessionVault } from './business-upload-session-vault.mjs';
+import { ensurePrivateMemberFolder } from './business-onedrive-folders.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -44,6 +45,25 @@ export function createBusinessWorker(env, overrides = {}) {
     const sealed = await vault.seal(organizationId, ownerId,
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'gmail');
     return { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email };
+  });
+  const prepareOwnerFolder = overrides.prepareOwnerFolder ?? (async ({ organizationId, org, storage, marker, name, email }) => {
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage);
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.driveId !== storage.driveId) throw new Error('provider-identity-mismatch');
+    const folder = await ensurePrivateMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, memberIdentityId: verified.providerAccountId, memberName: name, memberEmail: email,
+      creationMarker: marker, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    await verifyOneDriveMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, expectedParentId: folder.parentId, folderId: folder.folderId,
+      memberIdentityId: verified.providerAccountId, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const sealed = await vault.seal(organizationId, org.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    return { ...folder, memberIdentityId: verified.providerAccountId,
+      ownerCredential: { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
   });
   const prepareMailDelivery = overrides.prepareMailDelivery ?? (async ({ organizationId, organization, mail }) => {
     const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
@@ -168,7 +188,7 @@ export function createBusinessWorker(env, overrides = {}) {
     return { state: 'uploading', nextOffset, ownerCredential };
   });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
+    prepareOneDrive, prepareOwnerFolder, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),

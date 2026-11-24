@@ -8,6 +8,28 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 import { createBusinessWorker } from './business-worker.mjs';
 
+test('owner folder provisioning commits its recovery marker and verified binding', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
+  const projectId = 'demo-photomark-business', org = randomUUID();
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const identity = { uid: 'owner', email: 'owner@example.com', emailVerified: true };
+  const service = new BusinessService({ transaction, verifyToken: async token => token, newId: () => org, clock: () => 100,
+    canCreateOrganization: async () => true, prepareOwnerFolder: async ({ storage, marker, name, email }) => {
+      assert.match(marker, /^[0-9a-f-]{36}$/);
+      assert.equal(name, 'owner');
+      assert.equal(email, identity.email);
+      return { driveId: 'drive', folderId: 'folder', parentId: 'parent', memberIdentityId: 'graph-owner', ownerCredential: storage };
+    } });
+  await service.createOrganization(identity, 'Equipe', identity.email);
+  await transaction(tx => tx.setOneDriveCredential(org, { version: 1, iv: 'iv', ciphertext: 'cipher', providerAccountId: 'graph-owner', driveId: 'drive' }));
+  assert.deepEqual(await service.provisionOwnerFolder(identity, org), { ready: true });
+  const member = await transaction(tx => tx.membership(org, identity.uid));
+  assert.equal(member.storageStatus, 'granted');
+  assert.equal(member.oneDriveFolderId, 'folder');
+  assert.equal(member.oneDriveCreationMarker, org);
+  assert.equal(member.oneDriveProvisionEmail, identity.email);
+});
+
 test('isolated worker creates a verified owner organization with an emulator', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
   const projectId = 'demo-photomark-business';

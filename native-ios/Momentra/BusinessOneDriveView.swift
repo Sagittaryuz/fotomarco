@@ -7,6 +7,7 @@ struct BusinessOneDriveView: View {
     @State private var oauth = CloudArchiveOAuth()
     @State private var busy = false
     @State private var connected = false
+    @State private var folderReady = false
     @State private var message: String?
     @State private var pendingAccount: CloudArchiveOAuth.AuthorizedAccount?
     @State private var confirmAccount = false
@@ -22,8 +23,13 @@ struct BusinessOneDriveView: View {
                     FotomarcoHaptics.play(.buttons)
                     Task { await connect() }
                 }.disabled(busy)
+                Button("Preparar minha pasta") {
+                    FotomarcoHaptics.play(.buttons)
+                    Task { await prepareFolder() }
+                }.disabled(busy)
                 if busy { ProgressView("Confirmando a conta…") }
                 if connected { Label("Conta conectada", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+                if folderReady { Label("Pasta preparada", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
             }
         }
         .navigationTitle("Armazenamento")
@@ -65,11 +71,28 @@ struct BusinessOneDriveView: View {
             let result = try await api.connectOneDrive(organizationID: organizationID,
                 refreshToken: account.credential.refreshToken, token: token)
             connected = result.connected
-            if !connected { message = "Não foi possível confirmar a conexão." }
+            if connected {
+                let folder = try await api.provisionOwnerFolder(organizationID: organizationID, token: token)
+                folderReady = folder.ready
+                if !folderReady { message = "Conta conectada. Não foi possível confirmar a pasta." }
+            } else { message = "Não foi possível confirmar a conexão." }
         } catch BusinessAPIClient.Failure.storageAccountChangeRequiresMigration {
             message = "Esta organização já utiliza outra conta OneDrive. A troca exige uma migração para preservar as fotos."
         } catch {
-            message = "Não foi possível conectar a conta. Confira as permissões e tente novamente."
+            message = connected ? "Conta conectada. Não foi possível preparar a pasta; confira as permissões e tente novamente." : "Não foi possível conectar a conta. Confira as permissões e tente novamente."
+        }
+    }
+
+    @MainActor private func prepareFolder() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let token = try await BusinessIdentity.shared.verifiedToken()
+            folderReady = try await api.provisionOwnerFolder(organizationID: organizationID, token: token).ready
+            if !folderReady { message = "Não foi possível confirmar a pasta." }
+        } catch {
+            message = "Não foi possível preparar a pasta. Conecte o OneDrive e confira suas permissões."
         }
     }
 }
