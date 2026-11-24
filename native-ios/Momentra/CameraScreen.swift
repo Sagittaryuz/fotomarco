@@ -631,7 +631,7 @@ struct CameraScreen: View {
                                     Image(uiImage: capture.image).resizable().scaledToFill()
                                         .frame(width: 52, height: 52)
                                         .clipShape(RoundedRectangle(cornerRadius: 11))
-                                        .rotationEffect(.degrees(index == 0 ? 0 : (index == 1 ? -10 : 10)))
+                                        .rotationEffect(.degrees(index == 0 ? (sessionCaptureCount == 2 ? 7 : 0) : (index == 1 ? -10 : 10)))
                                         .offset(x: index == 0 ? 0 : (index == 1 ? -4 : 4), y: index == 0 ? 0 : -3)
                                 }
                                 if sessionCaptures.isEmpty {
