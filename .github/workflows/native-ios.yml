@@ -26,6 +26,8 @@ jobs:
           if [ -n "$FIREBASE_IOS_CONFIG" ]; then
             printf '%s' "$FIREBASE_IOS_CONFIG" > native-ios/Momentra/GoogleService-Info.plist
           fi
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Generate Xcode project
@@ -34,6 +36,14 @@ jobs:
       - name: Compile unsigned app for iPhone
         working-directory: native-ios
         run: xcodebuild -jobs 2 -project Fotomarco.xcodeproj -scheme Momentra -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/momentra-device" CODE_SIGNING_ALLOWED=NO build
+      - name: Preserve Xcode crash diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-device-crash-diagnostics
+          path: ~/Library/Logs/DiagnosticReports/*BuildService*
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Configure Google iOS sign-in
         if: inputs.signing_candidate || github.ref_name == 'feat/native-direct-updates' || (github.ref_name == 'feat/native-icons' || (github.ref_name == 'feat/native-camera-redesign' || (github.ref_name == 'feat/native-address-zoom' || github.ref_name == 'feat/native-one-tap-update')))
         env:
@@ -140,6 +150,8 @@ jobs:
           if [ -n "$FIREBASE_IOS_CONFIG" ]; then
             printf '%s' "$FIREBASE_IOS_CONFIG" > native-ios/Momentra/GoogleService-Info.plist
           fi
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Generate Xcode project
