@@ -16,3 +16,12 @@ jobs:
           test -n "$CF_TOKEN"
           curl --fail --silent --show-error -H "Authorization: Bearer $CF_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -e '.success == true and .result.status == "active"' > /dev/null
           echo 'Cloudflare token is active.'
+      - name: Check target account and existing Business Worker
+        env:
+          CF_TOKEN: ${{ secrets.PHOTOMARK_BUSINESS_WORKER_TOKEN }}
+        run: |
+          accounts=$(curl --fail --silent --show-error -H "Authorization: Bearer $CF_TOKEN" 'https://api.cloudflare.com/client/v4/accounts?per_page=50')
+          account_id=$(echo "$accounts" | jq -er 'select(.success == true) | .result | if length == 1 then .[0].id else error("Expected exactly one accessible account") end')
+          scripts=$(curl --fail --silent --show-error -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts?per_page=100")
+          echo "$scripts" | jq -e '.success == true and (.result | type == "array")' > /dev/null
+          echo "$scripts" | jq -r 'if any(.result[]; .id == "photomark-business") then "Business Worker already exists; inspect it before deployment." else "Business Worker is not present in this account." end'
