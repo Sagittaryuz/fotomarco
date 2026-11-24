@@ -4,6 +4,7 @@ import { googleServiceAccountToken } from './business-google-credential.mjs';
 import { createCredentialVault } from './business-credential-vault.mjs';
 import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
 import { invitationLanding } from './business-invitation-landing.mjs';
+import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -30,8 +31,17 @@ export function createBusinessWorker(env, overrides = {}) {
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
     return { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId };
   });
+  const prepareGoogleMail = overrides.prepareGoogleMail ?? (async ({ organizationId, ownerId, refreshToken }) => {
+    const exchange = googleBusinessMailCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(refreshToken);
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const sealed = await vault.seal(organizationId, ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'gmail');
+    return { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email };
+  });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive,
+    prepareOneDrive, prepareGoogleMail,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),

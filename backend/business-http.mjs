@@ -10,10 +10,11 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const settings = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/settings\/(read|update)$/.exec(new URL(request.url).pathname);
       const members = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/list$/.exec(new URL(request.url).pathname);
       const connectOneDrive = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/connect$/.exec(new URL(request.url).pathname);
+      const connectGoogleMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/gmail\/connect$/.exec(new URL(request.url).pathname);
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !connectGoogleMail) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -28,7 +29,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       try { allowed = await rateLimit(identity.uid); } catch { return reply(503, { error: 'unavailable' }); }
       if (allowed !== true) return reply(429, { error: 'rate-limited' });
       const size = request.headers.get('content-length');
-      const limit = asset?.[2] === 'upload' ? 360448 : profile?.[2] === 'publish' ? 98304 : connectOneDrive ? 20000 : 4096;
+      const limit = asset?.[2] === 'upload' ? 360448 : profile?.[2] === 'publish' ? 98304 : (connectOneDrive || connectGoogleMail) ? 20000 : 4096;
       if (!size || !/^\d{1,6}$/.test(size) || Number(size) > limit) return reply(413, { error: 'invalid-size' });
       if (!/^application\/json(?:\s*;|\s*$)/i.test(request.headers.get('content-type') ?? '')) return reply(415, { error: 'invalid-content-type' });
       if (!request.body) return reply(400, { error: 'invalid-body' });
@@ -51,6 +52,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply(400, { error: 'invalid-body' });
       const service = serviceForIdentity(identity);
       try {
+        if (connectGoogleMail) {
+          if (Object.keys(payload).length !== 1 || typeof payload.refreshToken !== 'string') return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.connectGoogleMail(null, connectGoogleMail[1], payload.refreshToken));
+        }
         if (connectOneDrive) {
           if (Object.keys(payload).length !== 1 || typeof payload.refreshToken !== 'string') return reply(400, { error: 'invalid-body' });
           return reply(200, await service.connectOneDrive(null, connectOneDrive[1], payload.refreshToken));
@@ -99,6 +104,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
         return reply(201, await service.invite(null, match[1], payload.email));
       } catch (error) {
         if (error?.message === 'storage-account-change-requires-migration') return reply(409, { error: 'storage-account-change-requires-migration' });
+        if (error?.message === 'mailbox-mismatch') return reply(422, { error: 'mailbox-mismatch' });
         if (['invalid-request', 'invalid-invitation', 'already-member', 'forbidden', 'forbidden-or-full', 'full', 'not-found'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
         return reply(503, { error: 'unavailable' });
       }

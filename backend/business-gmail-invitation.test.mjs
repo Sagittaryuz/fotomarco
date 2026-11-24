@@ -10,7 +10,7 @@ test('checks the sender mailbox and sends the intended invitation without exposi
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
-    if (url.endsWith('/profile')) return { status: 200, json: async () => ({ emailAddress: 'owner@example.com' }) };
+    if (url.endsWith('/userinfo')) return { status: 200, json: async () => ({ email: 'owner@example.com', email_verified: true }) };
     return { status: 200, json: async () => ({ id: 'message-id' }) };
   };
   const send = gmailInvitationSender({ invitationOrigin: 'https://business.example', fetchImpl });
@@ -27,7 +27,7 @@ test('checks the sender mailbox and sends the intended invitation without exposi
 test('refuses mismatched senders and header injection before sending', async () => {
   let sent = false;
   const send = gmailInvitationSender({ invitationOrigin: 'https://business.example', fetchImpl: async (url) => {
-    if (url.endsWith('/profile')) return { status: 200, json: async () => ({ emailAddress: 'other@example.com' }) };
+    if (url.endsWith('/userinfo')) return { status: 200, json: async () => ({ email: 'other@example.com', email_verified: true }) };
     sent = true;
     throw new Error('unexpected');
   } });

@@ -7,13 +7,14 @@ import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } fr
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleMail }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
     this.clock = clock;
     this.canCreateOrganization = canCreateOrganization;
     this.prepareOneDrive = prepareOneDrive;
+    this.prepareGoogleMail = prepareGoogleMail;
   }
 
   async createOrganization(token, name, contactEmail) {
@@ -139,6 +140,31 @@ export class BusinessService {
         throw new Error('storage-account-change-requires-migration');
       }
       await tx.setOneDriveCredential(organizationId, record);
+      return { connected: true };
+    });
+  }
+
+  async connectGoogleMail(token, organizationId, refreshToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
+        typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 16384 ||
+        typeof this.prepareGoogleMail !== 'function') throw new Error('invalid-request');
+    const readOwner = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member) || member.role !== 'owner') throw new Error('forbidden');
+      return org;
+    };
+    const org = await this.transaction(readOwner);
+    const record = await this.prepareGoogleMail({ organizationId, ownerId: identity.uid, refreshToken });
+    if (!record || record.version !== 1 || typeof record.iv !== 'string' || typeof record.ciphertext !== 'string' ||
+        typeof record.providerAccountId !== 'string' || typeof record.email !== 'string' ||
+        Object.keys(record).sort().join(',') !== 'ciphertext,email,iv,providerAccountId,version' ||
+        record.email !== org.contactEmail) throw new Error('mailbox-mismatch');
+    return this.transaction(async tx => {
+      const current = await readOwner(tx);
+      if (current.contactEmail !== record.email) throw new Error('mailbox-mismatch');
+      await tx.setGoogleMailCredential(organizationId, record);
       return { connected: true };
     });
   }

@@ -74,6 +74,9 @@ struct BusinessOrganizationsView: View {
                         NavigationLink("OneDrive da organização") {
                             BusinessOneDriveView(api: client, organizationID: org.id)
                         }
+                        NavigationLink("E-mail de convites") {
+                            BusinessOrganizationEmailView(api: client, organizationID: org.id)
+                        }
                     }
                 }
                 Text("O carimbo da equipe pode ser selecionado na câmera.").font(.footnote).foregroundStyle(.secondary)

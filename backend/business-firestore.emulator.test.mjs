@@ -88,7 +88,8 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   const authenticate = createFirebaseVerifier({ projectId, now: () => seconds * 1000, resolveKey: async () => keys.publicKey });
   const app = createBusinessApp({ projectId, authenticate, serverAccessToken: async () => 'owner', emulatorOrigin: origin,
     preAuthLimit: async () => true, rateLimit: async () => true, newId: () => 'invite', clock: () => 100,
-    prepareOneDrive: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'account', driveId: 'drive' }) });
+    prepareOneDrive: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'account', driveId: 'drive' }),
+    prepareGoogleMail: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted-mail', providerAccountId: 'google', email: 'org@example.com' }) });
   const token = async (uid, email) => new SignJWT({ auth_time: seconds - 1, email, email_verified: true })
     .setProtectedHeader({ alg: 'RS256', kid: 'key1' }).setIssuer(`https://securetoken.google.com/${projectId}`)
     .setAudience(projectId).setSubject(uid).setIssuedAt(seconds - 1).setExpirationTime(seconds + 60).sign(keys.privateKey);
@@ -131,6 +132,11 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   assert.equal(memberSettings.photoAssetId, 'invite');
   assert.equal(memberSettings.contactEmail, undefined);
   assert.equal((await app(req(`${settings}/update`, memberToken, { name: 'Alterado', contactEmail: 'x@example.com', photoAssetId: '' }))).status, 403);
+  const mailPath = `/v1/organizations/${org}/mail/gmail/connect`;
+  assert.equal((await app(req(mailPath, memberToken, { refreshToken: 'mail-private' }))).status, 403);
+  assert.equal((await app(req(mailPath, ownerToken, { refreshToken: 'mail-private' }))).status, 200);
+  const savedMail = await fetch(`${root}/organizations/${org}/private/gmail`, { headers: { authorization: 'Bearer owner' } });
+  assert.equal((await savedMail.json()).fields.ciphertext.stringValue, 'encrypted-mail');
   const profile = `/v1/organizations/${org}/profile`;
   const layoutJSON = '{"logoName":"business-asset:invite"}';
   assert.equal((await app(req(`${profile}/publish`, ownerToken, { layoutJSON }))).status, 201);

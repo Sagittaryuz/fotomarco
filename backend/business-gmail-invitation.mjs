@@ -13,10 +13,10 @@ export function gmailInvitationSender({ invitationOrigin, fetchImpl = fetch }) {
         !organizationName.trim() || organizationName.length > 160 || /[\x00-\x1f\x7f]/.test(organizationName) ||
         !uuid(organizationId) || !uuid(invitationId)) throw new Error('invalid-mail-request');
     const headers = { authorization: `Bearer ${accessToken}` };
-    const profile = await fetchImpl('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers, redirect: 'manual' });
+    const profile = await fetchImpl('https://openidconnect.googleapis.com/v1/userinfo', { headers, redirect: 'manual' });
     if (profile.status !== 200) throw new Error('mail-unavailable');
     const mailbox = await profile.json();
-    if (typeof mailbox.emailAddress !== 'string' || mailbox.emailAddress.toLowerCase() !== senderEmail.toLowerCase()) throw new Error('mailbox-mismatch');
+    if (mailbox.email_verified !== true || typeof mailbox.email !== 'string' || mailbox.email.toLowerCase() !== senderEmail.toLowerCase()) throw new Error('mailbox-mismatch');
     const link = new URL('/convite', origin);
     link.searchParams.set('organization', organizationId.toLowerCase());
     link.searchParams.set('invitation', invitationId.toLowerCase());

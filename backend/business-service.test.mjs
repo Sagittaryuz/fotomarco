@@ -9,6 +9,7 @@ function fixture() {
   let profile;
   let asset;
   let storedCredential;
+  let storedMail;
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
@@ -26,9 +27,10 @@ function fixture() {
     updateOrganization: async (_, updates) => { Object.assign(organization, updates); },
     setOneDriveCredential: async (_, value) => { storedCredential = value; },
     oneDriveCredential: async () => storedCredential,
+    setGoogleMailCredential: async (_, value) => { storedMail = value; },
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100 });
-  return { service, records, invites, storedCredential: () => storedCredential };
+  return { service, records, invites, storedCredential: () => storedCredential, storedMail: () => storedMail };
 }
 
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
@@ -38,6 +40,18 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('only the owner may connect the verified organization sender', async () => {
+  const { service, records, storedMail } = fixture();
+  service.prepareGoogleMail = async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'id', email: 'other@example.com' });
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  await assert.rejects(service.connectGoogleMail({ uid: 'member' }, 'org', 'secret'), /forbidden/);
+  await assert.rejects(service.connectGoogleMail({ uid: 'owner' }, 'org', 'secret'), /mailbox-mismatch/);
+  assert.equal(storedMail(), undefined);
+  service.prepareGoogleMail = async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'id', email: 'owner@example.com' });
+  assert.deepEqual(await service.connectGoogleMail({ uid: 'owner' }, 'org', 'secret'), { connected: true });
+  assert.equal(JSON.stringify(storedMail()).includes('secret'), false);
 });
 
 test('only the owner can connect a verified and encrypted OneDrive credential', async () => {

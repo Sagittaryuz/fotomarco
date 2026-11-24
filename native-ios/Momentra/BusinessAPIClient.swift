@@ -7,7 +7,7 @@ struct BusinessAPIClient {
               !raw.contains("$"), let url = URL(string: raw) else { return nil }
         return try? BusinessAPIClient(endpoint: url)
     }
-    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration }
+    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch }
     struct OrganizationReceipt: Decodable { let organizationId: String }
     struct InvitationReceipt: Decodable { let id: String; let expiresAt: Int64 }
     struct ProfileReceipt: Decodable { let organizationId: String; let versionId: String; let layoutJSON: String }
@@ -58,6 +58,12 @@ struct BusinessAPIClient {
     func connectOneDrive(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
         guard !refreshToken.isEmpty, refreshToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
         return try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "connect"],
+                              values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
+    }
+
+    func connectGoogleMail(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
+        guard !refreshToken.isEmpty, refreshToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "mail", "gmail", "connect"],
                               values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
     }
 
@@ -119,6 +125,7 @@ struct BusinessAPIClient {
         let (data, response) = try await transport(request)
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidResponse }
         if http.statusCode == 409 { throw Failure.storageAccountChangeRequiresMigration }
+        if http.statusCode == 422 { throw Failure.mailboxMismatch }
         if http.statusCode == 401 || http.statusCode == 403 { throw Failure.unauthorized }
         guard (200...299).contains(http.statusCode), data.count <= 400000 else { throw Failure.unavailable }
         do { return try JSONDecoder().decode(T.self, from: data) } catch { throw Failure.invalidResponse }

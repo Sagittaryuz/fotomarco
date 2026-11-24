@@ -14,6 +14,18 @@ final class CloudArchiveOAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testOrganizationMailUsesSendOnlyScopeWithoutChangingDriveScope() throws {
+        let info: [String: Any] = ["GIDClientID": "123-abc.apps.googleusercontent.com",
+            "CFBundleURLTypes": [["CFBundleURLSchemes": ["com.googleusercontent.apps.123-abc"]]]]
+        let personal = try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info)
+        let mail = try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info, forBusiness: true)
+        XCTAssertTrue(personal.includesStorageScope("https://www.googleapis.com/auth/drive.file"))
+        XCTAssertFalse(personal.includesStorageScope("https://www.googleapis.com/auth/gmail.send"))
+        XCTAssertTrue(mail.includesStorageScope("https://www.googleapis.com/auth/gmail.send"))
+        XCTAssertFalse(mail.includesStorageScope("https://www.googleapis.com/auth/drive.file"))
+    }
+
+    @MainActor
     func testMicrosoftRequiresRegisteredCallbackAndUsesAppFolder() throws {
         let clientID = "4befebdc-2a06-49a0-b14a-13de07c6ac08"
         XCTAssertThrowsError(try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: [

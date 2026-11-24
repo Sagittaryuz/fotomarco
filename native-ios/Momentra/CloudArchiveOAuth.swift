@@ -49,7 +49,6 @@ final class CloudArchiveOAuth {
             let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
             switch provider {
             case .googleDrive:
-                guard !forBusiness else { throw Failure.notConfigured }
                 guard let client = info["GIDClientID"] as? String,
                       client.range(of: #"^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$"#,
                                    options: .regularExpression) != nil else { throw Failure.notConfigured }
@@ -59,7 +58,7 @@ final class CloudArchiveOAuth {
                 authorizeURL = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
                 tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
                 identityURL = URL(string: "https://openidconnect.googleapis.com/v1/userinfo")!
-                requiredScope = "https://www.googleapis.com/auth/drive.file"
+                requiredScope = forBusiness ? "https://www.googleapis.com/auth/gmail.send" : "https://www.googleapis.com/auth/drive.file"
                 scopes = "openid email profile " + requiredScope
             case .oneDrive:
                 guard let client = info["MomentraMicrosoftClientID"] as? String,
