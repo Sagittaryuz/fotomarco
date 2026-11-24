@@ -1,0 +1,16 @@
+name: Inspect installer release configuration
+on:
+  push:
+    branches: [feat/business-organizations-foundation]
+    paths: [.github/workflows/inspect-installer-bindings.yml]
+permissions: {}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect release setting without exposing secrets
+        env:
+          CF_TOKEN: ${{ secrets.PHOTOMARK_BUSINESS_WORKER_TOKEN }}
+        run: |
+          curl -fsS -H "Authorization: Bearer $CF_TOKEN" 'https://api.cloudflare.com/client/v4/accounts/ceefd8797579fdd37486700792669302/workers/scripts/momentra-atualizacoes/settings' | node -e '
+          let s=""; process.stdin.on("data",x=>s+=x).on("end",()=>{const j=JSON.parse(s); if(!j.success) process.exit(1); for(const x of j.result.bindings||[]) if(x.name === "RELEASE") console.log(JSON.stringify({name:x.name,type:x.type,text:x.type === "plain_text" ? x.text : undefined}));});'
