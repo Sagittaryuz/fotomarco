@@ -28,6 +28,8 @@ struct OriginalsView: View {
     @State private var tab: Tab = .captures
     @State private var origin: GalleryOrigin?
     @State private var profile: UUID?
+    @State private var dateFilter: GalleryDateFilter?
+    @State private var showDateFilter = false
     @State private var columns = 3
     @State private var selecting = false
     @State private var selected: Set<GalleryItem.ID> = []
@@ -81,7 +83,7 @@ struct OriginalsView: View {
         let captures = tab == .favorites ? Self.decode(captureFavorites) : []
         let cloud = tab == .favorites ? Self.decode(cloudFavorites) : []
         let items = GalleryItem.grouped(source, origin: origin, profile: profile).filter {
-            tab != .favorites || $0.isFavorite(in: captures, cloud: cloud, device: deviceFavorites)
+            (tab != .favorites || $0.isFavorite(in: captures, cloud: cloud, device: deviceFavorites)) && (dateFilter?.includes($0.date) ?? true)
         }.sorted {
             if $0.date == $1.date { return $0.id < $1.id }
             return ($0.date ?? .distantPast) < ($1.date ?? .distantPast)
@@ -209,6 +211,8 @@ struct OriginalsView: View {
         }
         .onChange(of: origin) { _, _ in resetSelection(); openedAtNewest = true; scrollRequest += 1; updateProjection() }
         .onChange(of: profile) { _, _ in resetSelection(); openedAtNewest = true; scrollRequest += 1; updateProjection() }
+        .onChange(of: dateFilter) { _, _ in resetSelection(); openedAtNewest = true; scrollRequest += 1; updateProjection() }
+        .sheet(isPresented: $showDateFilter) { GalleryDateFilterView(filter: $dateFilter) }
         .onChange(of: captureFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .fullScreenCover(item: $detail) { item in
@@ -301,6 +305,10 @@ struct OriginalsView: View {
             ForEach(GalleryOrigin.allCases) { source in
                 Button { FotomarcoHaptics.play(.gallery); origin = source } label: { menuLabel(source.title, active: origin == source) }
             }
+            Button { FotomarcoHaptics.play(.gallery); showDateFilter = true } label: {
+                Label(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data", systemImage: "calendar")
+            }
+            if dateFilter != nil { Button("Limpar filtro de data") { dateFilter = nil } }
             if authorization == .notDetermined {
                 Button("Permitir acesso ao Fotos") {
                     FotomarcoHaptics.play(.gallery)
@@ -311,7 +319,7 @@ struct OriginalsView: View {
             }
         } label: {
             Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
-                .modifier(GalleryControlSurface(rounded: true, tint: origin == nil ? .primary : .yellow))
+                .modifier(GalleryControlSurface(rounded: true, tint: origin == nil && dateFilter == nil ? .primary : .yellow))
         }
         .accessibilityLabel("Filtrar por origem")
         .accessibilityValue(origin?.title ?? "Todos")

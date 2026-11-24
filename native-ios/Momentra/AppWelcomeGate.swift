@@ -18,6 +18,7 @@ enum ReleaseNews {
 struct AppWelcomeGate: View {
     @AppStorage("welcomeCompletedV1") private var completed = false
     @AppStorage("lastPresentedVersion") private var lastPresentedVersion = ""
+    @AppStorage("onboardingStartedV2") private var onboardingStarted = false
     @State private var page = 0
     @State private var showNews = false
     @State private var signingIn = false
@@ -29,9 +30,13 @@ struct AppWelcomeGate: View {
                 CameraScreen()
                     .sheet(isPresented: $showNews) { news }
             } else if page == 0 {
+                OnboardingIntroView { page = 1 }
+            } else if page == 1 {
+                OnboardingPermissionsView { page = 2 }
+            } else if page == 2 {
                 accountWelcome
             } else {
-                welcome
+                BusinessPlansView(onContinue: { lastPresentedVersion = currentVersion; completed = true })
             }
         }
         .onAppear { restoreExistingUser() }
@@ -43,7 +48,7 @@ struct AppWelcomeGate: View {
             identity.start()
             if registering { try await identity.register(email: email, password: password, fullName: name) }
             else { try await identity.signIn(email: email, password: password) }
-            page = 1
+            page = 3
         }, signInWithProvider: { provider in
             let identity = BusinessIdentity.shared
             identity.start()
@@ -55,61 +60,8 @@ struct AppWelcomeGate: View {
                 while let presented = controller.presentedViewController { controller = presented }
                 try await identity.signInGoogle(presenting: controller)
             }
-            page = 1
-        }, continueWithoutAccount: { page = 1 })
-    }
-
-    private var welcome: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 24) {
-                    Spacer(minLength: 35)
-                    Image(systemName: icon)
-                        .font(.system(size: 62, weight: .light))
-                        .foregroundStyle(.white)
-                        .frame(height: 100)
-                        .accessibilityHidden(true)
-                    Text(title).font(.largeTitle.bold()).multilineTextAlignment(.center)
-                    Text(description).font(.body).foregroundStyle(.white.opacity(0.75))
-                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                    if page == 0 {
-                        GoogleWelcomeButton(action: signIn)
-                            .frame(height: 48).disabled(signingIn)
-                        if signingIn { ProgressView().tint(.white) }
-                        if !NativeGoogleAuth.configured {
-                            Text("O login do Google ainda não está configurado nesta versão.")
-                                .font(.footnote).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
-                        }
-                        Button("Continuar por enquanto") { welcomeTap(); page = 1 }
-                            .foregroundStyle(.white.opacity(0.8))
-                    } else {
-                        Button {
-                            welcomeTap()
-                            if page == 3 { lastPresentedVersion = currentVersion; completed = true } else { page += 1 }
-                        } label: {
-                            Text(page == 3 ? "Começar a usar" : "Continuar")
-                                .font(.headline).foregroundStyle(.black)
-                                .frame(maxWidth: .infinity).padding(.vertical, 15)
-                                .background(.white, in: Capsule()).contentShape(Capsule())
-                        }.buttonStyle(.plain)
-                        Button("Voltar") { welcomeTap(); page -= 1 }.foregroundStyle(.white.opacity(0.8))
-                    }
-                    HStack(spacing: 8) {
-                        ForEach(0..<4) { index in
-                            Circle().fill(index == page ? Color.white : Color.white.opacity(0.25))
-                                .frame(width: 7, height: 7)
-                        }
-                    }.accessibilityLabel("Página \(page + 1) de 4")
-                    Spacer(minLength: 30)
-                }.padding(.horizontal, 28).frame(maxWidth: 500).frame(maxWidth: .infinity)
-            }
-        }
-        .foregroundStyle(.white)
-        .preferredColorScheme(.dark)
-        .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-            Button("OK") { message = nil }
-        } message: { Text(message ?? "") }
+            page = 3
+        }, continueWithoutAccount: { page = 3 })
     }
 
     private var currentVersion: String {
@@ -117,8 +69,8 @@ struct AppWelcomeGate: View {
     }
 
     private func restoreExistingUser() {
-        let existing = completed || AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-        guard existing else { return }
+        let existing = completed || (!onboardingStarted && AVCaptureDevice.authorizationStatus(for: .video) == .authorized)
+        guard existing else { onboardingStarted = true; return }
         let version = currentVersion
         let updated = !version.isEmpty && lastPresentedVersion != version
         completed = true
@@ -150,39 +102,10 @@ struct AppWelcomeGate: View {
         }.presentationDetents([.medium, .large])
     }
 
-    private var icon: String { ["person.crop.circle", "camera.aperture", "location.viewfinder", "photo.on.rectangle.angled"][page] }
-    private var title: String { ["Bem-vindo ao Photomark", "Registre seus momentos", "Localização no carimbo", "Suas fotos, do seu jeito"][page] }
-    private var description: String {
-        ["Entre com sua conta Google se desejar. Escolha nas configurações onde guardar as novas capturas e ative cada destino que quiser usar.",
-         "Use a câmera para fotografar e gravar. O iPhone pedirá acesso à câmera; o microfone será solicitado ao gravar vídeos.",
-         "Ao ativar o GPS, permita a localização para incluir os dados disponíveis no carimbo. Você pode alterar essa escolha nos ajustes.",
-         "O acesso ao Fotos permite escolher e salvar imagens. Você decide quais permissões conceder e pode alterá-las nos Ajustes do iPhone."][page]
-    }
-
     private func welcomeTap() {
         FotomarcoHaptics.play(.buttons)
     }
 
-    private func signIn() {
-        welcomeTap()
-        guard NativeGoogleAuth.configured else {
-            message = "O login Google ainda precisa ser configurado para este aplicativo."; return
-        }
-        guard !signingIn,
-              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
-              var controller = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
-            message = "Não foi possível abrir o login. Tente novamente."; return
-        }
-        while let presented = controller.presentedViewController { controller = presented }
-        signingIn = true
-        GIDSignIn.sharedInstance.signIn(withPresenting: controller) { result, error in
-            Task { @MainActor in
-                signingIn = false
-                if error == nil, result?.user.userID != nil { page = 1 }
-                else { message = "Não foi possível entrar com o Google. Você pode tentar novamente." }
-            }
-        }
-    }
 }
 
 struct GoogleWelcomeButton: UIViewRepresentable {

@@ -54,9 +54,8 @@ struct BusinessSignInView: View {
                         FotomarcoHaptics.play(.buttons); password = ""; registering.toggle()
                     }.disabled(busy)
                     Text("ou").foregroundStyle(.secondary)
-                    Button { performProvider(.google) } label: {
-                        Text("Continuar com Google").frame(maxWidth: .infinity).padding(14)
-                    }.buttonStyle(.plain).modifier(GalleryControlSurface(rounded: true)).disabled(busy)
+                    GoogleWelcomeButton { performProvider(.google) }
+                        .frame(height: 50).disabled(busy)
                     Button { performProvider(.microsoft) } label: {
                         Text("Continuar com Microsoft").frame(maxWidth: .infinity).padding(14)
                     }.buttonStyle(.plain).modifier(GalleryControlSurface(rounded: true)).disabled(busy)
