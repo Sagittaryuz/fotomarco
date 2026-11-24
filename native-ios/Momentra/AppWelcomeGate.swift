@@ -39,7 +39,18 @@ struct AppWelcomeGate: View {
                 BusinessPlansView(onContinue: { lastPresentedVersion = currentVersion; completed = true })
             }
         }
-        .onAppear { restoreExistingUser() }
+        .onAppear {
+            #if DEBUG
+            let args = ProcessInfo.processInfo.arguments
+            if let index = args.firstIndex(of: "--onboarding-preview"), args.indices.contains(index + 1),
+               let previewPage = Int(args[index + 1]), (0...3).contains(previewPage) {
+                completed = false
+                page = previewPage
+                return
+            }
+            #endif
+            restoreExistingUser()
+        }
     }
 
     private var accountWelcome: some View {

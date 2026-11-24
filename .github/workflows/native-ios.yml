@@ -179,6 +179,26 @@ jobs:
           path: ${{ runner.temp }}/Momentra-stamp-previews/
           if-no-files-found: warn
           retention-days: 3
+      - name: Capture onboarding screens on the simulator
+        if: success()
+        run: |
+          APP="$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app"
+          xcrun simctl bootstatus "$MOMENTRA_SIM_ID" -b
+          xcrun simctl install "$MOMENTRA_SIM_ID" "$APP"
+          mkdir -p "$RUNNER_TEMP/Momentra-onboarding-previews"
+          for page in 0 1 2 3; do
+            xcrun simctl terminate "$MOMENTRA_SIM_ID" br.com.momentra.camera || true
+            xcrun simctl launch "$MOMENTRA_SIM_ID" br.com.momentra.camera --onboarding-preview "$page"
+            sleep 3
+            xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-onboarding-previews/onboarding-$page.png"
+          done
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: momentra-onboarding-simulator
+          path: ${{ runner.temp }}/Momentra-onboarding-previews/*.png
+          if-no-files-found: error
+          retention-days: 3
       - name: Capture camera layout on the simulator
         if: inputs.signing_candidate
         run: |
