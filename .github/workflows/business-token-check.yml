@@ -44,3 +44,8 @@ jobs:
           if (![200,404].includes(check.status)) throw Error(`Firestore check failed: HTTP ${check.status}`);
           console.log('Isolated service identity can access Firestore.');
           NODE
+      - name: Check staging access control
+        run: |
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' -X POST https://photomark-business-staging.mrpires72.workers.dev/v1/organizations/mine)
+          echo "Staging anonymous request HTTP $status"
+          test "$status" = 401
