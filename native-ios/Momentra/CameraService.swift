@@ -30,6 +30,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         let profile: CaptureProfileTag?
         let archivePlan: CloudDeliveryPlan?
         let businessTarget: BusinessCaptureTarget?
+        let sessionID: UUID?
     }
 
     private struct StagedPhoto {
@@ -59,6 +60,10 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     struct CapturePreview {
         let image: UIImage
         let file: URL
+        let sessionID: UUID?
+        init(image: UIImage, file: URL, sessionID: UUID? = nil) {
+            self.image = image; self.file = file; self.sessionID = sessionID
+        }
     }
 
     let completedPhoto = PassthroughSubject<CapturePreview, Never>()
@@ -166,7 +171,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         return true
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil, businessTarget: BusinessCaptureTarget? = nil) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil, businessTarget: BusinessCaptureTarget? = nil, sessionID: UUID? = nil) {
         guard canStartPhoto() else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -184,7 +189,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             settings.photoQualityPrioritization = .speed
             self.pendingPhoto = PhotoRequest(settingsID: settings.uniqueID, id: UUID(), capturedAt: capturedAt,
                                              snapshot: snapshot, aspect: aspect, style: style, saveToPhotos: saveToPhotos,
-                                             profile: profile, archivePlan: archivePlan, businessTarget: businessTarget)
+                                             profile: profile, archivePlan: archivePlan, businessTarget: businessTarget, sessionID: sessionID)
             self.applyCaptureRotation(to: connection)
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
@@ -619,7 +624,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                kCGImageSourceCreateThumbnailWithTransform: true,
                kCGImageSourceThumbnailMaxPixelSize: 1200
            ] as CFDictionary) {
-            let capture = CapturePreview(image: UIImage(cgImage: preview), file: processed)
+            let capture = CapturePreview(image: UIImage(cgImage: preview), file: processed, sessionID: request.sessionID)
             DispatchQueue.main.async { self.completedPhoto.send(capture) }
         }
         if archiveReady || businessReady {

@@ -90,6 +90,7 @@ private struct StampOrientationContainer<Content: View>: View {
 struct CameraScreen: View {
     private enum CaptureMode: String, CaseIterable { case photo = "FOTO", video = "VÍDEO" }
     @StateObject private var camera = CameraService()
+    @StateObject private var sessionClipboard = SessionClipboardCoordinator()
     @StateObject private var stampMotion = StampMotionOrientation()
     @StateObject private var location = LocationService()
     @StateObject private var addressPreview = AddressPreviewService()
@@ -169,6 +170,8 @@ struct CameraScreen: View {
     @State private var sessionCaptures: [CameraService.CapturePreview] = []
     @State private var sessionCaptureCount = 0
     @State private var sessionCaptureFiles: [URL] = []
+    @State private var captureSessionID = UUID()
+    @State private var sessionStartedCount = 0
     @State private var cameraShareTask: Task<Void, Never>?
     @State private var cameraShare: GalleryShareBatch?
     @State private var cameraShareFailed = false
@@ -783,6 +786,9 @@ struct CameraScreen: View {
             } else {
                 if phase == .background {
                     didEnterBackground = true
+                    sessionClipboard.close(sessionID: captureSessionID, files: sessionCaptureFiles, expectedCount: sessionStartedCount, workPending: { camera.isCapturing || camera.processingPhotos > 0 }, copy: copyCameraThumbnail)
+                    captureSessionID = UUID()
+                    sessionStartedCount = 0
                     sessionCaptureCount = 0
                     sessionCaptures.removeAll()
                     sessionCaptureFiles.removeAll()
@@ -925,6 +931,9 @@ struct CameraScreen: View {
         } message: {
             Text("O carimbo da organização é definido pelo administrador.")
         }
+        .alert("Cópia das capturas", isPresented: Binding(get: { sessionClipboard.failure != nil }, set: { if !$0 { sessionClipboard.failure = nil } })) {
+            Button("OK", role: .cancel) { sessionClipboard.failure = nil }
+        } message: { Text(sessionClipboard.failure ?? "") }
         .alert("Captura da equipe", isPresented: Binding(get: { businessCaptureNotice != nil }, set: { if !$0 { businessCaptureNotice = nil } })) {
             Button("OK", role: .cancel) { businessCaptureNotice = nil }
         } message: { Text(businessCaptureNotice ?? "") }
@@ -1357,6 +1366,7 @@ struct CameraScreen: View {
     }
 
     private func capturePhoto() {
+        guard !camera.isCapturing else { return }
         let isBusiness = stampProfiles.isOrganizationSelected
         let target: BusinessCaptureTarget?
         if isBusiness {
@@ -1371,7 +1381,8 @@ struct CameraScreen: View {
                        saveToPhotos: effectiveLocalStorage,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
                        profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
-                       archivePlan: isBusiness ? nil : currentArchivePlan, businessTarget: target)
+                       archivePlan: isBusiness ? nil : currentArchivePlan, businessTarget: target, sessionID: captureSessionID)
+        if camera.isCapturing { sessionStartedCount += 1 }
     }
 
     private var archiveDestinations: [CloudDeliveryPlan.Destination] {
@@ -1467,7 +1478,8 @@ struct CameraScreen: View {
 
     private func showCapturedPhoto(_ capture: CameraService.CapturePreview) {
         finishPhotoFlight()
-        if scenePhase == .active {
+        sessionClipboard.record(capture.file, sessionID: capture.sessionID)
+        if scenePhase == .active && capture.sessionID == captureSessionID {
             sessionCaptureFiles.append(capture.file)
             sessionCaptureCount = sessionCaptureFiles.count
             let thumbnail = capture.image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? capture.image
