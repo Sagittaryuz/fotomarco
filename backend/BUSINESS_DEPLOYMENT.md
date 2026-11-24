@@ -17,3 +17,9 @@ Before enabling the app endpoint, confirm anonymous requests fail closed, use a 
 ## Local validation (24 Nov 2026)
 
 The current business service passed the Firestore emulator suite (9 tests, no skips), including owner bootstrap idempotency, membership isolation, invitation acceptance, folder binding and capture reservation. The separate client security-rules emulator test denies anonymous and signed-in reads, writes and deletes. These tests use synthetic users and fake provider responses; they do not verify real Microsoft sharing, email delivery, deployment, or device behavior.
+
+## Initial organization storage
+
+The initial organization is named JMD Hamoa, but its initial storage is the owner's personal OneDrive account associated with `mrpires72@gmail.com`. The organization name must not be interpreted as a request to connect a JMD corporate Microsoft tenant. The storage account still needs to be connected and verified using the actual Microsoft identity and drive ID; the email alone does not prove ownership or access.
+
+A later change to another OneDrive account requires an explicit, separately verified migration. Preserve the originals and access to the existing drive until every copy and its ownership, metadata, integrity, member access, and gallery references have been checked. Do not switch the active drive or delete original photos merely because a new account has been connected. The current implementation intentionally rejects switching to a different account or drive; a migration workflow has not yet been implemented or validated.
