@@ -5,6 +5,16 @@ struct PhotoAspectPanel: View {
     let close: () -> Void
 
     var body: some View {
+        Group {
+            if #available(iOS 26, *) {
+                GlassEffectContainer(spacing: 4) { panel }
+            } else {
+                panel
+            }
+        }
+    }
+
+    private var panel: some View {
         VStack(spacing: 16) {
             ZStack {
                 Text("PROPORÇÃO").font(.subheadline.weight(.medium)).tracking(1.2)
@@ -42,8 +52,19 @@ struct PhotoAspectPanel: View {
             }
         }
         .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 24)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .modifier(AspectPanelSurface())
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 8).padding(.bottom, 6)
+    }
+}
+
+private struct AspectPanelSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 32, style: .continuous)
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content.background(.ultraThinMaterial, in: shape)
+        }
     }
 }

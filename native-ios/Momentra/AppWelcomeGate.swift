@@ -7,7 +7,8 @@ enum ReleaseNews {
     static let items = [
         "Acesse o calendário ao lado de Selecionar na galeria.",
         "Melhorias na conexão do OneDrive da organização.",
-        "Veja as capturas recentes da sessão empilhadas na câmera."
+        "Veja e compartilhe as capturas da sessão pela miniatura da câmera.",
+        "O seletor de proporção agora usa uma superfície translúcida."
     ]
 
     static func items(for version: String) -> [String] {

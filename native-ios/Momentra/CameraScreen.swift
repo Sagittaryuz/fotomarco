@@ -168,6 +168,7 @@ struct CameraScreen: View {
     @State private var galleryThumbnail: CameraService.CapturePreview?
     @State private var sessionCaptures: [CameraService.CapturePreview] = []
     @State private var sessionCaptureCount = 0
+    @State private var sessionCaptureFiles: [URL] = []
     @State private var cameraShareTask: Task<Void, Never>?
     @State private var cameraShare: GalleryShareBatch?
     @State private var cameraShareFailed = false
@@ -667,7 +668,7 @@ struct CameraScreen: View {
                         .accessibilityValue(sessionCaptureCount > 0 ? "\(sessionCaptureCount) capturas nesta sessão" : "")
                         .accessibilityActions {
                             if galleryThumbnail != nil {
-                                Button("Compartilhar foto exibida", action: shareCameraThumbnail)
+                                Button(sessionCaptureCount > 0 ? "Compartilhar capturas da sessão" : "Compartilhar foto exibida", action: shareCameraThumbnail)
                             }
                         }
                         Spacer(minLength: 0)
@@ -780,7 +781,12 @@ struct CameraScreen: View {
                 }
                 camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures()
             } else {
-                if phase == .background { didEnterBackground = true }
+                if phase == .background {
+                    didEnterBackground = true
+                    sessionCaptureCount = 0
+                    sessionCaptures.removeAll()
+                    sessionCaptureFiles.removeAll()
+                }
                 finishPhotoFlight(); dismissZoomDial(); CloudBackgroundScheduler.scheduleIfNeeded(); cancelCountdown(); camera.stop(); location.setEnabled(false); pressure.setEnabled(false); weather.cancel(); addressPreview.clear()
             }
         }
@@ -988,11 +994,12 @@ struct CameraScreen: View {
     private func shareCameraThumbnail() {
         guard let thumbnail = galleryThumbnail, cameraSurfaceVisible, cameraShareTask == nil, cameraShare == nil,
               !camera.isRecording, !camera.isFinishingRecording, !camera.isCapturing, countdown == 0 else { return }
+        let files = sessionCaptureFiles.isEmpty ? [thumbnail.file] : sessionCaptureFiles
         FotomarcoHaptics.play(.quickShare)
         cameraShareTask = Task {
             defer { cameraShareTask = nil }
             do {
-                let batch = try await GalleryShareBatch.prepare([thumbnail.file], copy: copyCameraThumbnail)
+                let batch = try await GalleryShareBatch.prepare(files, copy: copyCameraThumbnail)
                 try Task.checkCancellation()
                 cameraShare = batch
             } catch {
@@ -1460,10 +1467,13 @@ struct CameraScreen: View {
 
     private func showCapturedPhoto(_ capture: CameraService.CapturePreview) {
         finishPhotoFlight()
-        sessionCaptureCount += 1
-        let thumbnail = capture.image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? capture.image
-        sessionCaptures.insert(.init(image: thumbnail, file: capture.file), at: 0)
-        if sessionCaptures.count > 3 { sessionCaptures.removeLast() }
+        if scenePhase == .active {
+            sessionCaptureFiles.append(capture.file)
+            sessionCaptureCount = sessionCaptureFiles.count
+            let thumbnail = capture.image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? capture.image
+            sessionCaptures.insert(.init(image: thumbnail, file: capture.file), at: 0)
+            if sessionCaptures.count > 3 { sessionCaptures.removeLast() }
+        }
         galleryThumbnailRevision = UUID()
         guard scenePhase == .active, mode == .photo, !showSettings, !showOriginals, !showAspectPanel,
               !reduceMotion, !galleryThumbnailFrame.isEmpty else {
