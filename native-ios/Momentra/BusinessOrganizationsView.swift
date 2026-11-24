@@ -27,6 +27,7 @@ struct BusinessOrganizationsView: View {
                         }
                     }
                     Section("Organizações") {
+                        NavigationLink("Conhecer os planos") { BusinessPlansView() }
                         if client == nil {
                             Text("O serviço de organizações ainda não está configurado.").font(.footnote).foregroundStyle(.secondary)
                         } else {
