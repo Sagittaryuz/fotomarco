@@ -45,6 +45,21 @@ test('reconciles a lost final response only after the provider verifies the file
   await assert.rejects(service.reconcileCapture(user, orgId, captureId, 'stamped'), /forbidden/);
 });
 
+test('does not restart an uncertain upload before the provider session grace period', async () => {
+  const { service, captures } = fixture();
+  const user = { uid: 'member', emailVerified: true };
+  await service.reserveCapture(user, orgId, captureId, name, 1, sha);
+  service.prepareUpload = async ({ storage }) => ({ session: { version: 1, iv: 'iv', ciphertext: 'secret' }, expiresAt: 1000, ownerCredential: storage });
+  await service.startCaptureUpload(user, orgId, captureId, 'stamped');
+  service.reconcileUpload = async ({ storage }) => ({ state: 'restart', ownerCredential: storage });
+  await assert.rejects(service.reconcileCapture(user, orgId, captureId, 'stamped'), /upload-result-uncertain/);
+  const capture = captures.get(`${captureId}-stamped`);
+  assert.equal(capture.state, 'uploading');
+  service.clock = () => 700000;
+  assert.deepEqual(await service.reconcileCapture(user, orgId, captureId, 'stamped'), { state: 'reserved', nextOffset: 0 });
+  assert.equal(capture.state, 'reserved');
+});
+
 test('reserves original and stamped files separately and idempotently for their author', async () => {
   const { service, captures } = fixture();
   const user = { uid: 'member', emailVerified: true };
