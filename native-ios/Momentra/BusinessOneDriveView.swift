@@ -80,6 +80,10 @@ struct BusinessOneDriveView: View {
             } else { message = "Não foi possível confirmar a conexão." }
         } catch BusinessAPIClient.Failure.storageAccountChangeRequiresMigration {
             message = "Esta organização já utiliza outra conta OneDrive. A troca exige uma migração para preservar as fotos."
+        } catch BusinessAPIClient.Failure.unauthorized {
+            message = "A sessão ou a permissão da organização não foi confirmada. Entre novamente e tente conectar o OneDrive."
+        } catch BusinessAPIClient.Failure.unavailable {
+            message = "Não foi possível confirmar o OneDrive no servidor. Confira a conexão e tente novamente."
         } catch {
             message = connected ? "Conta conectada. Não foi possível preparar a pasta; confira as permissões e tente novamente." : "Não foi possível conectar a conta. Confira as permissões e tente novamente."
         }
