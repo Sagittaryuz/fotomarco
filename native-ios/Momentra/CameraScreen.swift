@@ -113,6 +113,7 @@ struct CameraScreen: View {
     @AppStorage("native.archive.keepLocal") private var keepArchiveLocal = true
     @AppStorage("native.archive.keepOriginal") private var keepArchiveOriginal = true
     @State private var archiveStatus = CloudArchiveDelivery.Summary()
+    @State private var businessArchiveStatus = BusinessArchiveDelivery.Summary()
     @State private var archiveNotice: String?
     @State private var archiveConnectionError: String?
     @State private var connectingArchive = false
@@ -145,6 +146,7 @@ struct CameraScreen: View {
     @State private var showSettings = false
     @State private var stampEditorSection: StampLayoutEditor.Element?
     @State private var showOrganizationReadOnly = false
+    @State private var businessCaptureNotice: String?
     @State private var showUpdateMessage = false
     @State private var showSupportPanel = false
     @State private var showOriginals = false
@@ -875,6 +877,9 @@ struct CameraScreen: View {
         } message: {
             Text("O carimbo da organização é definido pelo administrador.")
         }
+        .alert("Captura da equipe", isPresented: Binding(get: { businessCaptureNotice != nil }, set: { if !$0 { businessCaptureNotice = nil } })) {
+            Button("OK", role: .cancel) { businessCaptureNotice = nil }
+        } message: { Text(businessCaptureNotice ?? "") }
         .alert("Atualização do Photomark", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -1052,10 +1057,10 @@ struct CameraScreen: View {
                 .disabled(pendingArchivePolicy != nil)
             Text("A escolha vale para as próximas fotos e seus destinos. Com o envio pendente, a foto fica no iPhone para ser enviada quando houver conexão.")
                 .font(.footnote).foregroundStyle(.secondary)
-            if archiveStatus.pending > 0 {
-                Text("\(archiveStatus.pending) captura(s) aguardando envio").font(.footnote)
+            if archiveStatus.pending + businessArchiveStatus.pending > 0 {
+                Text("\(archiveStatus.pending + businessArchiveStatus.pending) captura(s) aguardando envio").font(.footnote)
             }
-            if archiveStatus.needsAttention {
+            if archiveStatus.needsAttention || businessArchiveStatus.needsAttention {
                 Text("Há envios que precisam de atenção. Confira as contas, a conexão e o espaço disponível. Os arquivos pendentes ficam no iPhone.")
                     .font(.footnote).foregroundStyle(.orange)
             }
@@ -1292,18 +1297,32 @@ struct CameraScreen: View {
     }
 
     private func startVideoRecording() {
+        guard !stampProfiles.isOrganizationSelected else {
+            quickRecording = false; quickReleasePending = false; quickRecordingLocked = false
+            businessCaptureNotice = "O envio de vídeos da equipe ainda não está disponível. Escolha um perfil pessoal para gravar."
+            return
+        }
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
         let profile = CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name)
         camera.startRecording(saveToPhotos: effectiveLocalStorage, snapshot: snapshot, profile: profile)
     }
 
     private func capturePhoto() {
+        let isBusiness = stampProfiles.isOrganizationSelected
+        let target: BusinessCaptureTarget?
+        if isBusiness {
+            guard let userID = businessIdentity.userID, businessIdentity.emailVerified else {
+                businessCaptureNotice = "Entre novamente na sua conta para capturar pela organização."
+                return
+            }
+            target = BusinessCaptureTarget(organizationID: stampProfiles.selectedID, userID: userID, keepsOriginal: keepArchiveOriginal)
+        } else { target = nil }
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard,
                        saveToPhotos: effectiveLocalStorage,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
                        profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
-                       archivePlan: currentArchivePlan)
+                       archivePlan: isBusiness ? nil : currentArchivePlan, businessTarget: target)
     }
 
     private var archiveDestinations: [CloudDeliveryPlan.Destination] {
@@ -1372,7 +1391,11 @@ struct CameraScreen: View {
         lastCloudAttempt = Date()
         guard scenePhase == .active else { return }
         Task {
-            if let status = await CloudArchiveDelivery.shared.drain() { archiveStatus = status }
+            async let personal = CloudArchiveDelivery.shared.drain()
+            async let business = BusinessArchiveDelivery.shared.drain()
+            let (personalStatus, businessStatus) = await (personal, business)
+            if let personalStatus { archiveStatus = personalStatus }
+            if let businessStatus { businessArchiveStatus = businessStatus }
         }
     }
 

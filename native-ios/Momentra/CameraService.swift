@@ -29,6 +29,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         let saveToPhotos: Bool
         let profile: CaptureProfileTag?
         let archivePlan: CloudDeliveryPlan?
+        let businessTarget: BusinessCaptureTarget?
     }
 
     private struct StagedPhoto {
@@ -36,6 +37,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         let original: URL
         let root: URL
         let archiveQueued: Bool
+        let businessQueued: Bool
     }
 
     private var pendingPhoto: PhotoRequest?
@@ -164,7 +166,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         return true
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil, businessTarget: BusinessCaptureTarget? = nil) {
         guard canStartPhoto() else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -182,7 +184,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             settings.photoQualityPrioritization = .speed
             self.pendingPhoto = PhotoRequest(settingsID: settings.uniqueID, id: UUID(), capturedAt: capturedAt,
                                              snapshot: snapshot, aspect: aspect, style: style, saveToPhotos: saveToPhotos,
-                                             profile: profile, archivePlan: archivePlan)
+                                             profile: profile, archivePlan: archivePlan, businessTarget: businessTarget)
             self.applyCaptureRotation(to: connection)
             if self.input?.device.hasFlash == true,
                self.photoOutput.supportedFlashModes.contains(selectedFlash) {
@@ -516,6 +518,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
         DispatchQueue.main.async { self.capturedPhoto.send(()) }
         var archiveQueued = false
+        var businessQueued = false
         if let plan = request.archivePlan, !plan.deliveries.isEmpty {
             do {
                 try CloudArchiveJournal(root: base).enqueue(id: request.id, date: request.capturedAt,
@@ -525,11 +528,20 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 report("Não foi possível registrar o envio. A captura será mantida no iPhone. Confira o espaço disponível.")
             }
         }
+        if let target = request.businessTarget, let profile = request.profile {
+            do {
+                try BusinessArchiveJournal(root: base).enqueue(id: request.id, date: request.capturedAt,
+                    originalExtension: suffix, source: original, target: target, profile: profile)
+                businessQueued = true
+            } catch {
+                report("Não foi possível registrar o envio da equipe. A foto será mantida no iPhone.")
+            }
+        }
         if let profile = request.profile {
             do { try PhotoProfileIndex.register(captureID: request.id, profile: profile, captureDate: request.capturedAt, location: request.snapshot?.location) }
             catch { report("A foto foi salva, mas não foi possível associá-la ao perfil.") }
         }
-        let staged = StagedPhoto(request: request, original: original, root: base, archiveQueued: archiveQueued)
+        let staged = StagedPhoto(request: request, original: original, root: base, archiveQueued: archiveQueued, businessQueued: businessQueued)
         photoRenderQueue.async {
             self.stagedPhotos.append(staged)
             self.renderNextPhoto()
@@ -585,6 +597,13 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 archiveReady = true
             } catch { report("O envio ainda não foi preparado. As cópias locais foram preservadas.") }
         }
+        var businessReady = false
+        if staged.businessQueued {
+            do {
+                try BusinessArchiveJournal(root: staged.root).markReady(id: request.id, stampedSource: processed)
+                businessReady = true
+            } catch { report("O envio da equipe ainda não foi preparado. As cópias locais foram preservadas.") }
+        }
         if let plan = request.archivePlan, !plan.keepsOriginal, plan.deliveries.isEmpty || archiveReady {
             do {
                 try CloudArchiveJournal(root: staged.root).serializeCleanup {
@@ -603,7 +622,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let capture = CapturePreview(image: UIImage(cgImage: preview), file: processed)
             DispatchQueue.main.async { self.completedPhoto.send(capture) }
         }
-        if archiveReady {
+        if archiveReady || businessReady {
             CloudBackgroundScheduler.scheduleIfNeeded()
             NotificationCenter.default.post(name: .momentraCloudCaptureStaged, object: nil)
         }

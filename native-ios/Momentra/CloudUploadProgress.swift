@@ -5,8 +5,21 @@ final class CloudUploadProgress: ObservableObject {
     static let shared = CloudUploadProgress()
     @Published private(set) var values: [UUID: Double] = [:]
     private var active = Set<UUID>()
+    private var pendingPersonal = Set<UUID>()
+    private var pendingBusiness = Set<UUID>()
 
     func preparePending(_ ids: Set<UUID>) {
+        pendingPersonal = ids
+        reconcilePending()
+    }
+
+    func prepareBusinessPending(_ ids: Set<UUID>) {
+        pendingBusiness = ids
+        reconcilePending()
+    }
+
+    private func reconcilePending() {
+        let ids = pendingPersonal.union(pendingBusiness)
         for id in ids where values[id] == nil { values[id] = 0 }
         for id in Array(values.keys) where !ids.contains(id) && !active.contains(id) && values[id] != 1 {
             values.removeValue(forKey: id)

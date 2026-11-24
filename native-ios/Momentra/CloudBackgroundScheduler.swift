@@ -25,7 +25,8 @@ enum CloudBackgroundScheduler {
                 if #available(iOS 18.0, *) { await LockedCaptureImporter.importExisting() }
                 guard !Task.isCancelled else { completion.finish(false); return }
                 let summary = await CloudArchiveDelivery.shared.drain()
-                completion.finish(!Task.isCancelled && summary?.needsAttention == false)
+                let business = await BusinessArchiveDelivery.shared.drain()
+                completion.finish(!Task.isCancelled && summary?.needsAttention == false && business?.needsAttention == false)
             }
             processing.expirationHandler = {
                 work.cancel()
@@ -35,8 +36,15 @@ enum CloudBackgroundScheduler {
     }
 
     static func scheduleIfNeeded() {
-        guard let journal = try? CloudArchiveJournal.documents() else { return }
-        if let ids = try? journal.ids(), !ids.contains(where: { (try? journal.read($0).finished) != true }) { return }
+        let personal = try? CloudArchiveJournal.documents()
+        let business = try? BusinessArchiveJournal.documents()
+        let personalPending = personal.map { journal in
+            (try? journal.ids().contains(where: { (try? journal.read($0).finished) != true })) ?? true
+        } ?? true
+        let businessPending = business.map { journal in
+            (try? journal.ids().contains(where: { (try? journal.read($0).finished) != true })) ?? true
+        } ?? true
+        guard personalPending || businessPending else { return }
         let request = BGProcessingTaskRequest(identifier: identifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false
@@ -45,6 +53,8 @@ enum CloudBackgroundScheduler {
     }
 
     static func cancelPending() {
+        guard let journal = try? BusinessArchiveJournal.documents(), let ids = try? journal.ids(),
+              !ids.contains(where: { (try? journal.read($0).finished) != true }) else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
     }
 }
