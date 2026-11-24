@@ -113,7 +113,12 @@ test('only the owner can connect a verified and encrypted OneDrive credential', 
 test('organization discovery checks live membership rather than trusting an index', async () => {
   const { service, records } = fixture();
   records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
-  assert.deepEqual((await service.myOrganizations({ uid: 'member' })).organizations.map(x => x.id), ['org']);
+  let organizations = (await service.myOrganizations({ uid: 'member' })).organizations;
+  assert.deepEqual(organizations.map(x => x.id), ['org']);
+  assert.equal(organizations[0].captureReady, false);
+  Object.assign(records.get('member'), { storageStatus: 'granted', oneDriveFolderId: 'folder', oneDriveParentId: 'parent', oneDriveMemberIdentityId: 'member-graph' });
+  organizations = (await service.myOrganizations({ uid: 'member' })).organizations;
+  assert.equal(organizations[0].captureReady, true);
   records.get('member').active = false;
   assert.deepEqual((await service.myOrganizations({ uid: 'member' })).organizations, []);
   assert.deepEqual((await service.myOrganizations({ uid: 'stranger' })).organizations, []);

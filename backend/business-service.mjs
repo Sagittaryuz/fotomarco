@@ -58,7 +58,10 @@ export class BusinessService {
         const org = await tx.organization(id);
         const member = await tx.membership(id, identity.uid);
         if (org?.id === id && mayReadPublishedProfile(identity, org, member)) {
-          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '' });
+          const captureReady = member.storageStatus === 'granted' && typeof member.oneDriveFolderId === 'string' && !!member.oneDriveFolderId &&
+            typeof member.oneDriveParentId === 'string' && !!member.oneDriveParentId &&
+            typeof member.oneDriveMemberIdentityId === 'string' && !!member.oneDriveMemberIdentityId;
+          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '', captureReady });
         }
       }
       return { organizations };

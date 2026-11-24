@@ -10,7 +10,7 @@ enum BusinessProfileSync {
             let organizations = try await api.myOrganizations(token: token).organizations
             var snapshots: [(organizationID: String, profile: StampProfile)] = []
             let transfer = BusinessProfileTransfer(api: api)
-            for organization in organizations {
+            for organization in organizations where organization.captureReady == true {
                 guard !Task.isCancelled, identity.userID == userID else { return }
                 do {
                     let profile = try await transfer.fetch(organizationID: organization.id, token: token)

@@ -79,7 +79,9 @@ struct BusinessOrganizationsView: View {
                         }
                     }
                 }
-                Text("O carimbo da equipe pode ser selecionado na câmera.").font(.footnote).foregroundStyle(.secondary)
+                Text(org.captureReady == true ? "O carimbo da equipe pode ser selecionado na câmera." :
+                     "A pasta da equipe ainda precisa ser configurada para habilitar capturas.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle(org.name)
         }
     }

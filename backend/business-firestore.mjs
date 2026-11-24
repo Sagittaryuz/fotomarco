@@ -55,7 +55,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         const org = segment(organization.id);
         const owner = segment(organization.ownerId);
         put(path(org), organization, { exists: false });
-        put(path(org, 'members', owner), { organizationId: org, userId: owner, role: 'owner', active: true,
+        put(path(org, 'members', owner), { organizationId: org, userId: owner, role: 'owner', active: true, storageStatus: 'not-started',
           ...(typeof ownerEmail === 'string' && ownerEmail ? { email: ownerEmail } : {}),
           ...(typeof ownerName === 'string' && ownerName ? { displayName: ownerName } : {}) }, { exists: false });
         put(`${root}/users/${owner}/organizations/${org}`, { organizationId: org }, { exists: false });

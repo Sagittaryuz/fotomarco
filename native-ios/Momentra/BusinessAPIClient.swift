@@ -18,7 +18,7 @@ struct BusinessAPIClient {
     struct Member: Decodable, Identifiable { let userId: String; let role: String; let email: String?; let displayName: String?; let revocationPending: Bool?; var id: String { userId } }
     struct MemberList: Decodable { let members: [Member] }
     struct MemberRemoval: Decodable { let complete: Bool }
-    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String }
+    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool? }
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
     private let endpoint: URL
