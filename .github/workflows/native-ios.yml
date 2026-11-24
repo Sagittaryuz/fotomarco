@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   device-package-check:
-    runs-on: macos-15-intel
+    runs-on: macos-26-intel
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -129,7 +129,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
   simulator-build:
-    runs-on: macos-15-intel
+    runs-on: macos-26-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
