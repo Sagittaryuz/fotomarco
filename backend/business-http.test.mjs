@@ -90,3 +90,18 @@ test('member provisioning never accepts client supplied folder or account identi
   assert.equal((await handler(request(path, '{"accessToken":"provider-token"}'))).status, 200);
   assert.equal(calls, 1);
 });
+
+test('capture image route requires authorization and returns a private image stream', async () => {
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async token => token === 'valid.token' ? { uid: 'member' } : null, rateLimit: async () => true,
+    serviceForIdentity: () => ({ readCapture: async (_, org, id, thumbnail) => {
+      assert.equal(org, 'org'); assert.equal(id, 'capture'); assert.equal(thumbnail, true);
+      return new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1, 2])); controller.close(); } });
+    } }) });
+  const path = '/v1/organizations/org/captures/capture/thumbnail';
+  assert.equal((await handler(request(path, '{}', 'bad'))).status, 401);
+  assert.equal((await handler(request(path, '{"owner":true}'))).status, 400);
+  const response = await handler(request(path, '{}'));
+  assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2]);
+});

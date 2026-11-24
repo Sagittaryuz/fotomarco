@@ -13,6 +13,7 @@ import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 import { ensurePrivateMemberFolder } from './business-onedrive-folders.mjs';
 import { verifiedMicrosoftMember } from './business-microsoft-member.mjs';
 import { grantOneDriveMemberFolder } from './business-onedrive-grant.mjs';
+import { openBusinessPhoto } from './business-onedrive-download.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -160,6 +161,21 @@ export function createBusinessWorker(env, overrides = {}) {
     return { session: encryptedSession, expiresAt: session.expiresAt,
       ownerCredential: { ...credential, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
   });
+  const openCapture = overrides.openCapture ?? (async ({ organizationId, org, capture, storage, thumbnail }) => {
+    const fetcher = overrides.fetchImpl ?? fetch;
+    const boundedFetch = (url, options = {}) => fetcher(url, { ...options, signal: AbortSignal.timeout(30000) });
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage);
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID, fetchImpl: boundedFetch });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.driveId !== storage.driveId) throw new Error('provider-identity-mismatch');
+    await verifyOneDriveMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, expectedParentId: capture.parentId, folderId: capture.folderId,
+      memberIdentityId: capture.memberProviderId, requireMember: false, fetchImpl: boundedFetch });
+    return openBusinessPhoto({ ownerToken: verified.accessToken, itemId: capture.remoteItemId, folderId: capture.folderId,
+      driveId: capture.driveId, filename: capture.filename, thumbnail, fetchImpl: boundedFetch });
+  });
   const processUploadChunk = overrides.processUploadChunk ?? (async ({ organizationId, identity, capture, offset, bytes }) => {
     const vault = await createUploadSessionVault(env.BUSINESS_CREDENTIAL_KEY);
     const session = await vault.open(organizationId, identity.uid, capture.recordId,
@@ -217,7 +233,7 @@ export function createBusinessWorker(env, overrides = {}) {
     return { state: 'uploading', nextOffset, ownerCredential };
   });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder,
+    prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
     verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
     prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&

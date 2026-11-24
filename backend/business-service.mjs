@@ -8,7 +8,7 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, verifyMicrosoftMember, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -18,6 +18,7 @@ export class BusinessService {
     this.prepareOwnerFolder = prepareOwnerFolder;
     this.prepareMemberFolder = prepareMemberFolder;
     this.grantMemberFolder = grantMemberFolder;
+    this.openCapture = openCapture;
     this.verifyMicrosoftMember = verifyMicrosoftMember;
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMailDelivery = prepareMailDelivery;
@@ -92,6 +93,31 @@ export class BusinessService {
         .map(({ captureId, authorId, filename, createdAt, byteCount }) => ({ captureId, authorId, filename, createdAt, byteCount }));
       return { photos, nextCursor: records.length === 200 ? records[records.length - 1].recordId : '' };
     });
+  }
+
+  async readCapture(token, organizationId, captureId, thumbnail) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof organizationId !== 'string' || !organizationId ||
+        typeof captureId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(captureId) ||
+        typeof thumbnail !== 'boolean' || typeof this.openCapture !== 'function') throw new Error('invalid-request');
+    const recordId = `${captureId.toLowerCase()}-stamped`;
+    const context = async tx => {
+      const org = await tx.organization(organizationId), member = await tx.membership(organizationId, identity.uid);
+      const capture = await tx.capture(organizationId, recordId), storage = await tx.oneDriveCredential(organizationId);
+      if (!mayAccessPhoto(identity, org, member, capture, 'view') || capture.state !== 'verified' || capture.variant !== 'stamped' ||
+          capture.recordId !== recordId || capture.captureId.toLowerCase() !== captureId.toLowerCase() || !capture.remoteItemId ||
+          capture.driveId !== storage?.driveId || capture.ownerProviderId !== storage?.providerAccountId) throw new Error('forbidden');
+      return { org, capture, storage };
+    };
+    const original = await this.transaction(context);
+    const body = await this.openCapture({ organizationId, ...original, thumbnail });
+    if (!(body instanceof ReadableStream)) throw new Error('storage-unavailable');
+    try {
+      const current = await this.transaction(context);
+      if (current.capture.remoteItemId !== original.capture.remoteItemId || current.capture.folderId !== original.capture.folderId ||
+          current.capture.sha256 !== original.capture.sha256 || current.storage.driveId !== original.storage.driveId) throw new Error('storage-configuration-changed');
+    } catch (error) { try { await body.cancel(); } catch {} throw error; }
+    return body;
   }
 
   async updateOrganization(token, organizationId, name, contactEmail, photoAssetId) {

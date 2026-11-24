@@ -17,6 +17,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const connectGoogleMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/gmail\/connect$/.exec(new URL(request.url).pathname);
       const reserveCapture = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/reserve$/.exec(new URL(request.url).pathname);
       const listCaptures = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/list$/.exec(new URL(request.url).pathname);
+      const readCapture = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(thumbnail|image)$/.exec(new URL(request.url).pathname);
       const startUpload = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/start$/.exec(new URL(request.url).pathname);
       const uploadChunk = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/chunk$/.exec(new URL(request.url).pathname);
       const verifyCapture = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/captures\/([A-Za-z0-9_-]{1,128})\/(original|stamped)\/verify$/.exec(new URL(request.url).pathname);
@@ -24,7 +25,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !provisionOwnerFolder && !bindMicrosoftMember && !provisionMemberFolder && !connectGoogleMail && !removeMember && !reserveCapture && !listCaptures && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !provisionOwnerFolder && !bindMicrosoftMember && !provisionMemberFolder && !connectGoogleMail && !removeMember && !reserveCapture && !listCaptures && !readCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -65,6 +66,11 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       }
       const service = serviceForIdentity(identity);
       try {
+        if (readCapture) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          const body = await service.readCapture(null, readCapture[1], readCapture[2], readCapture[3] === 'thumbnail');
+          return new Response(body, { status: 200, headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' } });
+        }
         if (listCaptures) {
           if (Object.keys(payload).some(key => key !== 'cursor') || (payload.cursor !== undefined && typeof payload.cursor !== 'string')) return reply(400, { error: 'invalid-body' });
           return reply(200, await service.listCaptures(null, listCaptures[1], payload.cursor ?? ''));
