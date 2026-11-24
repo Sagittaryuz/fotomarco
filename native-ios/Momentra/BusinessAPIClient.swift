@@ -76,6 +76,12 @@ struct BusinessAPIClient {
                               values: ["accessToken": accessToken], token: token, maxBodySize: 20000)
     }
 
+    func provisionMemberOneDrive(organizationID: String, accessToken: String, token: String) async throws -> FolderProvisioning {
+        guard !accessToken.isEmpty, accessToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "provision-member"],
+                              values: ["accessToken": accessToken], token: token, maxBodySize: 20000)
+    }
+
     func connectGoogleMail(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
         guard !refreshToken.isEmpty, refreshToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
         return try await post(path: ["v1", "organizations", try Self.id(organizationID), "mail", "gmail", "connect"],

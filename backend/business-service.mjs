@@ -8,7 +8,7 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, verifyMicrosoftMember, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, verifyMicrosoftMember, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -16,6 +16,8 @@ export class BusinessService {
     this.canCreateOrganization = canCreateOrganization;
     this.prepareOneDrive = prepareOneDrive;
     this.prepareOwnerFolder = prepareOwnerFolder;
+    this.prepareMemberFolder = prepareMemberFolder;
+    this.grantMemberFolder = grantMemberFolder;
     this.verifyMicrosoftMember = verifyMicrosoftMember;
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMailDelivery = prepareMailDelivery;
@@ -175,11 +177,17 @@ export class BusinessService {
       return { org, target: { ...target, active: false, revocationState: 'pending', revocationId: marker } };
     });
     if (started.complete) return { complete: true };
+    if (started.target.storageStatus === 'provisioning' && started.target.oneDriveGrantLeaseExpiresAt > this.clock()) return { complete: false };
     if (started.target.storageStatus !== 'not-started') {
+      if (started.target.storageStatus === 'provisioning' && !started.target.oneDriveFolderId) {
+        // A folder cannot be shared before its ID is committed; the provisioning
+        // transaction rechecks active membership before that point.
+      } else {
       if (typeof this.revokeMemberStorage !== 'function') return { complete: false };
       try {
         if (await this.revokeMemberStorage({ organizationId, organization: started.org, member: started.target }) !== true) return { complete: false };
       } catch { return { complete: false }; }
+      }
     }
     return this.transaction(async tx => {
       const { target } = await authorize(tx);
@@ -283,16 +291,93 @@ export class BusinessService {
     const provider = await this.verifyMicrosoftMember(providerToken);
     if (!provider || typeof provider.providerAccountId !== 'string' || !provider.providerAccountId ||
         typeof provider.email !== 'string' || !provider.email) throw new Error('provider-identity-mismatch');
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(provider.providerAccountId)));
+    const bindingKey = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
     return this.transaction(async tx => {
       const member = await check(tx);
+      const binding = await tx.providerBinding(organizationId, bindingKey);
+      if (binding && binding.userId !== identity.uid) throw new Error('provider-account-already-linked');
       if (member.storageStatus === 'granted') {
         if (member.oneDriveMemberIdentityId !== provider.providerAccountId) throw new Error('storage-account-change-requires-migration');
+        return { linked: true };
+      }
+      if (member.storageStatus === 'provisioning') {
+        if (member.oneDrivePendingIdentityId !== provider.providerAccountId || member.oneDrivePendingEmail !== provider.email) throw new Error('storage-account-change-requires-migration');
         return { linked: true };
       }
       if (member.storageStatus !== 'not-started') throw new Error('storage-configuration-changed');
       if (member.oneDrivePendingIdentityId && (member.oneDrivePendingIdentityId !== provider.providerAccountId || member.oneDrivePendingEmail !== provider.email)) throw new Error('storage-account-change-requires-migration');
       await tx.setMemberProviderIdentity(organizationId, identity.uid, provider.providerAccountId, provider.email);
+      if (!binding) await tx.setProviderBinding(organizationId, bindingKey, identity.uid);
       return { linked: true };
+    });
+  }
+
+  async provisionMemberFolder(token, organizationId, providerToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof organizationId !== 'string' || !organizationId ||
+        typeof providerToken !== 'string' || !providerToken || providerToken.length > 16384 ||
+        typeof this.verifyMicrosoftMember !== 'function' || typeof this.prepareMemberFolder !== 'function' ||
+        typeof this.grantMemberFolder !== 'function') throw new Error('invalid-request');
+    const provider = await this.verifyMicrosoftMember(providerToken);
+    if (!provider?.providerAccountId || !provider?.email) throw new Error('provider-identity-mismatch');
+    const proposedMarker = this.newId(), lease = this.newId();
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuid.test(proposedMarker) || !uuid.test(lease)) throw new Error('invalid-id');
+    const getContext = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      const storage = await tx.oneDriveCredential(organizationId);
+      if (!mayReadPublishedProfile(identity, org, member) || member.role !== 'member') throw new Error('forbidden');
+      if (!storage?.providerAccountId || !storage?.driveId) throw new Error('storage-unavailable');
+      if (provider.providerAccountId === storage.providerAccountId) throw new Error('provider-identity-mismatch');
+      if (member.oneDrivePendingIdentityId !== provider.providerAccountId || member.oneDrivePendingEmail !== provider.email) throw new Error('provider-identity-mismatch');
+      return { org, member, storage };
+    };
+    const acquired = await this.transaction(async tx => {
+      const context = await getContext(tx), m = context.member;
+      if (m.storageStatus === 'granted') return { ready: true };
+      if (!['not-started', 'provisioning'].includes(m.storageStatus)) throw new Error('storage-unavailable');
+      if (m.storageStatus === 'provisioning' && (!Number.isSafeInteger(m.oneDriveGrantLeaseExpiresAt) || m.oneDriveGrantLeaseExpiresAt > this.clock())) throw new Error('storage-busy');
+      const marker = m.storageStatus === 'provisioning' ? m.oneDriveCreationMarker : proposedMarker;
+      const email = m.storageStatus === 'provisioning' ? m.oneDriveProvisionEmail : m.email;
+      const name = m.storageStatus === 'provisioning' ? m.oneDriveProvisionName :
+        (typeof m.displayName === 'string' && m.displayName.trim() ? m.displayName : email?.split('@')[0]);
+      if (!uuid.test(marker) || typeof name !== 'string' || !name || typeof email !== 'string' || !email) throw new Error('invalid-storage-configuration');
+      await tx.leaseMemberFolder(organizationId, identity.uid, marker, name, email, lease, this.clock() + 120000);
+      return { ...context, marker, name, email };
+    });
+    if (acquired.ready) return { ready: true };
+    const folder = await this.prepareMemberFolder({ organizationId, identity, ...acquired, provider, lease });
+    if (!folder || typeof folder.folderId !== 'string' || !folder.folderId || typeof folder.parentId !== 'string' || !folder.parentId ||
+        folder.memberIdentityId !== provider.providerAccountId || folder.driveId !== acquired.storage.driveId ||
+        !folder.ownerCredential || folder.ownerCredential.version !== 1 || !folder.ownerCredential.iv || !folder.ownerCredential.ciphertext ||
+        folder.ownerCredential.providerAccountId !== acquired.storage.providerAccountId || folder.ownerCredential.driveId !== acquired.storage.driveId) throw new Error('invalid-storage-configuration');
+    const context = await this.transaction(async tx => {
+      const current = await getContext(tx), m = current.member;
+      if (m.storageStatus !== 'provisioning' || m.oneDriveGrantLease !== lease || m.oneDriveGrantLeaseExpiresAt <= this.clock() ||
+          m.oneDriveCreationMarker !== acquired.marker || current.storage.driveId !== acquired.storage.driveId ||
+          current.storage.providerAccountId !== acquired.storage.providerAccountId ||
+          (m.oneDriveFolderId && (m.oneDriveFolderId !== folder.folderId || m.oneDriveParentId !== folder.parentId))) throw new Error('storage-configuration-changed');
+      if (current.storage.ciphertext === acquired.storage.ciphertext && current.storage.iv === acquired.storage.iv) await tx.setOneDriveCredential(organizationId, folder.ownerCredential);
+      await tx.setMemberFolderPendingGrant(organizationId, identity.uid, folder, this.clock() + 120000);
+      return current;
+    });
+    const currentProvider = await this.verifyMicrosoftMember(providerToken);
+    if (currentProvider?.providerAccountId !== provider.providerAccountId || currentProvider?.email !== provider.email) throw new Error('provider-identity-mismatch');
+    await this.transaction(async tx => {
+      const current = await getContext(tx);
+      if (current.member.storageStatus !== 'provisioning' || current.member.oneDriveGrantLease !== lease ||
+          current.member.oneDriveGrantLeaseExpiresAt <= this.clock() || current.member.oneDriveFolderId !== folder.folderId) throw new Error('storage-configuration-changed');
+    });
+    const granted = await this.grantMemberFolder({ organizationId, identity, ...context, provider, folder, lease });
+    if (granted !== true) throw new Error('storage-grant-unconfirmed');
+    return this.transaction(async tx => {
+      const current = await getContext(tx), m = current.member;
+      if (m.storageStatus !== 'provisioning' || m.oneDriveGrantLease !== lease || m.oneDriveGrantLeaseExpiresAt <= this.clock() ||
+          m.oneDriveFolderId !== folder.folderId || m.oneDriveParentId !== folder.parentId || m.oneDriveMemberIdentityId !== provider.providerAccountId) throw new Error('storage-configuration-changed');
+      await tx.setMemberFolderReady(organizationId, identity.uid);
+      return { ready: true };
     });
   }
 

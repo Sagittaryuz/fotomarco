@@ -12,6 +12,7 @@ import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusiness
 import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 import { ensurePrivateMemberFolder } from './business-onedrive-folders.mjs';
 import { verifiedMicrosoftMember } from './business-microsoft-member.mjs';
+import { grantOneDriveMemberFolder } from './business-onedrive-grant.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -66,6 +67,33 @@ export function createBusinessWorker(env, overrides = {}) {
     return { ...folder, memberIdentityId: verified.providerAccountId,
       ownerCredential: { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
   });
+  const prepareMemberFolder = overrides.prepareMemberFolder ?? (async ({ organizationId, org, member, storage, marker, name, email, provider }) => {
+    const fetcher = overrides.fetchImpl ?? fetch;
+    const boundedFetch = (url, options = {}) => fetcher(url, { ...options, signal: AbortSignal.timeout(30000) });
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage);
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID, fetchImpl: boundedFetch });
+    const verified = await exchange(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.driveId !== storage.driveId) throw new Error('provider-identity-mismatch');
+    const result = await ensurePrivateMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, memberIdentityId: provider.providerAccountId, memberName: name, memberEmail: email,
+      creationMarker: marker, ...(member.oneDriveFolderId ? { knownMemberFolderId: member.oneDriveFolderId } : {}), fetchImpl: boundedFetch });
+    const sealed = await vault.seal(organizationId, org.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    return { ...result, memberIdentityId: provider.providerAccountId, ownerAccessToken: verified.accessToken,
+      ownerCredential: { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId } };
+  });
+  const grantMemberFolder = overrides.grantMemberFolder ?? (async ({ storage, provider, folder }) => {
+    const fetcher = overrides.fetchImpl ?? fetch;
+    const boundedFetch = (url, options = {}) => fetcher(url, { ...options, signal: AbortSignal.timeout(10000) });
+    await grantOneDriveMemberFolder({ ownerToken: folder.ownerAccessToken, expectedOwnerId: storage.providerAccountId,
+      expectedDriveId: storage.driveId, expectedParentId: folder.parentId, folderId: folder.folderId,
+      memberIdentityId: provider.providerAccountId, memberVerifiedEmail: provider.email,
+      verifyRecipientIdentity: async (email, id) => email === provider.email && id === provider.providerAccountId,
+      fetchImpl: boundedFetch });
+    return true;
+  });
   const prepareMailDelivery = overrides.prepareMailDelivery ?? (async ({ organizationId, organization, mail }) => {
     const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
     const saved = await vault.open(organizationId, organization.ownerId, mail, 'gmail');
@@ -84,7 +112,7 @@ export function createBusinessWorker(env, overrides = {}) {
       }) };
   });
   const revokeMemberStorage = overrides.revokeMemberStorage ?? (async ({ organizationId, organization, member, transaction }) => {
-    if (member.storageStatus !== 'granted' || !member.oneDriveFolderId || !member.oneDriveParentId || !member.oneDriveMemberIdentityId) return false;
+    if (!['granted', 'provisioning'].includes(member.storageStatus) || !member.oneDriveFolderId || !member.oneDriveParentId || !member.oneDriveMemberIdentityId) return false;
     const saved = await transaction(tx => tx.oneDriveCredential(organizationId));
     if (!saved) return false;
     const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
@@ -101,7 +129,7 @@ export function createBusinessWorker(env, overrides = {}) {
       const currentMember = await tx.membership(organizationId, member.userId);
       const currentCredential = await tx.oneDriveCredential(organizationId);
       if (currentOrg?.ownerId !== organization.ownerId || currentMember?.revocationState !== 'pending' ||
-          currentMember.revocationId !== member.revocationId || currentMember.storageStatus !== 'granted' ||
+          currentMember.revocationId !== member.revocationId || currentMember.storageStatus !== member.storageStatus ||
           currentMember.oneDriveFolderId !== member.oneDriveFolderId || currentMember.oneDriveParentId !== member.oneDriveParentId ||
           currentMember.oneDriveMemberIdentityId !== member.oneDriveMemberIdentityId ||
           currentCredential?.ciphertext !== saved.ciphertext || currentCredential?.iv !== saved.iv) throw new Error('revocation-conflict');
@@ -189,7 +217,8 @@ export function createBusinessWorker(env, overrides = {}) {
     return { state: 'uploading', nextOffset, ownerCredential };
   });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareOwnerFolder, verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
+    prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder,
+    verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
     prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,

@@ -39,3 +39,15 @@ test('provider failure keeps the removal pending and the seat reserved until acc
   assert.deepEqual(await service.removeMember({ uid: 'owner' }, 'org', 'member'), { complete: true });
   assert.equal(seats(), 1);
 });
+
+test('removal waits for an in-flight folder grant and then revokes the provider access', async () => {
+  const { service, members, seats } = fixture('provisioning');
+  Object.assign(members.get('member'), { oneDriveFolderId: 'folder', oneDriveGrantLeaseExpiresAt: 200 });
+  let calls = 0;
+  service.revokeMemberStorage = async () => { calls++; return true; };
+  assert.deepEqual(await service.removeMember({ uid: 'owner' }, 'org', 'member'), { complete: false });
+  assert.equal(calls, 0); assert.equal(seats(), 2);
+  service.clock = () => 201;
+  assert.deepEqual(await service.removeMember({ uid: 'owner' }, 'org', 'member'), { complete: true });
+  assert.equal(calls, 1); assert.equal(seats(), 1);
+});

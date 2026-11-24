@@ -162,6 +162,25 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
           updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
       },
+      providerBinding: (org, key) => read(path(org, 'providerBindings', key)),
+      setProviderBinding: async (org, key, uid) => put(path(org, 'providerBindings', key), { userId: uid }, { exists: false }),
+      leaseMemberFolder: async (org, uid, marker, name, email, lease, expiresAt) => {
+        const data = { storageStatus: 'provisioning', oneDriveCreationMarker: marker, oneDriveProvisionName: name,
+          oneDriveProvisionEmail: email, oneDriveGrantLease: lease, oneDriveGrantLeaseExpiresAt: expiresAt };
+        writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
+      setMemberFolderPendingGrant: async (org, uid, folder, leaseExpiresAt) => {
+        const data = { oneDriveFolderId: folder.folderId, oneDriveParentId: folder.parentId,
+          oneDriveMemberIdentityId: folder.memberIdentityId, oneDriveGrantLeaseExpiresAt: leaseExpiresAt };
+        writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
+      setMemberFolderReady: async (org, uid) => {
+        const data = { storageStatus: 'granted', oneDriveGrantLease: '', oneDriveGrantLeaseExpiresAt: 0 };
+        writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
       setGoogleMailCredential: async (org, record) => put(path(org, 'private', 'gmail'), record),
       publishProfile: async profile => {
         put(path(profile.organizationId, 'profiles', profile.versionId), profile, { exists: false });

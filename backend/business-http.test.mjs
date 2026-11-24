@@ -77,3 +77,16 @@ test('member account binding accepts only the provider token, never a supplied i
   assert.equal((await handler(request(path, '{"accessToken":"provider-token"}'))).status, 200);
   assert.equal(calls, 1);
 });
+
+test('member provisioning never accepts client supplied folder or account identities', async () => {
+  let calls = 0;
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async () => ({ uid: 'member' }), rateLimit: async () => true,
+    serviceForIdentity: () => ({ provisionMemberFolder: async (_, org, token) => {
+      assert.equal(org, 'org'); assert.equal(token, 'provider-token'); calls++; return { ready: true };
+    } }) });
+  const path = '/v1/organizations/org/storage/onedrive/provision-member';
+  assert.equal((await handler(request(path, '{"accessToken":"provider-token","folderId":"other"}'))).status, 400);
+  assert.equal((await handler(request(path, '{"accessToken":"provider-token"}'))).status, 200);
+  assert.equal(calls, 1);
+});

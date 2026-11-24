@@ -59,7 +59,13 @@ struct BusinessMemberOneDriveView: View {
             let token = try await BusinessIdentity.shared.verifiedToken()
             let result = try await api.bindMemberOneDrive(organizationID: organizationID,
                 accessToken: account.credential.accessToken, token: token)
-            message = result.linked ? "Conta confirmada. A pasta da organização ainda precisa ser preparada." : "Não foi possível confirmar a conta."
+            if result.linked {
+                let folder = try await api.provisionMemberOneDrive(organizationID: organizationID,
+                    accessToken: account.credential.accessToken, token: token)
+                message = folder.ready ? "Conta conectada e pasta da organização preparada." : "Conta confirmada. A pasta ainda não está pronta."
+            } else {
+                message = "Não foi possível confirmar a conta."
+            }
         } catch BusinessAPIClient.Failure.storageAccountChangeRequiresMigration {
             message = "Outra conta já está associada. A troca exige uma migração para preservar as fotos."
         } catch {

@@ -5,11 +5,13 @@ import { BusinessService } from './business-service.mjs';
 function fixture() {
   const org = { id: 'org', ownerId: 'owner' };
   const member = { organizationId: 'org', userId: 'member', role: 'member', active: true, storageStatus: 'not-started' };
+  const bindings = new Map();
   const tx = { organization: async () => org, membership: async (_, uid) => uid === 'member' ? member : null,
+    providerBinding: async (_, key) => bindings.get(key), setProviderBinding: async (_, key, uid) => bindings.set(key, { userId: uid }),
     setMemberProviderIdentity: async (_, __, id, email) => Object.assign(member, { oneDrivePendingIdentityId: id, oneDrivePendingEmail: email }) };
   const service = new BusinessService({ verifyToken: async x => x, transaction: action => action(tx),
     verifyMicrosoftMember: async () => ({ providerAccountId: 'verified-id', email: 'onedrive@example.com' }) });
-  return { service, member };
+  return { service, member, bindings };
 }
 const user = { uid: 'member', emailVerified: true };
 
@@ -29,4 +31,12 @@ test('rejects revoked members and rechecks access after contacting Microsoft', a
   await assert.rejects(service.bindMicrosoftMember(user, 'org', 'token'), /forbidden/);
   assert.equal(member.oneDrivePendingIdentityId, undefined);
   await assert.rejects(service.bindMicrosoftMember({ ...user, emailVerified: false }, 'org', 'token'), /invalid-request/);
+});
+
+test('a Microsoft account already bound to another member cannot be reused', async () => {
+  const { service, member, bindings } = fixture();
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('verified-id')));
+  bindings.set(Array.from(digest, b => b.toString(16).padStart(2, '0')).join(''), { userId: 'different-member' });
+  await assert.rejects(service.bindMicrosoftMember(user, 'org', 'token'), /provider-account-already-linked/);
+  assert.equal(member.oneDrivePendingIdentityId, undefined);
 });

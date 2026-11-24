@@ -8,6 +8,31 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 import { createBusinessWorker } from './business-worker.mjs';
 
+test('member folder provisioning persists binding and ready state transactionally', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business', org = randomUUID();
+  const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents`, s = stringValue => ({ stringValue });
+  const write = async (path, fields) => {
+    const res = await fetch(`${root}/${path}`, { method: 'PATCH', headers: { authorization: 'Bearer owner', 'content-type': 'application/json' }, body: JSON.stringify({ fields }) });
+    assert.equal(res.ok, true);
+  };
+  await write(`organizations/${org}`, { id: s(org), ownerId: s('owner') });
+  await write(`organizations/${org}/members/member`, { organizationId: s(org), userId: s('member'), role: s('member'),
+    active: { booleanValue: true }, storageStatus: s('not-started'), email: s('member@example.com') });
+  await write(`organizations/${org}/private/onedrive`, { version: { integerValue: '1' }, iv: s('iv'), ciphertext: s('cipher'),
+    providerAccountId: s('graph-owner'), driveId: s('drive') });
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const service = new BusinessService({ transaction, verifyToken: async token => token, newId: randomUUID, clock: () => 100,
+    verifyMicrosoftMember: async () => ({ providerAccountId: 'graph-member', email: 'ms@example.com' }),
+    prepareMemberFolder: async ({ storage }) => ({ driveId: 'drive', parentId: 'parent', folderId: 'folder', memberIdentityId: 'graph-member', ownerCredential: storage }),
+    grantMemberFolder: async () => true });
+  const identity = { uid: 'member', emailVerified: true };
+  assert.deepEqual(await service.bindMicrosoftMember(identity, org, 'token'), { linked: true });
+  assert.deepEqual(await service.provisionMemberFolder(identity, org, 'token'), { ready: true });
+  const member = await transaction(tx => tx.membership(org, 'member'));
+  assert.equal(member.storageStatus, 'granted'); assert.equal(member.oneDriveFolderId, 'folder');
+  assert.equal(member.oneDriveMemberIdentityId, 'graph-member');
+});
+
 test('owner folder provisioning commits its recovery marker and verified binding', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
   const projectId = 'demo-photomark-business', org = randomUUID();
