@@ -33,7 +33,8 @@ function fixture(withMail = true) {
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100,
     prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async values => { sent.push(values); } }) });
-  return { service, records, invites, sent, storedCredential: () => storedCredential, storedMail: () => storedMail };
+  return { service, records, invites, sent, storedCredential: () => storedCredential, storedMail: () => storedMail,
+    replaceMail: value => { storedMail = value; } };
 }
 
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
@@ -54,6 +55,17 @@ test('a revoked inviter cannot admit a user and missing mail cannot create an in
   const missing = fixture(false);
   await assert.rejects(missing.service.invite({ uid: 'owner' }, 'org', 'person@example.com'), /mail-not-configured/);
   assert.equal(missing.invites.size, 0);
+});
+
+test('an invitation is not sent when the sender changes during preparation', async () => {
+  const { service, invites, sent, replaceMail } = fixture();
+  service.prepareMailDelivery = async ({ mail }) => {
+    replaceMail({ ...mail, ciphertext: 'new-credential' });
+    return { record: mail, send: async value => { sent.push(value); } };
+  };
+  await assert.rejects(service.invite({ uid: 'owner' }, 'org', 'person@example.com'), /mail-configuration-changed/);
+  assert.equal(invites.size, 0);
+  assert.equal(sent.length, 0);
 });
 
 test('only the owner may connect the verified organization sender', async () => {
