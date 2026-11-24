@@ -3,6 +3,19 @@ import CoreLocation
 @testable import Momentra
 
 final class PhotoProfileIndexTests: XCTestCase {
+    func testCloudDiscoveredLegacyAssociationRetainsExistingProfile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID(), org = UUID(), old = CaptureProfileTag(id: UUID(), name: "Anterior")
+        try PhotoProfileIndex.register(captureID: id, profile: old, root: root)
+        try PhotoProfileIndex.associateLegacyCapture(id, captureDate: Date(timeIntervalSince1970: 100), organizationID: org,
+            name: "JMD Hamoa", before: Date(timeIntervalSince1970: 200), root: root)
+        XCTAssertEqual(PhotoProfileIndex.load(root: root).captures[id]?.id, org)
+        let data = try Data(contentsOf: root.appendingPathComponent("CaptureProfiles/\(id.uuidString).json"))
+        XCTAssertEqual(try JSONDecoder().decode(CaptureProfileRecord.self, from: data).profile, old)
+        XCTAssertThrowsError(try PhotoProfileIndex.associateLegacyCapture(id, captureDate: Date(timeIntervalSince1970: 100),
+            organizationID: UUID(), name: "Outro", before: Date(timeIntervalSince1970: 200), root: root))
+    }
     func testLegacyAssociationPreservesOriginalProfileAndSkipsNewCaptures() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

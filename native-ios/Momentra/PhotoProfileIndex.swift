@@ -115,6 +115,29 @@ enum PhotoProfileIndex {
         return changed
     }
 
+    /// Adds an association discovered from an app-generated cloud filename with a known capture date.
+    static func associateLegacyCapture(_ captureID: UUID, captureDate: Date, organizationID: UUID,
+                                       name: String, before cutoff: Date, root: URL? = nil) throws {
+        guard captureDate <= cutoff else { throw CocoaError(.fileWriteInvalidFileName) }
+        lock.lock(); defer { lock.unlock() }
+        let file = try indexDirectory(root: root).appendingPathComponent(captureID.uuidString + ".json")
+        if !FileManager.default.fileExists(atPath: file.path) {
+            let tag = CaptureProfileTag(id: organizationID, name: String(name.prefix(60)))
+            try save(CaptureProfileRecord(captureID: captureID, profile: tag, captureDate: captureDate,
+                                          localAssetID: nil, cloudMediaIDs: [], organizationID: organizationID,
+                                          organizationName: tag.name), to: file)
+            return
+        }
+        let data = try Data(contentsOf: file)
+        guard data.count <= 16384, var record = try? JSONDecoder().decode(CaptureProfileRecord.self, from: data),
+              record.captureID == captureID, record.captureDate.map({ $0 <= cutoff }) ?? true,
+              record.organizationID == nil || record.organizationID == organizationID else { throw CocoaError(.fileWriteFileExists) }
+        if record.organizationID == organizationID { return }
+        record.organizationID = organizationID
+        record.organizationName = String(name.prefix(60))
+        try save(record, to: file)
+    }
+
     private static func update(captureID: UUID, root: URL?, mutate: (inout CaptureProfileRecord) -> Void) throws {
         lock.lock(); defer { lock.unlock() }
         let file = try indexDirectory(root: root).appendingPathComponent(captureID.uuidString + ".json")
