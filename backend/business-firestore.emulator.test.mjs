@@ -102,6 +102,9 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   assert.equal((await app(req(base, ownerToken, { email: 'member@example.com' }))).status, 201);
   assert.equal((await app(req(`${base}/invite/accept`, memberToken, {}))).status, 200);
   assert.equal((await app(req(`${base}/invite/accept`, memberToken, {}))).status, 403);
+  const mine = await app(req('/v1/organizations/mine', memberToken, {}));
+  assert.equal(mine.status, 200);
+  assert.ok((await mine.json()).organizations.some(item => item.id === org && item.role === 'member'));
   const membersPath = `/v1/organizations/${org}/members/list`;
   const membersResponse = await app(req(membersPath, ownerToken, {}));
   assert.equal(membersResponse.status, 200);

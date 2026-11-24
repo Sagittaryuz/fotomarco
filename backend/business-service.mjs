@@ -42,6 +42,24 @@ export class BusinessService {
     });
   }
 
+  async myOrganizations(token) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const indexes = await tx.userOrganizations(identity.uid);
+      if (!Array.isArray(indexes) || indexes.length > 500 || new Set(indexes).size !== indexes.length) throw new Error('invalid-index');
+      const organizations = [];
+      for (const id of indexes) {
+        const org = await tx.organization(id);
+        const member = await tx.membership(id, identity.uid);
+        if (org?.id === id && mayReadPublishedProfile(identity, org, member)) {
+          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '' });
+        }
+      }
+      return { organizations };
+    });
+  }
+
   async updateOrganization(token, organizationId, name, contactEmail, photoAssetId) {
     const identity = await this.verifyToken(token);
     const displayName = typeof name === 'string' ? name.trim() : '';

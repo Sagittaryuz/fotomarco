@@ -26,9 +26,10 @@ test('transaction reads trusted state and atomically writes member, counter and 
   });
   const commit = calls.find(x => x.url.endsWith(':commit')).body;
   assert.equal(commit.transaction, 'tx');
-  assert.equal(commit.writes.length, 3);
-  assert.equal(commit.writes[1].update.fields.count.integerValue, '6');
-  assert.deepEqual(commit.writes[2].updateMask.fieldPaths, ['state', 'acceptedBy']);
+  assert.equal(commit.writes.length, 4);
+  assert.match(commit.writes[1].update.name, /\/users\/user\/organizations\/org$/);
+  assert.equal(commit.writes[2].update.fields.count.integerValue, '6');
+  assert.deepEqual(commit.writes[3].updateMask.fieldPaths, ['state', 'acceptedBy']);
 });
 
 test('invalid paths and interrupted actions roll back without committing', async () => {

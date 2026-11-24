@@ -12,6 +12,8 @@ struct BusinessAPIClient {
     struct OrganizationSettings: Decodable { let id: String; let name: String; let photoAssetId: String; let contactEmail: String? }
     struct Member: Decodable, Identifiable { let userId: String; let role: String; let email: String?; var id: String { userId } }
     struct MemberList: Decodable { let members: [Member] }
+    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String }
+    struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     private let endpoint: URL
     private let transport: (URLRequest) async throws -> (Data, URLResponse)
 
@@ -41,6 +43,10 @@ struct BusinessAPIClient {
 
     func createOrganization(name: String, contactEmail: String, token: String) async throws -> OrganizationReceipt {
         try await post(path: ["v1", "organizations"], values: ["name": name, "contactEmail": contactEmail], token: token)
+    }
+
+    func myOrganizations(token: String) async throws -> OrganizationList {
+        try await post(path: ["v1", "organizations", "mine"], values: [:], token: token)
     }
 
     func invite(organizationID: String, email: String, token: String) async throws -> InvitationReceipt {

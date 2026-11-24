@@ -56,6 +56,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         const owner = segment(organization.ownerId);
         put(path(org), organization, { exists: false });
         put(path(org, 'members', owner), { organizationId: org, userId: owner, role: 'owner', active: true }, { exists: false });
+        put(`${root}/users/${owner}/organizations/${org}`, { organizationId: org }, { exists: false });
         put(path(org, 'state', 'seats'), { count: 1 }, { exists: false });
       },
       updateOrganization: async (org, updates) => {
@@ -64,6 +65,19 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       organization: org => read(path(org)),
       membership: (org, user) => read(path(org, 'members', user)),
+      userOrganizations: async userId => {
+        if (writes.length) throw new Error('read-after-write');
+        const user = segment(userId);
+        const result = await send(`/users/${user}:runQuery`, { transaction: txId,
+          structuredQuery: { from: [{ collectionId: 'organizations' }], limit: 501 } });
+        if (!Array.isArray(result) || result.some(entry => !entry || entry.error || (!entry.document && !entry.readTime))) throw new Error('invalid-read');
+        return result.filter(entry => entry.document).map(entry => {
+          const index = decode(entry.document.fields);
+          const org = segment(index.organizationId);
+          if (entry.document.name !== `${root}/users/${user}/organizations/${org}`) throw new Error('invalid-read');
+          return org;
+        });
+      },
       activeMembers: async org => {
         if (writes.length) throw new Error('read-after-write');
         const organization = segment(org);
@@ -103,6 +117,8 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       addMember: async member => {
         if (seatState === undefined || activeOrg !== member.organizationId || seatState >= 500) throw new Error('invalid-seat-counter');
         put(path(member.organizationId, 'members', member.userId), member);
+        put(`${root}/users/${segment(member.userId)}/organizations/${segment(member.organizationId)}`,
+          { organizationId: member.organizationId });
         put(path(member.organizationId, 'state', 'seats'), { count: seatState + 1 });
       },
       markInvitationAccepted: async (org, id, userId) => {

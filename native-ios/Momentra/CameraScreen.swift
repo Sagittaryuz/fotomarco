@@ -1057,6 +1057,8 @@ struct CameraScreen: View {
                     Section("Conta e organização") {
                         NavigationLink("Conta Business") { BusinessAccountView() }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                        NavigationLink("Gerenciar organização") { BusinessOrganizationsView() }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     archiveSettingsSection
                     Section("Ajustes da câmera") {

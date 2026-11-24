@@ -21,7 +21,8 @@ test('only the configured verified owner may bootstrap an organization', async (
   identity = { ...identity, emailVerified: true };
   assert.equal((await worker(req({ name: 'Equipe', contactEmail: 'business@example.com' }))).status, 201);
   assert.equal(commits.length, 1);
-  assert.equal(commits[0].writes.length, 3);
+  assert.equal(commits[0].writes.length, 4);
+  assert.match(commits[0].writes[2].update.name, /\/users\/uid1\/organizations\//);
 });
 
 test('missing security bindings fail closed', () => {

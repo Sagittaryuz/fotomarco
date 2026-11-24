@@ -11,6 +11,7 @@ function fixture() {
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
+    userOrganizations: async id => records.has(id) ? ['org'] : [],
     activeMembers: async () => [...records.values()].filter(item => item.active),
     occupiedSeats: async () => [...records.values()].filter(x => x.active).length,
     createInvitation: async value => { invites.set(value.id, value); },
@@ -34,6 +35,15 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('organization discovery checks live membership rather than trusting an index', async () => {
+  const { service, records } = fixture();
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  assert.deepEqual((await service.myOrganizations({ uid: 'member' })).organizations.map(x => x.id), ['org']);
+  records.get('member').active = false;
+  assert.deepEqual((await service.myOrganizations({ uid: 'member' })).organizations, []);
+  assert.deepEqual((await service.myOrganizations({ uid: 'stranger' })).organizations, []);
 });
 
 test('only a manager may list active members and their verified email addresses', async () => {
