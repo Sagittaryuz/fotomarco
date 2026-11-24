@@ -1,0 +1,44 @@
+name: Publish isolated Business staging
+on:
+  push:
+    branches: [feat/business-organizations-foundation]
+    paths: [.github/workflows/business-staging.yml, backend/wrangler.business.staging.json]
+permissions:
+  contents: read
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Run Business unit tests
+        run: find backend -maxdepth 1 -name 'business-*.test.mjs' ! -name '*emulator*' -print0 | xargs -0 node --test
+      - name: Deploy isolated staging worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PHOTOMARK_BUSINESS_WORKER_TOKEN }}
+        run: npx --yes wrangler@4.167.0 deploy --config backend/wrangler.business.staging.json
+      - name: Configure protected staging secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PHOTOMARK_BUSINESS_WORKER_TOKEN }}
+          SERVICE_JSON: ${{ secrets.PHOTOMARK_BUSINESS_GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VAULT_KEY: ${{ secrets.PHOTOMARK_BUSINESS_CREDENTIAL_KEY }}
+          MS_CLIENT: ${{ vars.MOMENTRA_MICROSOFT_CLIENT_ID }}
+          GOOGLE_CLIENT: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          const service = JSON.parse(process.env.SERVICE_JSON || '{}');
+          if (service.client_email !== 'photomark-business-api@photomark-business-2026.iam.gserviceaccount.com' || !service.private_key || !process.env.VAULT_KEY || !process.env.MS_CLIENT || !process.env.GOOGLE_CLIENT) throw Error('Missing or invalid Business configuration');
+          const values = { BUSINESS_OWNER_EMAIL: 'mrpires72@gmail.com', BUSINESS_SERVER_EMAIL: service.client_email, BUSINESS_SERVER_PRIVATE_KEY: service.private_key, BUSINESS_CREDENTIAL_KEY: process.env.VAULT_KEY, BUSINESS_MICROSOFT_CLIENT_ID: process.env.MS_CLIENT, BUSINESS_GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT, BUSINESS_PUBLIC_ORIGIN: 'https://photomark-business-staging.mrpires72.workers.dev' };
+          writeFileSync(`${process.env.RUNNER_TEMP}/business-secrets.json`, JSON.stringify(values), { mode: 0o600 });
+          NODE
+          npx --yes wrangler@4.167.0 secret bulk "$RUNNER_TEMP/business-secrets.json" --config backend/wrangler.business.staging.json
+          rm -f "$RUNNER_TEMP/business-secrets.json"
+      - name: Confirm unauthenticated access is rejected
+        run: |
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST https://photomark-business-staging.mrpires72.workers.dev/v1/organizations/mine)
+          test "$status" = 401 || { echo "Unexpected HTTP $status"; exit 1; }
+          echo 'Anonymous Business API request rejected.'

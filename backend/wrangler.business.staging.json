@@ -1,0 +1,12 @@
+{
+  "name": "photomark-business-staging",
+  "main": "business-worker.mjs",
+  "compatibility_date": "2026-11-23",
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "vars": { "PHOTOMARK_FIREBASE_PROJECT_ID": "photomark-business-2026" },
+  "ratelimits": [
+    { "name": "BUSINESS_IP_LIMIT", "namespace_id": "2026112491", "simple": { "limit": 120, "period": 60 } },
+    { "name": "BUSINESS_UID_LIMIT", "namespace_id": "2026112492", "simple": { "limit": 120, "period": 60 } }
+  ]
+}
