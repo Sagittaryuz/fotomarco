@@ -107,6 +107,10 @@ final class BusinessIdentity: ObservableObject {
         }
     }
 
+    func requireCurrentUser(_ expectedUserID: String) throws {
+        guard try auth().currentUser?.uid == expectedUserID else { throw IdentityError.signedOut }
+    }
+
     func sendPasswordReset(email: String) async throws {
         try await auth().sendPasswordReset(withEmail: email)
     }
