@@ -189,7 +189,7 @@ jobs:
           for page in 0 1 2 3; do
             xcrun simctl terminate "$MOMENTRA_SIM_ID" br.com.momentra.camera || true
             xcrun simctl launch "$MOMENTRA_SIM_ID" br.com.momentra.camera --onboarding-preview "$page"
-            sleep 3
+            sleep 10
             xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-onboarding-previews/onboarding-$page.png"
           done
       - uses: actions/upload-artifact@v4

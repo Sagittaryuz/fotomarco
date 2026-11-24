@@ -10,7 +10,7 @@ struct OnboardingActionButton: View {
     var body: some View {
         if #available(iOS 26, *) {
             Button(action: action) { Text(title).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8) }
-                .buttonStyle(.glassProminent).tint(.yellow)
+                .buttonStyle(.glassProminent).tint(.yellow).foregroundStyle(.black)
         } else {
             Button(action: action) { Text(title).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8) }
                 .buttonStyle(.borderedProminent).tint(.yellow).foregroundStyle(.black)

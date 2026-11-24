@@ -46,10 +46,13 @@ struct BusinessSignInView: View {
                             .onSubmit { performEmail() }
                             .padding(16).background(.white.opacity(0.12), in: Capsule())
                     }.foregroundStyle(.white)
-                    Button(registering ? "Cadastrar" : "Entrar") { performEmail() }
-                        .buttonStyle(.borderedProminent).tint(.yellow).foregroundStyle(.black)
-                        .disabled(busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty ||
-                                  (registering && fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    Button { performEmail() } label: {
+                        Text(registering ? "Cadastrar" : "Entrar")
+                            .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent).tint(.yellow)
+                    .foregroundStyle(canSubmit ? Color.black : Color.secondary)
+                    .disabled(!canSubmit)
                     if !registering {
                         Button("Esqueci minha senha") { resetPassword() }
                             .disabled(busy)
@@ -83,6 +86,11 @@ struct BusinessSignInView: View {
         .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK", role: .cancel) { message = nil }
         } message: { Text(message ?? "") }
+    }
+
+    private var canSubmit: Bool {
+        !busy && !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty &&
+            (!registering || !fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func resetPassword() {
