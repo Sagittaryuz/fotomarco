@@ -10,7 +10,7 @@ struct CaptureProfileTag: Codable, Equatable {
 struct CaptureProfileRecord: Codable {
     let captureID: UUID
     let profile: CaptureProfileTag
-    let captureDate: Date?
+    var captureDate: Date?
     var localAssetID: String?
     var cloudMediaIDs: [String]
     var latitude: Double? = nil
@@ -132,9 +132,16 @@ enum PhotoProfileIndex {
         guard data.count <= 16384, var record = try? JSONDecoder().decode(CaptureProfileRecord.self, from: data),
               record.captureID == captureID, record.captureDate.map({ $0 <= cutoff }) ?? true,
               record.organizationID == nil || record.organizationID == organizationID else { throw CocoaError(.fileWriteFileExists) }
-        if record.organizationID == organizationID { return }
-        record.organizationID = organizationID
-        record.organizationName = String(name.prefix(60))
+        let needsAssociation = record.organizationID != organizationID
+        let needsDate = record.captureDate == nil
+        guard needsAssociation || needsDate else { return }
+        if needsAssociation {
+            record.organizationID = organizationID
+            record.organizationName = String(name.prefix(60))
+        }
+        // A date obtained from the original capture metadata can repair older
+        // index records, including records already associated in a prior pass.
+        if needsDate { record.captureDate = captureDate }
         try save(record, to: file)
     }
 

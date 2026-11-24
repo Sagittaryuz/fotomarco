@@ -11,11 +11,30 @@ final class PhotoProfileIndexTests: XCTestCase {
         try PhotoProfileIndex.associateLegacyCapture(id, captureDate: Date(timeIntervalSince1970: 100), organizationID: org,
             name: "JMD Hamoa", before: Date(timeIntervalSince1970: 200), root: root)
         XCTAssertEqual(PhotoProfileIndex.load(root: root).captures[id]?.id, org)
+        XCTAssertEqual(PhotoProfileIndex.load(root: root).dates[id], Date(timeIntervalSince1970: 100))
         let data = try Data(contentsOf: root.appendingPathComponent("CaptureProfiles/\(id.uuidString).json"))
         XCTAssertEqual(try JSONDecoder().decode(CaptureProfileRecord.self, from: data).profile, old)
         XCTAssertThrowsError(try PhotoProfileIndex.associateLegacyCapture(id, captureDate: Date(timeIntervalSince1970: 100),
             organizationID: UUID(), name: "Outro", before: Date(timeIntervalSince1970: 200), root: root))
     }
+    func testExistingOrganizationAssociationCanRecoverMissingCaptureDate() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID(), org = UUID(), cutoff = Date(timeIntervalSince1970: 200)
+        try PhotoProfileIndex.register(captureID: id, profile: .init(id: UUID(), name: "Anterior"), root: root)
+        try PhotoProfileIndex.associateLegacyCapture(id, captureDate: Date(timeIntervalSince1970: 100), organizationID: org,
+            name: "JMD Hamoa", before: cutoff, root: root)
+        // Simulate an older already-associated index that did not retain its capture date.
+        let file = root.appendingPathComponent("CaptureProfiles/\(id.uuidString).json")
+        var record = try JSONDecoder().decode(CaptureProfileRecord.self, from: Data(contentsOf: file))
+        record.captureDate = nil
+        try JSONEncoder().encode(record).write(to: file)
+        try PhotoProfileIndex.associateLegacyCapture(id, captureDate: Date(timeIntervalSince1970: 100), organizationID: org,
+            name: "JMD Hamoa", before: cutoff, root: root)
+        XCTAssertEqual(PhotoProfileIndex.load(root: root).dates[id], Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(PhotoProfileIndex.load(root: root).captures[id]?.id, org)
+    }
+
     func testLegacyAssociationPreservesOriginalProfileAndSkipsNewCaptures() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
