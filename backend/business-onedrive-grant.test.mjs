@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { grantOneDriveMemberFolder } from './business-onedrive-grant.mjs';
 
-const config = { ownerToken: 'private-token', expectedOwnerId: 'owner', expectedDriveId: 'drive', expectedParentId: 'parent', folderId: 'folder', memberIdentityId: 'member', memberVerifiedEmail: 'member@example.com' };
+const config = { ownerToken: 'private-token', expectedOwnerId: 'owner', expectedDriveId: 'drive', expectedParentId: 'parent', folderId: 'folder', memberIdentityId: 'member', memberVerifiedEmail: 'member@example.com', verifyRecipientIdentity: async (email, id) => email === 'member@example.com' && id === 'member' };
 const entry = (id, roles) => ({ roles, grantedToV2: { user: { id } } });
 
 test('grants only the verified recipient and confirms the effective access', async () => {
@@ -26,6 +26,13 @@ test('grants only the verified recipient and confirms the effective access', asy
   assert.deepEqual(await grantOneDriveMemberFolder({ ...config, fetchImpl }), { driveId: 'drive', folderId: 'folder' });
   assert.deepEqual(await grantOneDriveMemberFolder({ ...config, fetchImpl }), { driveId: 'drive', folderId: 'folder' });
   assert.equal(invitations, 1);
+});
+
+test('never shares when recipient email and provider identity cannot be verified', async () => {
+  let contacted = false;
+  const fetchImpl = async () => { contacted = true; throw new Error('unexpected'); };
+  await assert.rejects(grantOneDriveMemberFolder({ ...config, verifyRecipientIdentity: async () => false, fetchImpl }), /unverified-recipient/);
+  assert.equal(contacted, false);
 });
 
 test('does not grant access when an unexpected recipient already has access', async () => {

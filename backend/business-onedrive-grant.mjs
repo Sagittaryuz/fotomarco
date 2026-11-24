@@ -2,9 +2,13 @@ import { verifyOneDriveMemberFolder } from './business-onedrive-verify.mjs';
 
 /** Caller must load membership from trusted storage and derive both member fields from
  * the same verified Microsoft identity. This function never accepts client-supplied tokens. */
-export async function grantOneDriveMemberFolder({ memberVerifiedEmail, ...configuration }) {
+export async function grantOneDriveMemberFolder({ memberVerifiedEmail, verifyRecipientIdentity, ...configuration }) {
   if (typeof memberVerifiedEmail !== 'string' || memberVerifiedEmail.length > 254 ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberVerifiedEmail)) throw new Error('invalid-member-identity');
+  // Identity resolution must be provider-verified server side before any sharing,
+  // not inferred from an email address supplied by the client.
+  if (typeof verifyRecipientIdentity !== 'function' ||
+      await verifyRecipientIdentity(memberVerifiedEmail, configuration.memberIdentityId) !== true) throw new Error('unverified-recipient');
   try {
     return await verifyOneDriveMemberFolder(configuration);
   } catch (error) {
