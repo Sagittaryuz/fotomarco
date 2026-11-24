@@ -25,6 +25,6 @@ export function microsoftBusinessCredential({ clientId, fetchImpl = fetch }) {
     const drive = await get('https://graph.microsoft.com/v1.0/me/drive');
     if (typeof user.id !== 'string' || !user.id || user.id.length > 256 || drive.owner?.user?.id !== user.id ||
         typeof drive.id !== 'string' || !drive.id || drive.id.length > 256) throw new Error('provider-identity-mismatch');
-    return { refreshToken: rotatedRefresh, providerAccountId: user.id, driveId: drive.id };
+    return { refreshToken: rotatedRefresh, providerAccountId: user.id, driveId: drive.id, accessToken: token.access_token };
   };
 }

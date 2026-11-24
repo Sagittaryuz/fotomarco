@@ -9,12 +9,13 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const profile = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/profile\/(read|publish)$/.exec(new URL(request.url).pathname);
       const settings = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/settings\/(read|update)$/.exec(new URL(request.url).pathname);
       const members = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/list$/.exec(new URL(request.url).pathname);
+      const removeMember = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/([A-Za-z0-9_-]{1,128})\/remove$/.exec(new URL(request.url).pathname);
       const connectOneDrive = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/connect$/.exec(new URL(request.url).pathname);
       const connectGoogleMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/gmail\/connect$/.exec(new URL(request.url).pathname);
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !connectGoogleMail) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !connectGoogleMail && !removeMember) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -52,6 +53,11 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply(400, { error: 'invalid-body' });
       const service = serviceForIdentity(identity);
       try {
+        if (removeMember) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          const result = await service.removeMember(null, removeMember[1], removeMember[2]);
+          return reply(result.complete ? 200 : 202, result);
+        }
         if (connectGoogleMail) {
           if (Object.keys(payload).length !== 1 || typeof payload.refreshToken !== 'string') return reply(400, { error: 'invalid-body' });
           return reply(200, await service.connectGoogleMail(null, connectGoogleMail[1], payload.refreshToken));
@@ -106,7 +112,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
         if (error?.message === 'storage-account-change-requires-migration') return reply(409, { error: 'storage-account-change-requires-migration' });
         if (error?.message === 'mailbox-mismatch') return reply(422, { error: 'mailbox-mismatch' });
         if (error?.message === 'mail-not-configured') return reply(412, { error: 'mail-not-configured' });
-        if (['invalid-request', 'invalid-invitation', 'already-member', 'forbidden', 'forbidden-or-full', 'full', 'not-found'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
+        if (['invalid-request', 'invalid-invitation', 'already-member', 'revocation-pending', 'forbidden', 'forbidden-or-full', 'full', 'not-found'].includes(error?.message)) return reply(403, { error: 'operation-not-allowed' });
         return reply(503, { error: 'unavailable' });
       }
     } catch { return reply(503, { error: 'unavailable' }); }

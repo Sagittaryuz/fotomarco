@@ -45,8 +45,13 @@ final class BusinessIdentity: ObservableObject {
         update(result.user)
     }
 
-    func register(email: String, password: String) async throws {
+    func register(email: String, password: String, fullName: String) async throws {
+        let name = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 160, name.rangeOfCharacter(from: .controlCharacters) == nil else { throw IdentityError.notConfigured }
         let result = try await auth().createUser(withEmail: email, password: password)
+        let changes = result.user.createProfileChangeRequest()
+        changes.displayName = name
+        try await changes.commitChanges()
         update(result.user)
         try await result.user.sendEmailVerification()
     }

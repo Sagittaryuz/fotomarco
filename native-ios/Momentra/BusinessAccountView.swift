@@ -40,8 +40,8 @@ struct BusinessAccountView: View {
                     }
                 }
             } else {
-                BusinessSignInView(submit: { email, password, registering in
-                    if registering { try await identity.register(email: email, password: password) }
+                BusinessSignInView(submit: { email, password, fullName, registering in
+                    if registering { try await identity.register(email: email, password: password, fullName: fullName) }
                     else { try await identity.signIn(email: email, password: password) }
                 }, signInWithProvider: { provider in
                     switch provider {

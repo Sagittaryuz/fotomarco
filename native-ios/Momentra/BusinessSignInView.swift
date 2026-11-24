@@ -3,11 +3,12 @@ import SwiftUI
 /// Authentication is injected so this screen never accesses storage-account credentials.
 struct BusinessSignInView: View {
     enum Provider { case google, microsoft }
-    let submit: (String, String, Bool) async throws -> Void
+    let submit: (String, String, String, Bool) async throws -> Void
     let signInWithProvider: (Provider) async throws -> Void
     let continueWithoutAccount: () -> Void
 
     @State private var email = ""
+    @State private var fullName = ""
     @State private var password = ""
     @State private var registering = false
     @State private var busy = false
@@ -27,6 +28,11 @@ struct BusinessSignInView: View {
                     Text(registering ? "Criar conta" : "Entrar")
                         .font(.title2.bold()).foregroundStyle(.white)
                     VStack(spacing: 12) {
+                        if registering {
+                            TextField("Nome e sobrenome", text: $fullName)
+                                .textContentType(.name).textInputAutocapitalization(.words)
+                                .padding(16).background(.white.opacity(0.12), in: Capsule())
+                        }
                         TextField("E-mail", text: $email)
                             .keyboardType(.emailAddress).textContentType(.username)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -41,7 +47,8 @@ struct BusinessSignInView: View {
                     }.foregroundStyle(.white)
                     Button(registering ? "Cadastrar" : "Entrar") { performEmail() }
                         .buttonStyle(.borderedProminent).tint(.yellow).foregroundStyle(.black)
-                        .disabled(busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
+                        .disabled(busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty ||
+                                  (registering && fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                     Button(registering ? "Já tenho conta" : "Criar uma conta") {
                         FotomarcoHaptics.play(.buttons); password = ""; registering.toggle()
                     }.disabled(busy)
@@ -66,14 +73,15 @@ struct BusinessSignInView: View {
     }
 
     private func performEmail() {
-        guard !busy, !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !password.isEmpty else { return }
+        guard !busy, !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !password.isEmpty,
+              !registering || !fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         FotomarcoHaptics.play(.buttons)
         let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let secret = password
         busy = true; focus = nil
         Task { @MainActor in
             defer { busy = false; password = "" }
-            do { try await submit(address, secret, registering) }
+            do { try await submit(address, secret, fullName, registering) }
             catch { message = "Confira seus dados e tente novamente." }
         }
     }

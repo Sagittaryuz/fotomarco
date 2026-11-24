@@ -15,7 +15,7 @@ function fixture(withMail = true) {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
     userOrganizations: async id => records.has(id) ? ['org'] : [],
-    activeMembers: async () => [...records.values()].filter(item => item.active),
+    activeMembers: async () => [...records.values()].filter(item => item.active || item.revocationState === 'pending'),
     occupiedSeats: async () => [...records.values()].filter(x => x.active).length,
     createInvitation: async value => { invites.set(value.id, value); },
     invitation: async (_, id) => invites.get(id),
@@ -55,6 +55,13 @@ test('a revoked inviter cannot admit a user and missing mail cannot create an in
   const missing = fixture(false);
   await assert.rejects(missing.service.invite({ uid: 'owner' }, 'org', 'person@example.com'), /mail-not-configured/);
   assert.equal(missing.invites.size, 0);
+});
+
+test('a member cannot rejoin while provider access revocation is pending', async () => {
+  const { service, records } = fixture();
+  await service.invite({ uid: 'owner' }, 'org', 'person@example.com');
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: false, revocationState: 'pending' });
+  await assert.rejects(service.accept({ uid: 'member', email: 'person@example.com', emailVerified: true }, 'org', 'invite'), /revocation-pending/);
 });
 
 test('an invitation is not sent when the sender changes during preparation', async () => {
@@ -116,9 +123,11 @@ test('only a manager may list active members and their verified email addresses'
   const { service, records } = fixture();
   records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true, email: 'person@example.com' });
   records.set('revoked', { organizationId: 'org', userId: 'revoked', role: 'member', active: false, email: 'old@example.com' });
+  records.set('pending', { organizationId: 'org', userId: 'pending', role: 'member', active: false, revocationState: 'pending' });
   const result = await service.listMembers({ uid: 'owner' }, 'org');
-  assert.deepEqual(result.members.map(item => item.userId).sort(), ['member', 'owner']);
+  assert.deepEqual(result.members.map(item => item.userId).sort(), ['member', 'owner', 'pending']);
   assert.equal(result.members.find(item => item.userId === 'member').email, 'person@example.com');
+  assert.equal(result.members.find(item => item.userId === 'pending').revocationPending, true);
   await assert.rejects(service.listMembers({ uid: 'member' }, 'org'), /forbidden/);
   await assert.rejects(service.listMembers({ uid: 'outsider' }, 'org'), /forbidden/);
 });

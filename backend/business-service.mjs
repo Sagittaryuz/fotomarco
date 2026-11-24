@@ -7,7 +7,7 @@ import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } fr
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleMail, prepareMailDelivery }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -16,19 +16,21 @@ export class BusinessService {
     this.prepareOneDrive = prepareOneDrive;
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMailDelivery = prepareMailDelivery;
+    this.revokeMemberStorage = revokeMemberStorage;
   }
 
   async createOrganization(token, name, contactEmail) {
     const identity = await this.verifyToken(token);
     const displayName = typeof name === 'string' ? name.trim() : '';
     const address = typeof contactEmail === 'string' ? contactEmail.trim().toLowerCase() : '';
-    if (!identity?.uid || identity.emailVerified !== true || !displayName || displayName.length > 160 ||
+    if (!identity?.uid || identity.emailVerified !== true || typeof identity.email !== 'string' || !identity.email || !displayName || displayName.length > 160 ||
         address.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new Error('invalid-request');
     if (typeof this.canCreateOrganization !== 'function' || await this.canCreateOrganization(identity) !== true) throw new Error('forbidden');
     const id = this.newId();
     if (typeof id !== 'string' || !id) throw new Error('invalid-id');
     return this.transaction(async tx => {
-      await tx.initializeOrganization({ id, ownerId: identity.uid, name: displayName, contactEmail: address });
+      await tx.initializeOrganization({ id, ownerId: identity.uid, name: displayName, contactEmail: address },
+        identity.email.trim().toLowerCase(), identity.displayName);
       return { organizationId: id };
     });
   }
@@ -129,10 +131,55 @@ export class BusinessService {
       const members = await tx.activeMembers(organizationId);
       if (!Array.isArray(members) || members.length > 500 || members.some(member =>
         member.organizationId !== organizationId || typeof member.userId !== 'string' ||
-        !member.userId || member.active !== true || !['owner', 'administrator', 'member'].includes(member.role))) {
+        !member.userId || (member.active !== true && !(member.active === false && member.revocationState === 'pending')) ||
+        !['owner', 'administrator', 'member'].includes(member.role)) || new Set(members.map(member => member.userId)).size !== members.length) {
         throw new Error('invalid-members');
       }
-      return { members: members.map(({ userId, role, email }) => ({ userId, role, ...(typeof email === 'string' ? { email } : {}) })) };
+      return { members: members.map(({ userId, role, email, displayName, revocationState }) => ({ userId, role,
+        ...(typeof email === 'string' ? { email } : {}), ...(typeof displayName === 'string' ? { displayName } : {}),
+        ...(revocationState === 'pending' ? { revocationPending: true } : {}) })) };
+    });
+  }
+
+  async removeMember(token, organizationId, targetId) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
+        typeof targetId !== 'string' || !targetId || targetId === identity.uid) throw new Error('invalid-request');
+    const marker = this.newId();
+    if (typeof marker !== 'string' || !marker) throw new Error('invalid-id');
+    const authorize = async tx => {
+      const org = await tx.organization(organizationId);
+      const actor = await tx.membership(organizationId, identity.uid);
+      const target = await tx.membership(organizationId, targetId);
+      if (!mayManage(identity, org, actor) || !target || target.organizationId !== organizationId ||
+          target.userId !== targetId || target.role === 'owner' || !['member', 'administrator'].includes(target.role) ||
+          (target.role === 'administrator' && actor.role !== 'owner')) throw new Error('forbidden');
+      return { org, target };
+    };
+    const started = await this.transaction(async tx => {
+      const { org, target } = await authorize(tx);
+      if (target.active === false && target.revocationState === 'complete') return { complete: true };
+      if (target.active === false && target.revocationState === 'pending' && target.revocationId) return { org, target };
+      if (target.active !== true) throw new Error('forbidden');
+      await tx.beginMemberRevocation(organizationId, targetId, marker);
+      return { org, target: { ...target, active: false, revocationState: 'pending', revocationId: marker } };
+    });
+    if (started.complete) return { complete: true };
+    if (started.target.storageStatus !== 'not-started') {
+      if (typeof this.revokeMemberStorage !== 'function') return { complete: false };
+      try {
+        if (await this.revokeMemberStorage({ organizationId, organization: started.org, member: started.target }) !== true) return { complete: false };
+      } catch { return { complete: false }; }
+    }
+    return this.transaction(async tx => {
+      const { target } = await authorize(tx);
+      if (target.active === false && target.revocationState === 'complete') return { complete: true };
+      if (target.active !== false || target.revocationState !== 'pending' || target.revocationId !== started.target.revocationId ||
+          target.storageStatus !== started.target.storageStatus) throw new Error('revocation-conflict');
+      const seats = await tx.occupiedSeats(organizationId);
+      if (!Number.isInteger(seats) || seats < 2) throw new Error('invalid-seat-counter');
+      await tx.completeMemberRevocation(organizationId, targetId);
+      return { complete: true };
     });
   }
 
@@ -201,10 +248,11 @@ export class BusinessService {
       if (!mayManage({ uid: invitation.invitedBy }, organization, inviter)) throw new Error('invalid-invitation');
       const existing = await tx.membership(organizationId, identity.uid);
       if (existing?.active) throw new Error('already-member');
+      if (existing?.revocationState === 'pending') throw new Error('revocation-pending');
       const seats = await tx.occupiedSeats(organizationId);
       if (!Number.isInteger(seats) || seats < 0 || seats >= 500) throw new Error('full');
-      await tx.addMember({ organizationId, userId: identity.uid, role: 'member', active: true,
-        email: identity.email.trim().toLowerCase() });
+      await tx.addMember({ organizationId, userId: identity.uid, role: 'member', active: true, storageStatus: 'not-started',
+        email: identity.email.trim().toLowerCase(), ...(identity.displayName ? { displayName: identity.displayName } : {}) });
       await tx.markInvitationAccepted(organizationId, invitationId, identity.uid);
       return { organizationId };
     });

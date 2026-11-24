@@ -16,7 +16,7 @@ function provider({ scope = 'openid Files.ReadWrite', driveOwner = 'owner' } = {
 test('validates the actual Microsoft owner and required folder access', async () => {
   const mock = provider();
   const exchange = microsoftBusinessCredential({ clientId, fetchImpl: mock.fetch });
-  assert.deepEqual(await exchange('refresh'), { refreshToken: 'rotated', providerAccountId: 'owner', driveId: 'drive' });
+  assert.deepEqual(await exchange('refresh'), { refreshToken: 'rotated', providerAccountId: 'owner', driveId: 'drive', accessToken: 'access' });
   assert.equal(mock.calls.length, 3);
   assert.equal(mock.calls.every(call => call.options.redirect === 'manual'), true);
   const narrow = provider({ scope: 'Files.ReadWrite.AppFolder' });

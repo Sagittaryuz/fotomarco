@@ -90,11 +90,13 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   const keys = await generateKeyPair('RS256');
   const seconds = 1800000000;
   const authenticate = createFirebaseVerifier({ projectId, now: () => seconds * 1000, resolveKey: async () => keys.publicKey });
+  let allowRevocation = false;
   const app = createBusinessApp({ projectId, authenticate, serverAccessToken: async () => 'owner', emulatorOrigin: origin,
     preAuthLimit: async () => true, rateLimit: async () => true, newId: () => 'invite', clock: () => 100,
     prepareOneDrive: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'account', driveId: 'drive' }),
     prepareGoogleMail: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted-mail', providerAccountId: 'google', email: 'org@example.com' }),
-    prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async () => {} }) });
+    prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async () => {} }),
+    revokeMemberStorage: async () => allowRevocation });
   const token = async (uid, email) => new SignJWT({ auth_time: seconds - 1, email, email_verified: true })
     .setProtectedHeader({ alg: 'RS256', kid: 'key1' }).setIssuer(`https://securetoken.google.com/${projectId}`)
     .setAudience(projectId).setSubject(uid).setIssuedAt(seconds - 1).setExpirationTime(seconds + 60).sign(keys.privateKey);
@@ -150,4 +152,23 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   assert.equal((await current.json()).layoutJSON, layoutJSON);
   const count = await fetch(`${root}/organizations/${org}/state/seats`, { headers: { authorization: 'Bearer owner' } });
   assert.equal((await count.json()).fields.count.integerValue, '2');
+  const removal = `/v1/organizations/${org}/members/member/remove`;
+  assert.equal((await app(req(removal, memberToken, {}))).status, 403);
+  assert.deepEqual(await (await app(req(removal, ownerToken, {}))).json(), { complete: true });
+  assert.deepEqual(await (await app(req(removal, ownerToken, {}))).json(), { complete: true });
+  const after = await fetch(`${root}/organizations/${org}/state/seats`, { headers: { authorization: 'Bearer owner' } });
+  assert.equal((await after.json()).fields.count.integerValue, '1');
+  const memberOrgs = await (await app(req('/v1/organizations/mine', memberToken, {}))).json();
+  assert.equal(memberOrgs.organizations.some(item => item.id === org), false);
+  await write(`organizations/${org}/members/member2`, { organizationId: s(org), userId: s('member2'), role: s('member'),
+    active: { booleanValue: true }, storageStatus: s('granted') });
+  await write(`organizations/${org}/state/seats`, { count: { integerValue: '2' } });
+  const pendingRemoval = `/v1/organizations/${org}/members/member2/remove`;
+  assert.equal((await app(req(pendingRemoval, ownerToken, {}))).status, 202);
+  const pendingMembers = (await (await app(req(membersPath, ownerToken, {}))).json()).members;
+  assert.equal(pendingMembers.find(item => item.userId === 'member2').revocationPending, true);
+  allowRevocation = true;
+  assert.deepEqual(await (await app(req(pendingRemoval, ownerToken, {}))).json(), { complete: true });
+  const finalCount = await fetch(`${root}/organizations/${org}/state/seats`, { headers: { authorization: 'Bearer owner' } });
+  assert.equal((await finalCount.json()).fields.count.integerValue, '1');
 });

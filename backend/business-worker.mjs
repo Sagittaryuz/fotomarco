@@ -6,6 +6,7 @@ import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
 import { invitationLanding } from './business-invitation-landing.mjs';
 import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 import { gmailInvitationSender } from './business-gmail-invitation.mjs';
+import { revokeOneDriveMemberFolder } from './business-onedrive-revoke.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -58,8 +59,37 @@ export function createBusinessWorker(env, overrides = {}) {
         accessToken: verified.accessToken, senderEmail: verified.email, recipientEmail, organizationName, organizationId: org, invitationId
       }) };
   });
+  const revokeMemberStorage = overrides.revokeMemberStorage ?? (async ({ organizationId, organization, member, transaction }) => {
+    if (member.storageStatus !== 'granted' || !member.oneDriveFolderId || !member.oneDriveParentId || !member.oneDriveMemberIdentityId) return false;
+    const saved = await transaction(tx => tx.oneDriveCredential(organizationId));
+    if (!saved) return false;
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const credential = await vault.open(organizationId, organization.ownerId, saved);
+    if (credential.providerAccountId !== saved.providerAccountId) throw new Error('provider-identity-mismatch');
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(credential.refreshToken);
+    if (verified.providerAccountId !== saved.providerAccountId || verified.driveId !== saved.driveId) throw new Error('provider-identity-mismatch');
+    const sealed = await vault.seal(organizationId, organization.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    await transaction(async tx => {
+      const currentOrg = await tx.organization(organizationId);
+      const currentMember = await tx.membership(organizationId, member.userId);
+      const currentCredential = await tx.oneDriveCredential(organizationId);
+      if (currentOrg?.ownerId !== organization.ownerId || currentMember?.revocationState !== 'pending' ||
+          currentMember.revocationId !== member.revocationId || currentMember.storageStatus !== 'granted' ||
+          currentMember.oneDriveFolderId !== member.oneDriveFolderId || currentMember.oneDriveParentId !== member.oneDriveParentId ||
+          currentMember.oneDriveMemberIdentityId !== member.oneDriveMemberIdentityId ||
+          currentCredential?.ciphertext !== saved.ciphertext || currentCredential?.iv !== saved.iv) throw new Error('revocation-conflict');
+      await tx.setOneDriveCredential(organizationId, { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId });
+    });
+    const result = await revokeOneDriveMemberFolder({ ownerToken: verified.accessToken, expectedOwnerId: verified.providerAccountId,
+      expectedDriveId: verified.driveId, expectedParentId: member.oneDriveParentId, folderId: member.oneDriveFolderId,
+      memberIdentityId: member.oneDriveMemberIdentityId, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    return result.revoked === true;
+  });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareGoogleMail, prepareMailDelivery,
+    prepareOneDrive, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),

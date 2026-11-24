@@ -32,7 +32,9 @@ export function createFirebaseVerifier({ projectId, fetchImpl = fetch, now = () 
     if (typeof payload.sub !== 'string' || payload.sub.length === 0 || payload.sub.length > 128 ||
         !Number.isSafeInteger(payload.iat) || payload.iat > seconds ||
         !Number.isSafeInteger(payload.auth_time) || payload.auth_time > seconds) throw new Error('invalid-token');
+    const displayName = typeof payload.name === 'string' ? payload.name.trim() : '';
     return { uid: payload.sub, email: typeof payload.email === 'string' ? payload.email : undefined,
-      emailVerified: payload.email_verified === true };
+      emailVerified: payload.email_verified === true,
+      ...(displayName && displayName.length <= 160 && !/[\x00-\x1f\x7f]/.test(displayName) ? { displayName } : {}) };
   };
 }

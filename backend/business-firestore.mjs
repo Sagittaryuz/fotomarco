@@ -51,11 +51,13 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       writes.push({ update: { name, fields: fields(data) }, ...(currentDocument ? { currentDocument } : {}) });
     }
     const tx = {
-      initializeOrganization: async organization => {
+      initializeOrganization: async (organization, ownerEmail, ownerName) => {
         const org = segment(organization.id);
         const owner = segment(organization.ownerId);
         put(path(org), organization, { exists: false });
-        put(path(org, 'members', owner), { organizationId: org, userId: owner, role: 'owner', active: true }, { exists: false });
+        put(path(org, 'members', owner), { organizationId: org, userId: owner, role: 'owner', active: true,
+          ...(typeof ownerEmail === 'string' && ownerEmail ? { email: ownerEmail } : {}),
+          ...(typeof ownerName === 'string' && ownerName ? { displayName: ownerName } : {}) }, { exists: false });
         put(`${root}/users/${owner}/organizations/${org}`, { organizationId: org }, { exists: false });
         put(path(org, 'state', 'seats'), { count: 1 }, { exists: false });
       },
@@ -81,18 +83,18 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       activeMembers: async org => {
         if (writes.length) throw new Error('read-after-write');
         const organization = segment(org);
-        const result = await send(`/organizations/${organization}:runQuery`, {
-          transaction: txId,
-          structuredQuery: { from: [{ collectionId: 'members' }],
-            where: { fieldFilter: { field: { fieldPath: 'active' }, op: 'EQUAL', value: { booleanValue: true } } },
-            limit: 501 }
-        });
-        if (!Array.isArray(result) || result.some(entry => !entry || entry.error || (!entry.document && !entry.readTime))) throw new Error('invalid-read');
-        return result.filter(entry => entry.document).map(entry => {
-          const member = decode(entry.document.fields);
-          if (entry.document.name !== path(organization, 'members', member.userId)) throw new Error('invalid-read');
-          return member;
-        });
+        const query = async (field, queryValue) => {
+          const result = await send(`/organizations/${organization}:runQuery`, { transaction: txId,
+            structuredQuery: { from: [{ collectionId: 'members' }],
+              where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: queryValue } }, limit: 501 } });
+          if (!Array.isArray(result) || result.some(entry => !entry || entry.error || (!entry.document && !entry.readTime))) throw new Error('invalid-read');
+          return result.filter(entry => entry.document).map(entry => {
+            const member = decode(entry.document.fields);
+            if (entry.document.name !== path(organization, 'members', member.userId)) throw new Error('invalid-read');
+            return member;
+          });
+        };
+        return [...await query('active', { booleanValue: true }), ...await query('revocationState', { stringValue: 'pending' })];
       },
       invitation: (org, id) => read(path(org, 'invitations', id)),
       asset: (org, id) => read(path(org, 'assets', id)),
@@ -124,6 +126,16 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         put(`${root}/users/${segment(member.userId)}/organizations/${segment(member.organizationId)}`,
           { organizationId: member.organizationId });
         put(path(member.organizationId, 'state', 'seats'), { count: seatState + 1 });
+      },
+      beginMemberRevocation: async (org, user, revocationId) => {
+        writes.push({ update: { name: path(org, 'members', user), fields: fields({ active: false, revocationState: 'pending', revocationId }) },
+          updateMask: { fieldPaths: ['active', 'revocationState', 'revocationId'] }, currentDocument: { exists: true } });
+      },
+      completeMemberRevocation: async (org, user) => {
+        if (seatState === undefined || activeOrg !== org || seatState < 2) throw new Error('invalid-seat-counter');
+        writes.push({ update: { name: path(org, 'members', user), fields: fields({ revocationState: 'complete' }) },
+          updateMask: { fieldPaths: ['revocationState'] }, currentDocument: { exists: true } });
+        put(path(org, 'state', 'seats'), { count: seatState - 1 });
       },
       markInvitationAccepted: async (org, id, userId) => {
         const name = path(org, 'invitations', id);

@@ -12,6 +12,7 @@ struct BusinessMembersView: View {
     @State private var email = ""
     @State private var sending = false
     @State private var notice: String?
+    @State private var removal: BusinessAPIClient.Member?
 
     var body: some View {
         List {
@@ -24,8 +25,19 @@ struct BusinessMembersView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(member.email ?? "Usuário da organização")
+                        Text(member.displayName ?? member.email ?? "Usuário da organização")
+                        if let displayName = member.displayName, !displayName.isEmpty, let email = member.email {
+                            Text(email).font(.caption).foregroundStyle(.secondary)
+                        }
                         Text(roleName(member.role)).font(.caption).foregroundStyle(.secondary)
+                        if member.revocationPending == true {
+                            Text("Remoção pendente no OneDrive").font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    if member.role != "owner" && member.userId != BusinessIdentity.shared.userID {
+                        Button(member.revocationPending == true ? "Concluir" : "Remover", role: .destructive) { removal = member }
                     }
                 }
             }
@@ -58,6 +70,13 @@ struct BusinessMembersView: View {
                 }
             }
         }
+        .confirmationDialog("Remover membro da organização?", isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }), titleVisibility: .visible) {
+            Button("Remover membro", role: .destructive) {
+                guard let target = removal else { return }
+                Task { await remove(target) }
+            }
+            Button("Cancelar", role: .cancel) { removal = nil }
+        } message: { Text("As fotos existentes serão preservadas. O acesso ao OneDrive será revogado quando possível.") }
         .alert("Convite", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK") { notice = nil }
         } message: { Text(notice ?? "") }
@@ -100,5 +119,16 @@ struct BusinessMembersView: View {
             showInvite = false
             notice = "Não foi possível confirmar o envio. Confira se a pessoa recebeu o e-mail antes de tentar novamente."
         }
+    }
+
+    @MainActor private func remove(_ member: BusinessAPIClient.Member) async {
+        defer { removal = nil }
+        do {
+            let token = try await accessToken()
+            let result = try await api.removeMember(organizationID: organizationID, userID: member.userId, token: token)
+            await load()
+            notice = result.complete ? "Membro removido. As fotos foram preservadas." :
+                "O acesso ao aplicativo foi suspenso. A revogação no OneDrive está pendente; tente concluir novamente."
+        } catch { notice = "Não foi possível remover o membro. Confira sua conexão e seu acesso." }
     }
 }
