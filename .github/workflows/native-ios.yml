@@ -191,6 +191,12 @@ jobs:
             xcrun simctl launch "$MOMENTRA_SIM_ID" br.com.momentra.camera --onboarding-preview "$page"
             sleep 10
             xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-onboarding-previews/onboarding-$page.png"
+            if [ "$page" = 1 ]; then
+              # Keep a second observation to distinguish slow simulator startup
+              # from an interface that remains blank after rendering settles.
+              sleep 30
+              xcrun simctl io "$MOMENTRA_SIM_ID" screenshot "$RUNNER_TEMP/Momentra-onboarding-previews/onboarding-1-delayed.png"
+            fi
           done
       - uses: actions/upload-artifact@v4
         if: success()
