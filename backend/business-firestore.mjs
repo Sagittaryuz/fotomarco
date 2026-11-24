@@ -157,6 +157,11 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
           updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
       },
+      setMemberProviderIdentity: async (org, uid, providerAccountId, email) => {
+        const data = { oneDrivePendingIdentityId: providerAccountId, oneDrivePendingEmail: email };
+        writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
       setGoogleMailCredential: async (org, record) => put(path(org, 'private', 'gmail'), record),
       publishProfile: async profile => {
         put(path(profile.organizationId, 'profiles', profile.versionId), profile, { exists: false });

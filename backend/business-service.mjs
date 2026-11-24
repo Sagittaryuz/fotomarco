@@ -8,7 +8,7 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, verifyMicrosoftMember, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -16,6 +16,7 @@ export class BusinessService {
     this.canCreateOrganization = canCreateOrganization;
     this.prepareOneDrive = prepareOneDrive;
     this.prepareOwnerFolder = prepareOwnerFolder;
+    this.verifyMicrosoftMember = verifyMicrosoftMember;
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMailDelivery = prepareMailDelivery;
     this.revokeMemberStorage = revokeMemberStorage;
@@ -264,6 +265,34 @@ export class BusinessService {
       if (current.storage.ciphertext === context.storage.ciphertext && current.storage.iv === context.storage.iv) await tx.setOneDriveCredential(organizationId, result.ownerCredential);
       await tx.setOwnerFolderReady(organizationId, identity.uid, result);
       return { ready: true };
+    });
+  }
+
+  async bindMicrosoftMember(token, organizationId, providerToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof organizationId !== 'string' || !organizationId ||
+        typeof providerToken !== 'string' || !providerToken || providerToken.length > 16384 ||
+        typeof this.verifyMicrosoftMember !== 'function') throw new Error('invalid-request');
+    const check = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member) || member.role !== 'member') throw new Error('forbidden');
+      return member;
+    };
+    await this.transaction(check);
+    const provider = await this.verifyMicrosoftMember(providerToken);
+    if (!provider || typeof provider.providerAccountId !== 'string' || !provider.providerAccountId ||
+        typeof provider.email !== 'string' || !provider.email) throw new Error('provider-identity-mismatch');
+    return this.transaction(async tx => {
+      const member = await check(tx);
+      if (member.storageStatus === 'granted') {
+        if (member.oneDriveMemberIdentityId !== provider.providerAccountId) throw new Error('storage-account-change-requires-migration');
+        return { linked: true };
+      }
+      if (member.storageStatus !== 'not-started') throw new Error('storage-configuration-changed');
+      if (member.oneDrivePendingIdentityId && (member.oneDrivePendingIdentityId !== provider.providerAccountId || member.oneDrivePendingEmail !== provider.email)) throw new Error('storage-account-change-requires-migration');
+      await tx.setMemberProviderIdentity(organizationId, identity.uid, provider.providerAccountId, provider.email);
+      return { linked: true };
     });
   }
 

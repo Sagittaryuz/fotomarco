@@ -11,6 +11,7 @@ import { verifyOneDriveMemberFolder } from './business-onedrive-verify.mjs';
 import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusinessUpload, sendBusinessUploadChunk, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
 import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 import { ensurePrivateMemberFolder } from './business-onedrive-folders.mjs';
+import { verifiedMicrosoftMember } from './business-microsoft-member.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -188,7 +189,8 @@ export function createBusinessWorker(env, overrides = {}) {
     return { state: 'uploading', nextOffset, ownerCredential };
   });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareOwnerFolder, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
+    prepareOneDrive, prepareOwnerFolder, verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
+    prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),
