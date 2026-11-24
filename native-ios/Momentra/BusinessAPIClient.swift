@@ -2,6 +2,11 @@ import Foundation
 
 /// The Firebase ID token is supplied by the sign-in session, never by a cloud archive account.
 struct BusinessAPIClient {
+    // Historical imports can rename existing cloud files. Keep them off unless a
+    // specifically validated release opts in; missing configuration fails closed.
+    static func legacyMigrationEnabled(info: [String: Any] = Bundle.main.infoDictionary ?? [:]) -> Bool {
+        info["PhotomarkLegacyMigrationEnabled"] as? Bool == true
+    }
     static func configured(bundle: Bundle = .main) -> BusinessAPIClient? {
         guard let raw = bundle.object(forInfoDictionaryKey: "PhotomarkBusinessAPI") as? String,
               !raw.contains("$"), let url = URL(string: raw) else { return nil }

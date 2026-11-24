@@ -10,7 +10,7 @@ enum BusinessProfileSync {
             var ownerOrganizationID: String?
             if identity.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mrpires72@gmail.com" {
                 ownerOrganizationID = try await api.ensureOwnerOrganization(token: token).organizationId
-                if let ownerOrganizationID, let orgID = UUID(uuidString: ownerOrganizationID) {
+                if BusinessAPIClient.legacyMigrationEnabled(), let ownerOrganizationID, let orgID = UUID(uuidString: ownerOrganizationID) {
                     // User requested the historical association on 23 Nov 2026 (São Paulo).
                     // The cutoff prevents captures subsequently made in Pessoal from being reassigned.
                     _ = try await Task.detached(priority: .utility) {

@@ -2,6 +2,12 @@ import XCTest
 @testable import Momentra
 
 final class BusinessAPIClientTests: XCTestCase {
+    func testHistoricalMigrationRequiresExplicitOptIn() {
+        XCTAssertFalse(BusinessAPIClient.legacyMigrationEnabled(info: [:]))
+        XCTAssertFalse(BusinessAPIClient.legacyMigrationEnabled(info: ["PhotomarkLegacyMigrationEnabled": false]))
+        XCTAssertFalse(BusinessAPIClient.legacyMigrationEnabled(info: ["PhotomarkLegacyMigrationEnabled": "true"]))
+        XCTAssertTrue(BusinessAPIClient.legacyMigrationEnabled(info: ["PhotomarkLegacyMigrationEnabled": true]))
+    }
     func testTeamPhotoListingAndThumbnailUseAuthenticatedBusinessEndpoint() async throws {
         let id = UUID().uuidString
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in

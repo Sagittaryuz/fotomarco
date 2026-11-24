@@ -26,7 +26,7 @@ import Foundation
     }
 
     func stageIfReady() async {
-        guard !running, let target, BusinessIdentity.shared.userID == target.userID,
+        guard BusinessAPIClient.legacyMigrationEnabled(), !running, let target, BusinessIdentity.shared.userID == target.userID,
               BusinessIdentity.shared.emailVerified else { return }
         running = true
         defer { running = false }
