@@ -8,6 +8,28 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 import { createBusinessWorker } from './business-worker.mjs';
 
+test('capture listing respects member ownership in the Firestore query flow', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business', org = randomUUID();
+  const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents`, s = stringValue => ({ stringValue });
+  const write = async (path, fields) => {
+    const res = await fetch(`${root}/${path}`, { method: 'PATCH', headers: { authorization: 'Bearer owner', 'content-type': 'application/json' }, body: JSON.stringify({ fields }) });
+    assert.equal(res.ok, true);
+  };
+  await write(`organizations/${org}`, { id: s(org), ownerId: s('owner') });
+  for (const uid of ['owner', 'alice', 'bob']) await write(`organizations/${org}/members/${uid}`,
+    { organizationId: s(org), userId: s(uid), role: s(uid === 'owner' ? 'owner' : 'member'), active: { booleanValue: true } });
+  for (const [index, author] of ['alice', 'bob'].entries()) {
+    const recordId = `photo-${index}-stamped`;
+    await write(`organizations/${org}/captures/${recordId}`, { organizationId: s(org), recordId: s(recordId), state: s('verified'), variant: s('stamped'),
+      captureId: s(`photo-${index}`), authorId: s(author), filename: s(`${index}.jpg`), createdAt: { integerValue: '1' }, byteCount: { integerValue: '10' } });
+  }
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const service = new BusinessService({ transaction, verifyToken: async token => token });
+  assert.equal((await service.listCaptures({ uid: 'owner', emailVerified: true }, org)).photos.length, 2);
+  assert.deepEqual((await service.listCaptures({ uid: 'alice', emailVerified: true }, org)).photos.map(p => p.authorId), ['alice']);
+  assert.deepEqual((await transaction(tx => tx.verifiedCapturesPage(org, 'photo-0-stamped', 200))).map(p => p.authorId), ['bob']);
+});
+
 test('member folder provisioning persists binding and ready state transactionally', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business', org = randomUUID();
   const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents`, s = stringValue => ({ stringValue });

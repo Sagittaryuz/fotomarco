@@ -99,6 +99,21 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       invitation: (org, id) => read(path(org, 'invitations', id)),
       asset: (org, id) => read(path(org, 'assets', id)),
       capture: (org, id) => read(path(org, 'captures', id)),
+      verifiedCapturesPage: async (org, cursor, limit) => {
+        if (writes.length || !Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('invalid-query');
+        const organization = segment(org);
+        const query = { from: [{ collectionId: 'captures' }],
+          where: { fieldFilter: { field: { fieldPath: 'state' }, op: 'EQUAL', value: { stringValue: 'verified' } } },
+          orderBy: [{ field: { fieldPath: '__name__' }, direction: 'ASCENDING' }], limit };
+        if (cursor) query.startAt = { before: false, values: [{ referenceValue: path(organization, 'captures', segment(cursor)) }] };
+        const result = await send(`/organizations/${organization}:runQuery`, { transaction: txId, structuredQuery: query });
+        if (!Array.isArray(result) || result.some(entry => !entry || entry.error || (!entry.document && !entry.readTime))) throw new Error('invalid-read');
+        return result.filter(entry => entry.document).map(entry => {
+          const record = decode(entry.document.fields);
+          if (entry.document.name !== path(organization, 'captures', segment(record.recordId))) throw new Error('invalid-read');
+          return record;
+        });
+      },
       oneDriveCredential: org => read(path(org, 'private', 'onedrive')),
       googleMailCredential: org => read(path(org, 'private', 'gmail')),
       latestProfile: async org => {

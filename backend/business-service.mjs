@@ -1,4 +1,4 @@
-import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } from './business-policy.mjs';
+import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile, mayAccessPhoto } from './business-policy.mjs';
 import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
 
 /**
@@ -74,6 +74,23 @@ export class BusinessService {
         }
       }
       return { organizations };
+    });
+  }
+
+  async listCaptures(token, organizationId, cursor = '') {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof organizationId !== 'string' || !organizationId ||
+        typeof cursor !== 'string' || (cursor && !/^[A-Za-z0-9_-]{1,128}$/.test(cursor))) throw new Error('invalid-request');
+    return this.transaction(async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member)) throw new Error('forbidden');
+      const records = await tx.verifiedCapturesPage(organizationId, cursor, 200);
+      if (!Array.isArray(records) || records.length > 200 || records.some(record => record.organizationId !== organizationId ||
+          record.state !== 'verified' || typeof record.recordId !== 'string' || !record.recordId)) throw new Error('invalid-read');
+      const photos = records.filter(record => record.variant === 'stamped' && mayAccessPhoto(identity, org, member, record, 'view'))
+        .map(({ captureId, authorId, filename, createdAt, byteCount }) => ({ captureId, authorId, filename, createdAt, byteCount }));
+      return { photos, nextCursor: records.length === 200 ? records[records.length - 1].recordId : '' };
     });
   }
 
