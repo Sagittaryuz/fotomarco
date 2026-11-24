@@ -6,6 +6,13 @@ actor BusinessArchiveDelivery {
     struct Summary { var pending = 0; var needsAttention = false }
     private var running = false
     private let chunkSize = 320 * 1024 * 10
+    private let requireUser: (String) async throws -> Void
+
+    init(requireUser: @escaping (String) async throws -> Void = { userID in
+        try await BusinessIdentity.shared.requireCurrentUser(userID)
+    }) {
+        self.requireUser = requireUser
+    }
 
     func drain() async -> Summary? {
         guard !running else { return nil }
@@ -70,7 +77,7 @@ actor BusinessArchiveDelivery {
                       api: BusinessAPIClient, token: String) async throws {
         guard try CloudFileFingerprint.read(file) == fingerprint else { throw CocoaError(.fileReadCorruptFile) }
         let org = item.organizationID.uuidString.lowercased()
-        try await BusinessIdentity.shared.requireCurrentUser(item.userID)
+        try await requireUser(item.userID)
         let reservation = try await api.reserveCapture(organizationID: org, captureID: item.id, filename: filename,
                                                        fingerprint: fingerprint, token: token)
         guard reservation.captureId.lowercased() == item.id.uuidString.lowercased(), reservation.variant == variant else { throw BusinessAPIClient.Failure.invalidResponse }
@@ -78,16 +85,16 @@ actor BusinessArchiveDelivery {
         var status: BusinessAPIClient.UploadStart
         switch reservation.state {
         case "reserved", "uploading":
-            try await BusinessIdentity.shared.requireCurrentUser(item.userID)
+            try await requireUser(item.userID)
             status = try await api.startCaptureUpload(organizationID: org, captureID: item.id, variant: variant, token: token)
         case "verifying": status = .init(state: "verifying", nextOffset: fingerprint.byteCount)
         default: throw BusinessAPIClient.Failure.unavailable
         }
         if status.state == "uncertain" {
-            try await BusinessIdentity.shared.requireCurrentUser(item.userID)
+            try await requireUser(item.userID)
             status = try await api.reconcileCapture(organizationID: org, captureID: item.id, variant: variant, token: token)
             if status.state == "reserved" {
-                try await BusinessIdentity.shared.requireCurrentUser(item.userID)
+                try await requireUser(item.userID)
                 status = try await api.startCaptureUpload(organizationID: org, captureID: item.id, variant: variant, token: token)
             }
         }
@@ -105,7 +112,7 @@ actor BusinessArchiveDelivery {
                 guard !part.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
                 data.append(part)
             }
-            try await BusinessIdentity.shared.requireCurrentUser(item.userID)
+            try await requireUser(item.userID)
             status = try await api.sendCaptureChunk(organizationID: org, captureID: item.id, variant: variant,
                                                      offset: offset, bytes: data, token: token)
             guard status.nextOffset > offset, status.nextOffset <= fingerprint.byteCount else { throw BusinessAPIClient.Failure.invalidResponse }
@@ -113,7 +120,7 @@ actor BusinessArchiveDelivery {
             await MainActor.run { CloudUploadProgress.shared.set(item.id, fraction: fraction) }
         }
         if status.state == "verifying" {
-            try await BusinessIdentity.shared.requireCurrentUser(item.userID)
+            try await requireUser(item.userID)
             status = try await api.verifyCapture(organizationID: org, captureID: item.id, variant: variant, token: token)
         }
         guard status.state == "verified", try CloudFileFingerprint.read(file) == fingerprint else { throw BusinessAPIClient.Failure.unavailable }

@@ -30,11 +30,33 @@ final class BusinessArchiveDeliveryTests: XCTestCase {
             return (Data(body.utf8), response)
         }
         do {
-            try await BusinessArchiveDelivery().send(item, variant: "stamped", filename: item.stampedName,
+            try await BusinessArchiveDelivery(requireUser: { userID in
+                guard userID == "user" else { throw BusinessIdentity.IdentityError.signedOut }
+            }).send(item, variant: "stamped", filename: item.stampedName,
                 file: journal.stampedURL(item), fingerprint: fingerprint, base: 0, total: fingerprint.byteCount, api: client, token: "token")
             XCTFail("An unverified upload must not be accepted")
         } catch BusinessAPIClient.Failure.unavailable { } catch { XCTFail("Unexpected error: \(error)") }
         XCTAssertFalse(try journal.read(id).stampedVerified)
         XCTAssertTrue(FileManager.default.fileExists(atPath: journal.stampedURL(item).path))
+        // The session changes after the upload starts; no chunk may be sent.
+        let guardState = SessionGuard()
+        do {
+            try await BusinessArchiveDelivery(requireUser: { id in try await guardState.check(id) }).send(
+                item, variant: "stamped", filename: item.stampedName, file: journal.stampedURL(item),
+                fingerprint: fingerprint, base: 0, total: fingerprint.byteCount, api: client, token: "token")
+            XCTFail("The upload must stop when the session changes")
+        } catch BusinessIdentity.IdentityError.signedOut { } catch { XCTFail("Unexpected error: \(error)") }
+        let checks = await guardState.checkCount()
+        XCTAssertEqual(checks, 3)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: journal.stampedURL(item).path))
     }
+}
+
+private actor SessionGuard {
+    private var calls = 0
+    func check(_ id: String) throws {
+        calls += 1
+        guard id == "user", calls < 3 else { throw BusinessIdentity.IdentityError.signedOut }
+    }
+    func checkCount() -> Int { calls }
 }
