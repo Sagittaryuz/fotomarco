@@ -22,6 +22,10 @@ struct BusinessMembersView: View {
             } label: { Label("Convidar", systemImage: "plus.circle.fill") }
             if busy && members.isEmpty { ProgressView("Carregando membros…") }
             ForEach(members) { member in
+                NavigationLink {
+                    BusinessTeamPhotosView(api: api, organizationID: organizationID, authorID: member.userId,
+                                           title: member.displayName ?? member.email ?? "Fotos do membro")
+                } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 3) {
@@ -34,6 +38,7 @@ struct BusinessMembersView: View {
                             Text("Remoção pendente no OneDrive").font(.caption).foregroundStyle(.orange)
                         }
                     }
+                }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if member.role != "owner" && member.userId != BusinessIdentity.shared.userID {

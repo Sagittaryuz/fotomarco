@@ -20,6 +20,16 @@ struct BusinessAPIClient {
     struct MemberRemoval: Decodable { let complete: Bool }
     struct CaptureReservation: Decodable { let captureId: String; let variant: String; let state: String }
     struct UploadStart: Decodable { let state: String; let nextOffset: Int64 }
+    struct TeamPhoto: Decodable, Identifiable {
+        let captureId: String
+        let authorId: String
+        let filename: String
+        let createdAt: Int64
+        let byteCount: Int64
+        var id: String { captureId }
+        var date: Date { Date(timeIntervalSince1970: Double(createdAt) / 1000) }
+    }
+    struct TeamPhotoPage: Decodable { let photos: [TeamPhoto]; let nextCursor: String }
     struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool? }
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
@@ -131,6 +141,20 @@ struct BusinessAPIClient {
         return try await post(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID.uuidString, variant, "reconcile"], values: [:], token: token)
     }
 
+    func listTeamPhotos(organizationID: String, cursor: String = "", token: String) async throws -> TeamPhotoPage {
+        if !cursor.isEmpty { _ = try Self.id(cursor) }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "captures", "list"], values: ["cursor": cursor], token: token)
+    }
+
+    func teamPhotoData(organizationID: String, captureID: String, thumbnail: Bool, token: String) async throws -> Data {
+        guard UUID(uuidString: captureID) != nil else { throw Failure.invalidRequest }
+        let (data, response) = try await send(path: ["v1", "organizations", try Self.id(organizationID), "captures", captureID,
+                                                    thumbnail ? "thumbnail" : "image"], body: Data("{}".utf8), token: token)
+        guard response.mimeType?.lowercased() == "image/jpeg", !data.isEmpty,
+              data.count <= (thumbnail ? 2_000_000 : 80_000_000) else { throw Failure.invalidResponse }
+        return data
+    }
+
     func accept(organizationID: String, invitationID: String, token: String) async throws -> OrganizationReceipt {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "invitations", try Self.id(invitationID), "accept"], values: [:], token: token)
     }
@@ -171,6 +195,14 @@ struct BusinessAPIClient {
 
     private func postBody<T: Decodable>(path: [String], body: Data, token: String, maxBodySize: Int = 98304,
                                          contentType: String = "application/json", uploadOffset: Int64? = nil) async throws -> T {
+        let (data, _) = try await send(path: path, body: body, token: token, maxBodySize: maxBodySize,
+                                       contentType: contentType, uploadOffset: uploadOffset)
+        guard data.count <= 400000 else { throw Failure.unavailable }
+        do { return try JSONDecoder().decode(T.self, from: data) } catch { throw Failure.invalidResponse }
+    }
+
+    private func send(path: [String], body: Data, token: String, maxBodySize: Int = 98304,
+                      contentType: String = "application/json", uploadOffset: Int64? = nil) async throws -> (Data, HTTPURLResponse) {
         guard !token.isEmpty, token.utf8.count <= 16384,
               token.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 46 || $0 == 95 }) else { throw Failure.invalidRequest }
         guard body.count <= maxBodySize else { throw Failure.invalidRequest }
@@ -190,8 +222,8 @@ struct BusinessAPIClient {
         if http.statusCode == 412 { throw Failure.mailNotConfigured }
         if http.statusCode == 422 { throw Failure.mailboxMismatch }
         if http.statusCode == 401 || http.statusCode == 403 { throw Failure.unauthorized }
-        guard (200...299).contains(http.statusCode), data.count <= 400000 else { throw Failure.unavailable }
-        do { return try JSONDecoder().decode(T.self, from: data) } catch { throw Failure.invalidResponse }
+        guard (200...299).contains(http.statusCode) else { throw Failure.unavailable }
+        return (data, http)
     }
 
     private static func id(_ value: String) throws -> String {

@@ -2,6 +2,24 @@ import XCTest
 @testable import Momentra
 
 final class BusinessAPIClientTests: XCTestCase {
+    func testTeamPhotoListingAndThumbnailUseAuthenticatedBusinessEndpoint() async throws {
+        let id = UUID().uuidString
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
+            let url = try XCTUnwrap(request.url)
+            if url.path.hasSuffix("/list") {
+                let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+                return (Data("{\"photos\":[{\"captureId\":\"\(id)\",\"authorId\":\"user\",\"filename\":\"photo.jpg\",\"createdAt\":1000,\"byteCount\":10}],\"nextCursor\":\"\"}".utf8), response)
+            }
+            XCTAssertTrue(url.path.hasSuffix("/thumbnail"))
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "image/jpeg"]))
+            return (Data([1, 2, 3]), response)
+        }
+        let page = try await client.listTeamPhotos(organizationID: "org", token: "token")
+        XCTAssertEqual(page.photos.first?.id, id)
+        let bytes = try await client.teamPhotoData(organizationID: "org", captureID: id, thumbnail: true, token: "token")
+        XCTAssertEqual(bytes, Data([1, 2, 3]))
+    }
     func testPhotoChunkIsSentOnlyToBusinessAPI() async throws {
         let id = UUID(), bytes = Data([1, 2, 3])
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in

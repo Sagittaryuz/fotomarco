@@ -58,6 +58,9 @@ struct BusinessOrganizationsView: View {
     @ViewBuilder private func organizationMenu(_ org: BusinessAPIClient.OrganizationSummary) -> some View {
         if let client {
             List {
+                NavigationLink("Fotos da organização") {
+                    BusinessTeamPhotosView(api: client, organizationID: org.id)
+                }
                 if org.role == "owner" || org.role == "administrator" {
                     NavigationLink("Carimbo da equipe") {
                         BusinessPublishProfileView(api: client, organizationID: org.id, profiles: profiles)
