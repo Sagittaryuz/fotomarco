@@ -8,6 +8,8 @@ struct BusinessOneDriveView: View {
     @State private var busy = false
     @State private var connected = false
     @State private var message: String?
+    @State private var pendingAccount: CloudArchiveOAuth.AuthorizedAccount?
+    @State private var confirmAccount = false
 
     var body: some View {
         Form {
@@ -26,6 +28,13 @@ struct BusinessOneDriveView: View {
         }
         .navigationTitle("Armazenamento")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Usar esta conta para a organização?", isPresented: $confirmAccount, titleVisibility: .visible) {
+            Button("Usar \(pendingAccount?.label ?? "esta conta")") { Task { await saveAccount() } }
+            Button("Cancelar", role: .cancel) { pendingAccount = nil }
+        } message: {
+            Text("As fotos da equipe serão associadas a esta conta OneDrive.")
+        }
+        .onDisappear { pendingAccount = nil }
         .alert("OneDrive da organização", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { message = nil }
         } message: { Text(message ?? "") }
@@ -40,6 +49,18 @@ struct BusinessOneDriveView: View {
         do {
             let configuration = try CloudArchiveOAuth.Configuration(provider: .oneDrive, forBusiness: true)
             let account = try await oauth.connect(configuration, presenting: window, knownDestinations: [])
+            pendingAccount = account
+            confirmAccount = true
+        } catch {
+            message = "Não foi possível conectar a conta. Confira as permissões e tente novamente."
+        }
+    }
+
+    @MainActor private func saveAccount() async {
+        guard !busy, let account = pendingAccount else { return }
+        busy = true
+        defer { busy = false; pendingAccount = nil }
+        do {
             let token = try await BusinessIdentity.shared.verifiedToken()
             let result = try await api.connectOneDrive(organizationID: organizationID,
                 refreshToken: account.credential.refreshToken, token: token)
