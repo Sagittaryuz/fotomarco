@@ -4,7 +4,8 @@ on:
   push:
     branches: [feat/business-organizations-foundation]
     paths: [.github/workflows/business-token-check.yml]
-permissions: {}
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -49,3 +50,11 @@ jobs:
           status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' -X POST https://photomark-business-staging.mrpires72.workers.dev/v1/organizations/mine)
           echo "Staging anonymous request HTTP $status"
           test "$status" = 401
+      - uses: actions/checkout@v4
+      - name: Test isolated identities against staging
+        env:
+          FIREBASE_CONFIG: ${{ secrets.PHOTOMARK_FIREBASE_IOS_CONFIG }}
+        run: |
+          export FIREBASE_API_KEY=$(python3 -c 'import os,plistlib; print(plistlib.loads(os.environ["FIREBASE_CONFIG"].encode())["API_KEY"])')
+          echo "::add-mask::$FIREBASE_API_KEY"
+          node backend/business-staging-identity-check.mjs
