@@ -871,6 +871,7 @@ struct CameraScreen: View {
         moreTrackedCamera
         .task(id: "\(businessIdentity.userID ?? "")-\(businessIdentity.emailVerified)") {
             stampProfiles.replaceOrganizationProfiles([])
+            BusinessLegacyImportCoordinator.shared.configure(organizationID: nil, userID: nil)
             await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity)
         }
         .onReceive(NotificationCenter.default.publisher(for: .businessOrganizationsDidChange)) { _ in
@@ -1400,6 +1401,7 @@ struct CameraScreen: View {
         lastCloudAttempt = Date()
         guard scenePhase == .active else { return }
         Task {
+            await BusinessLegacyImportCoordinator.shared.stageIfReady()
             async let personal = CloudArchiveDelivery.shared.drain()
             async let business = BusinessArchiveDelivery.shared.drain()
             let (personalStatus, businessStatus) = await (personal, business)

@@ -24,6 +24,7 @@ enum CloudBackgroundScheduler {
             let work = Task { @MainActor in
                 if #available(iOS 18.0, *) { await LockedCaptureImporter.importExisting() }
                 guard !Task.isCancelled else { completion.finish(false); return }
+                await BusinessLegacyImportCoordinator.shared.stageIfReady()
                 let summary = await CloudArchiveDelivery.shared.drain()
                 let business = await BusinessArchiveDelivery.shared.drain()
                 completion.finish(!Task.isCancelled && summary?.needsAttention == false && business?.needsAttention == false)
