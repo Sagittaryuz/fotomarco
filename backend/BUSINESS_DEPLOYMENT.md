@@ -13,3 +13,7 @@ The deployment must provision these environment values through protected secrets
 The configuration binds `BUSINESS_IP_LIMIT` and `BUSINESS_UID_LIMIT` separately. Cloudflare's limits are approximate and local to each location, not globally strict; account-wide free quotas are still shared. Confirm namespaces are unused and verify account limits before deployment. Do not enable request logging because request data and identifiers can be sensitive.
 
 Before enabling the app endpoint, confirm anonymous requests fail closed, use a synthetic test organization and two consenting test identities to verify OneDrive folder ACLs and revocation, and confirm private profile and photo access. Then configure the app's `PHOTOMARK_BUSINESS_API` for the signed candidate. Do not migrate or rename historical user photographs until the upgraded app, provider receipts, and rollback behavior have been verified. See `firestore.rules` for the deny-all client access policy: the backend's IAM permissions still need separate review.
+
+## Local validation (24 Nov 2026)
+
+The current business service passed the Firestore emulator suite (9 tests, no skips), including owner bootstrap idempotency, membership isolation, invitation acceptance, folder binding and capture reservation. The separate client security-rules emulator test denies anonymous and signed-in reads, writes and deletes. These tests use synthetic users and fake provider responses; they do not verify real Microsoft sharing, email delivery, deployment, or device behavior.
