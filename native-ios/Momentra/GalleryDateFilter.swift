@@ -10,50 +10,61 @@ struct GalleryDateFilter: Equatable {
     }
 }
 
+enum GalleryDateSelection {
+    static func limited(_ next: Set<DateComponents>, previous: Set<DateComponents>) -> Set<DateComponents> {
+        guard next.count > 2 else { return next }
+        return next.subtracting(previous)
+    }
+
+    static func filter(from selection: Set<DateComponents>, calendar: Calendar = .current) -> GalleryDateFilter? {
+        let days = selection.compactMap { calendar.date(from: $0) }.sorted()
+        guard !days.isEmpty, days.count == selection.count, days.count <= 2,
+              let first = days.first, let last = days.last else { return nil }
+        return GalleryDateFilter(start: first, end: last)
+    }
+}
+
 struct GalleryDateFilterView: View {
     @Binding var filter: GalleryDateFilter?
     @Environment(\.dismiss) private var dismiss
-    @State private var start: Date
-    @State private var end: Date
-    @State private var range: Bool
+    @State private var selection: Set<DateComponents>
 
     init(filter: Binding<GalleryDateFilter?>) {
         self._filter = filter
         let existing = filter.wrappedValue
-        self._start = State(initialValue: existing?.start ?? Date())
-        self._end = State(initialValue: existing?.end ?? Date())
-        self._range = State(initialValue: existing.map { !Calendar.current.isDate($0.start, inSameDayAs: $0.end) } ?? false)
+        let calendar = Calendar.current
+        let days = existing.map { [calendar.dateComponents([.year, .month, .day], from: $0.start),
+                                   calendar.dateComponents([.year, .month, .day], from: $0.end)] } ?? []
+        self._selection = State(initialValue: Set(days))
     }
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Período", selection: $range) {
-                    Text("Um dia").tag(false)
-                    Text("Intervalo").tag(true)
-                }.pickerStyle(.segmented)
-                Section(range ? "Data inicial" : "Selecione a data") {
-                    DatePicker("Data inicial", selection: $start, displayedComponents: .date)
-                        .datePickerStyle(.graphical).labelsHidden()
-                }
-                if range {
-                    Section("Data final") {
-                        DatePicker("Data final", selection: $end, in: Calendar.current.startOfDay(for: start)..., displayedComponents: .date)
-                            .datePickerStyle(.graphical).labelsHidden()
+                Section("Selecione um dia ou as duas datas do intervalo") {
+                    MultiDatePicker("Datas", selection: $selection).labelsHidden()
+                    if let selected = GalleryDateSelection.filter(from: selection) {
+                        let start = selected.start.formatted(date: .abbreviated, time: .omitted)
+                        let end = selected.end.formatted(date: .abbreviated, time: .omitted)
+                        Text(Calendar.current.isDate(selected.start, inSameDayAs: selected.end) ? start : "\(start) – \(end)")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
                 if filter != nil {
                     Button("Limpar filtro", role: .destructive) { filter = nil; dismiss() }
                 }
             }
-            .onChange(of: start) { _, value in if end < Calendar.current.startOfDay(for: value) { end = value } }
+            .onChange(of: selection) { old, new in
+                let limited = GalleryDateSelection.limited(new, previous: old)
+                if limited != new { selection = limited }
+            }
             .navigationTitle("Filtrar por data").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Aplicar") {
-                        filter = GalleryDateFilter(start: start, end: range ? max(start, end) : start)
+                        filter = GalleryDateSelection.filter(from: selection)
                         dismiss()
-                    }
+                    }.disabled(selection.isEmpty)
                 }
             }
         }.preferredColorScheme(.dark)

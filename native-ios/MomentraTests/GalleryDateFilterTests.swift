@@ -2,6 +2,20 @@ import XCTest
 @testable import Momentra
 
 final class GalleryDateFilterTests: XCTestCase {
+    func testOneDayTwoDaysAndStartingANewRange() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
+        let a = DateComponents(year: 2026, month: 11, day: 20)
+        let b = DateComponents(year: 2026, month: 11, day: 22)
+        let c = DateComponents(year: 2026, month: 11, day: 25)
+        let one = try XCTUnwrap(GalleryDateSelection.filter(from: [a], calendar: calendar))
+        XCTAssertTrue(calendar.isDate(one.start, inSameDayAs: one.end))
+        let interval = try XCTUnwrap(GalleryDateSelection.filter(from: [b, a], calendar: calendar))
+        XCTAssertEqual(calendar.component(.day, from: interval.start), 20)
+        XCTAssertEqual(calendar.component(.day, from: interval.end), 22)
+        XCTAssertEqual(GalleryDateSelection.limited([a, b, c], previous: [a, b]), [c])
+        XCTAssertNil(GalleryDateSelection.filter(from: [], calendar: calendar))
+    }
     func testInclusiveDaysAndMissingDates() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
