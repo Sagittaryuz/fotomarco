@@ -19,6 +19,28 @@ final class StampProfilesStoreTests: XCTestCase {
         super.tearDown()
     }
 
+    func testOrganizationProfileIsReadOnlyAndDoesNotOverwritePersonalSelection() {
+        let store = StampProfilesStore(defaults: defaults)
+        let personalID = store.selectedID
+        let organizationID = UUID()
+        let shared = StampProfile(name: "Empresa", note: "Original")
+        store.replaceOrganizationProfiles([(organizationID.uuidString, shared)])
+        store.select(organizationID)
+        XCTAssertTrue(store.isOrganizationSelected)
+        store.rename("Alterado")
+        store.setNote("Alterado")
+        XCTAssertEqual(store.selected.name, "Empresa")
+        XCTAssertEqual(store.selected.note, "Original")
+        XCTAssertEqual(StampProfilesStore(defaults: defaults).selectedID, personalID)
+        let draft = StampProfilesStore(draftOf: store)
+        draft.rename("Pessoal editado")
+        store.applyDraft(draft)
+        XCTAssertEqual(store.selectedID, organizationID)
+        store.replaceOrganizationProfiles([])
+        XCTAssertEqual(store.selectedID, personalID)
+        XCTAssertEqual(store.selected.name, "Pessoal editado")
+    }
+
     func testDraftChangesPersistOnlyAfterSaving() {
         let original = StampProfilesStore(defaults: defaults)
         let initial = original.selected

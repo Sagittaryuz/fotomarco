@@ -29,8 +29,10 @@ final class StampProfilesStore: ObservableObject {
     private let startupKey = "native.stamp.startupProfile.v1"
 
     @Published private(set) var profiles: [StampProfile] { didSet { persist() } }
+    /// Organization profiles are separately held immutable snapshots, never personal drafts.
+    @Published private(set) var organizationProfiles: [StampProfile] = []
     @Published private(set) var selectedID: UUID {
-        didSet { if !isDraft { defaults.set(selectedID.uuidString, forKey: selectedKey) } }
+        didSet { if !isDraft && profiles.contains(where: { $0.id == selectedID }) { defaults.set(selectedID.uuidString, forKey: selectedKey) } }
     }
     /// "last" or a profile UUID; only applied on a new app launch.
     @Published private(set) var startupSelection: String {
@@ -79,20 +81,44 @@ final class StampProfilesStore: ObservableObject {
         defaults = source.defaults
         isDraft = true
         profiles = source.profiles
-        selectedID = source.selectedID
+        let previous = source.defaults.string(forKey: "native.stamp.selectedLayoutProfile.v1").flatMap(UUID.init(uuidString:))
+        selectedID = source.profiles.contains(where: { $0.id == source.selectedID }) ? source.selectedID :
+            (source.profiles.first(where: { $0.id == previous })?.id ?? source.profiles[0].id)
         startupSelection = source.startupSelection
     }
 
     func applyDraft(_ draft: StampProfilesStore) {
+        let keepOrganizationSelection = isOrganizationSelected
         profiles = draft.profiles
-        selectedID = draft.selectedID
+        if !keepOrganizationSelection { selectedID = draft.selectedID }
         startupSelection = draft.startupSelection
     }
 
-    var selected: StampProfile { profiles.first(where: { $0.id == selectedID }) ?? profiles[0] }
+    var availableProfiles: [StampProfile] { profiles + organizationProfiles }
+    var isOrganizationSelected: Bool { organizationProfiles.contains(where: { $0.id == selectedID }) }
+    var selected: StampProfile { availableProfiles.first(where: { $0.id == selectedID }) ?? profiles[0] }
+
+    /// The organization ID is the stable ID of its read-only profile. Personal
+    /// IDs are never replaced and snapshots are never written into personal keys.
+    func replaceOrganizationProfiles(_ snapshots: [(organizationID: String, profile: StampProfile)]) {
+        var ids = Set(profiles.map(\.id))
+        var result: [StampProfile] = []
+        for snapshot in snapshots {
+            guard let id = UUID(uuidString: snapshot.organizationID), ids.insert(id).inserted else { continue }
+            var profile = snapshot.profile
+            profile.id = id
+            result.append(profile)
+        }
+        let wasOrganization = isOrganizationSelected
+        organizationProfiles = result
+        if wasOrganization && !result.contains(where: { $0.id == selectedID }) {
+            let previous = defaults.string(forKey: selectedKey).flatMap(UUID.init(uuidString:))
+            selectedID = profiles.first(where: { $0.id == previous })?.id ?? profiles[0].id
+        }
+    }
 
     func select(_ id: UUID) {
-        guard profiles.contains(where: { $0.id == id }) else { return }
+        guard availableProfiles.contains(where: { $0.id == id }) else { return }
         selectedID = id
     }
 

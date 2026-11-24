@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BusinessOrganizationsView: View {
+    @ObservedObject var profiles: StampProfilesStore
     @ObservedObject private var identity = BusinessIdentity.shared
     @State private var organizations: [BusinessAPIClient.OrganizationSummary] = []
     @State private var busy = false
@@ -10,9 +11,7 @@ struct BusinessOrganizationsView: View {
     @State private var organizationEmail = ""
 
     private var client: BusinessAPIClient? {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "PhotomarkBusinessAPI") as? String,
-              let url = URL(string: raw), !raw.contains("$") else { return nil }
-        return try? BusinessAPIClient(endpoint: url)
+        BusinessAPIClient.configured()
     }
 
     var body: some View {
@@ -60,6 +59,9 @@ struct BusinessOrganizationsView: View {
         if let client {
             List {
                 if org.role == "owner" || org.role == "administrator" {
+                    NavigationLink("Carimbo da equipe") {
+                        BusinessPublishProfileView(api: client, organizationID: org.id, profiles: profiles)
+                    }
                     NavigationLink("Dados da organização") {
                         BusinessOrganizationSettingsView(api: client, organizationID: org.id,
                             accessToken: { try await identity.verifiedToken() }, didSave: { Task { await load() } })
@@ -69,7 +71,7 @@ struct BusinessOrganizationsView: View {
                             accessToken: { try await identity.verifiedToken() })
                     }
                 }
-                Text("Perfil da organização").foregroundStyle(.secondary)
+                Text("O carimbo da equipe pode ser selecionado na câmera.").font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle(org.name)
         }
     }
@@ -98,7 +100,10 @@ struct BusinessOrganizationsView: View {
         guard identity.userID != nil, identity.emailVerified, let client, !busy else { return }
         busy = true
         defer { busy = false }
-        do { organizations = try await client.myOrganizations(token: identity.verifiedToken()).organizations }
+        do {
+            organizations = try await client.myOrganizations(token: identity.verifiedToken()).organizations
+            await BusinessProfileSync.refresh(into: profiles)
+        }
         catch { message = "Não foi possível carregar as organizações. Confira sua conexão e seu acesso." }
     }
 

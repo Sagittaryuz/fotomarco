@@ -98,6 +98,7 @@ struct CameraScreen: View {
     @StateObject private var updates = UpdateService()
     @StateObject private var directUpdate = DirectUpdateAccess.shared
     @StateObject private var stampProfiles = StampProfilesStore()
+    @ObservedObject private var businessIdentity = BusinessIdentity.shared
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
     @AppStorage("native.camera.scanQR") private var scanQR = true
@@ -143,6 +144,7 @@ struct CameraScreen: View {
     @State private var selectedRecognizedText: RecognizedTextSelection?
     @State private var showSettings = false
     @State private var stampEditorSection: StampLayoutEditor.Element?
+    @State private var showOrganizationReadOnly = false
     @State private var showUpdateMessage = false
     @State private var showSupportPanel = false
     @State private var showOriginals = false
@@ -487,7 +489,7 @@ struct CameraScreen: View {
                                 get: { stampProfiles.selectedID },
                                 set: { stampProfiles.select($0) }
                             )) {
-                                ForEach(stampProfiles.profiles) { item in
+                                ForEach(stampProfiles.availableProfiles) { item in
                                     Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id)
                                 }
                             }
@@ -856,10 +858,19 @@ struct CameraScreen: View {
 
     var body: some View {
         moreTrackedCamera
+        .task(id: "\(businessIdentity.userID ?? "")-\(businessIdentity.emailVerified)") {
+            stampProfiles.replaceOrganizationProfiles([])
+            await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity)
+        }
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .sheet(item: $cameraShare) { batch in
             batch.sheet {}
+        }
+        .alert("Carimbo da organização", isPresented: $showOrganizationReadOnly) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("O carimbo da organização é definido pelo administrador.")
         }
         .alert("Atualização do Photomark", isPresented: $showUpdateMessage) {
             Button("OK", role: .cancel) {}
@@ -1057,7 +1068,7 @@ struct CameraScreen: View {
                     Section("Conta e organização") {
                         NavigationLink("Conta Business") { BusinessAccountView() }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        NavigationLink("Gerenciar organização") { BusinessOrganizationsView() }
+                        NavigationLink("Gerenciar organização") { BusinessOrganizationsView(profiles: stampProfiles) }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     archiveSettingsSection
@@ -1411,6 +1422,7 @@ struct CameraScreen: View {
 
     private func openStampEditor(_ section: StampLayoutEditor.Element) {
         FotomarcoHaptics.play(.buttons)
+        guard !stampProfiles.isOrganizationSelected else { showOrganizationReadOnly = true; return }
         stampEditorSection = section
     }
 

@@ -2,6 +2,11 @@ import Foundation
 
 /// The Firebase ID token is supplied by the sign-in session, never by a cloud archive account.
 struct BusinessAPIClient {
+    static func configured(bundle: Bundle = .main) -> BusinessAPIClient? {
+        guard let raw = bundle.object(forInfoDictionaryKey: "PhotomarkBusinessAPI") as? String,
+              !raw.contains("$"), let url = URL(string: raw) else { return nil }
+        return try? BusinessAPIClient(endpoint: url)
+    }
     enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse }
     struct OrganizationReceipt: Decodable { let organizationId: String }
     struct InvitationReceipt: Decodable { let id: String; let expiresAt: Int64 }

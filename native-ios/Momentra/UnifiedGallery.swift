@@ -213,7 +213,7 @@ struct OriginalsView: View {
         .onChange(of: cloudFavorites) { _, _ in if tab == .favorites { updateProjection() } }
         .fullScreenCover(item: $detail) { item in
             MomentraGalleryDetail(items: detailItems(fallback: item), initial: item,
-                                  profiles: stampProfiles.profiles, activeProfileID: stampProfiles.selected.id,
+                                  profiles: stampProfiles.availableProfiles, activeProfileID: stampProfiles.selected.id,
                                   isFavorite: isFavorite, favorite: toggleFavorite,
                                   onTrash: { item in
                                       local.removeAll { $0.storageID == item.storageID }
@@ -320,7 +320,7 @@ struct OriginalsView: View {
     private var profileMenu: some View {
         Menu {
             Button { FotomarcoHaptics.play(.gallery); profile = nil } label: { menuLabel("Todos os perfis", active: profile == nil) }
-            ForEach(stampProfiles.profiles) { item in
+            ForEach(stampProfiles.availableProfiles) { item in
                 Button { FotomarcoHaptics.play(.gallery); profile = item.id } label: {
                     menuLabel(item.name.isEmpty ? "Sem nome" : item.name, active: profile == item.id)
                 }
