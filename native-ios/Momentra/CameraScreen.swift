@@ -491,8 +491,17 @@ struct CameraScreen: View {
                                 get: { stampProfiles.selectedID },
                                 set: { stampProfiles.select($0) }
                             )) {
-                                ForEach(stampProfiles.availableProfiles) { item in
-                                    Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id)
+                                Section("Espaço pessoal") {
+                                    ForEach(stampProfiles.profiles) { item in
+                                        Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id)
+                                    }
+                                }
+                                if !stampProfiles.organizationProfiles.isEmpty {
+                                    Section("Organizações") {
+                                        ForEach(stampProfiles.organizationProfiles) { item in
+                                            Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id)
+                                        }
+                                    }
                                 }
                             }
                             .pickerStyle(.inline)
@@ -506,7 +515,7 @@ struct CameraScreen: View {
                                 .contentShape(Rectangle())
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
-                        .accessibilityLabel("Escolher perfil do carimbo")
+                        .accessibilityLabel("Escolher espaço e perfil")
                         .accessibilityValue(stampProfiles.selected.name.isEmpty ? "Sem nome" : stampProfiles.selected.name)
                         .opacity(camera.isRecording ? 0 : 1)
                         Spacer(minLength: 0)

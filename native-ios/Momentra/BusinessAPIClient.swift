@@ -30,7 +30,7 @@ struct BusinessAPIClient {
         var date: Date { Date(timeIntervalSince1970: Double(createdAt) / 1000) }
     }
     struct TeamPhotoPage: Decodable { let photos: [TeamPhoto]; let nextCursor: String }
-    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool? }
+    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool?; let profileReady: Bool? }
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
     struct FolderProvisioning: Decodable { let ready: Bool }
@@ -68,6 +68,10 @@ struct BusinessAPIClient {
 
     func myOrganizations(token: String) async throws -> OrganizationList {
         try await post(path: ["v1", "organizations", "mine"], values: [:], token: token)
+    }
+
+    func ensureOwnerOrganization(token: String) async throws -> OrganizationReceipt {
+        try await post(path: ["v1", "organizations", "bootstrap-owner"], values: [:], token: token)
     }
 
     func connectOneDrive(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
@@ -163,8 +167,8 @@ struct BusinessAPIClient {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "profile", "read"], values: [:], token: token)
     }
 
-    func publishProfile(organizationID: String, layoutJSON: String, token: String) async throws -> VersionReceipt {
-        try await post(path: ["v1", "organizations", try Self.id(organizationID), "profile", "publish"], values: ["layoutJSON": layoutJSON], token: token)
+    func publishProfile(organizationID: String, layoutJSON: String, token: String, onlyIfAbsent: Bool = false) async throws -> VersionReceipt {
+        try await post(path: ["v1", "organizations", try Self.id(organizationID), "profile", onlyIfAbsent ? "initialize" : "publish"], values: ["layoutJSON": layoutJSON], token: token)
     }
 
     func uploadAsset(organizationID: String, mimeType: String, imageData: Data, token: String) async throws -> AssetReceipt {

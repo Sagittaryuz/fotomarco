@@ -21,7 +21,8 @@ struct StampProfile: Identifiable, Codable, Equatable {
 /// Legacy keys remain intact for recovery and for older app versions.
 @MainActor
 final class StampProfilesStore: ObservableObject {
-    static let maximumProfiles = 5
+    // The personal default must not displace any of the five existing profiles.
+    static let maximumProfiles = 6
     private let defaults: UserDefaults
     private let isDraft: Bool
     private let profilesKey = "native.stamp.layoutProfiles.v1"
@@ -46,6 +47,7 @@ final class StampProfilesStore: ObservableObject {
         let selectionKey = "native.stamp.selectedLayoutProfile.v1"
         let startupKey = "native.stamp.startupProfile.v1"
         let migrationKey = "native.stamp.profileSettingsMigrated.v1"
+        let personalDefaultKey = "native.stamp.personalDefaultCreated.v1"
         let data = defaults.data(forKey: profileKey)
         var loaded: [StampProfile]
         if let data, let saved = try? JSONDecoder().decode([StampProfile].self, from: data),
@@ -61,8 +63,25 @@ final class StampProfilesStore: ObservableObject {
                 defaults.set(data, forKey: profileKey + ".recovery")
             }
         }
+        let hasLegacyData = data != nil || defaults.object(forKey: "native.profile") != nil
+        let previousFirstID = loaded[0].id
+        if !defaults.bool(forKey: personalDefaultKey) {
+            if let index = loaded.firstIndex(where: { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare("Pessoal") == .orderedSame }) {
+                let existing = loaded.remove(at: index)
+                loaded.insert(existing, at: 0)
+            } else {
+                var layout = StampLayout()
+                layout.mode = .separate
+                layout.showsLogo = false
+                layout.showsMap = true
+                layout.showsInformation = true
+                layout.map = StampPoint(x: 0.15, y: 0.88)
+                let personal = StampProfile(name: "Pessoal", layout: layout)
+                if hasLegacyData { loaded.insert(personal, at: 0) } else { loaded = [personal] }
+            }
+        }
         let last = defaults.string(forKey: selectionKey).flatMap(UUID.init(uuidString:))
-        let lastID = loaded.first(where: { $0.id == last })?.id ?? loaded[0].id
+        let lastID = loaded.first(where: { $0.id == last })?.id ?? (hasLegacyData ? previousFirstID : loaded[0].id)
         if !defaults.bool(forKey: migrationKey), let index = loaded.firstIndex(where: { $0.id == lastID }) {
             Self.importLegacyAppearance(into: &loaded[index].layout, defaults: defaults)
             defaults.set(true, forKey: migrationKey)
@@ -73,6 +92,7 @@ final class StampProfilesStore: ObservableObject {
         self.startupSelection = fixed?.uuidString ?? "last"
         self.selectedID = fixed ?? lastID
         defaults.set(try? JSONEncoder().encode(loaded), forKey: profileKey)
+        defaults.set(true, forKey: personalDefaultKey)
         defaults.set(self.selectedID.uuidString, forKey: selectionKey)
         defaults.set(self.startupSelection, forKey: startupKey)
     }

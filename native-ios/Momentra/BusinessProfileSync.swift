@@ -7,13 +7,24 @@ enum BusinessProfileSync {
         guard let userID = identity.userID, identity.emailVerified, let api = BusinessAPIClient.configured() else { return }
         do {
             let token = try await identity.verifiedToken()
+            var ownerOrganizationID: String?
+            if identity.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mrpires72@gmail.com" {
+                ownerOrganizationID = try await api.ensureOwnerOrganization(token: token).organizationId
+            }
             let organizations = try await api.myOrganizations(token: token).organizations
             var snapshots: [(organizationID: String, profile: StampProfile)] = []
             let transfer = BusinessProfileTransfer(api: api)
+            if let id = ownerOrganizationID, let ownerOrg = organizations.first(where: { $0.id == id && $0.role == "owner" }), ownerOrg.profileReady == false {
+                let candidate = store.profiles.first(where: { $0.name.localizedCaseInsensitiveContains("hamoa") }) ??
+                    store.profiles.first(where: { $0.id == store.selectedID && $0.name.localizedCaseInsensitiveCompare("Pessoal") != .orderedSame }) ??
+                    store.profiles.first(where: { $0.name.localizedCaseInsensitiveCompare("Pessoal") != .orderedSame })
+                if let candidate { _ = try await transfer.publish(candidate, organizationID: id, token: token, onlyIfAbsent: true) }
+            }
             for organization in organizations where organization.captureReady == true {
                 guard !Task.isCancelled, identity.userID == userID else { return }
                 do {
-                    let profile = try await transfer.fetch(organizationID: organization.id, token: token)
+                    var profile = try await transfer.fetch(organizationID: organization.id, token: token)
+                    profile.name = organization.name
                     snapshots.append((organization.id, profile))
                 } catch BusinessAPIClient.Failure.unauthorized {
                     // A denied profile is not retained as an active organization selection.

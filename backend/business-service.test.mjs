@@ -171,6 +171,15 @@ test('only managers publish layouts; active members can read but not change them
   await assert.rejects(service.publishProfile({ uid: 'owner' }, 'org', 'invalid'), /invalid-request/);
 });
 
+test('initializing a layout never overwrites an existing organization layout', async () => {
+  const { service, records } = fixture();
+  records.set('admin', { organizationId: 'org', userId: 'admin', role: 'administrator', active: true });
+  await service.publishProfile({ uid: 'owner' }, 'org', '{"title":"existing"}');
+  await service.publishProfile({ uid: 'owner' }, 'org', '{"title":"replacement"}', true);
+  assert.equal((await service.readProfile({ uid: 'owner' }, 'org')).layoutJSON, '{"title":"existing"}');
+  await assert.rejects(service.publishProfile({ uid: 'admin' }, 'org', '{}', true), /forbidden/);
+});
+
 test('a nonmember cannot invite; unverified or mismatched recipients cannot accept', async () => {
   const { service } = fixture();
   await assert.rejects(service.invite({ uid: 'stranger' }, 'org', 'a@example.com'), /forbidden-or-full/);

@@ -9,7 +9,7 @@ struct BusinessProfileTransfer {
     private static let prefix = "business-asset:"
     let api: BusinessAPIClient
 
-    func publish(_ personal: StampProfile, organizationID: String, token: String) async throws -> String {
+    func publish(_ personal: StampProfile, organizationID: String, token: String, onlyIfAbsent: Bool = false) async throws -> String {
         var profile = personal
         var uploaded: [String: String] = [:]
         func upload(_ name: String) async throws -> String {
@@ -33,7 +33,7 @@ struct BusinessProfileTransfer {
         }
         let data = try JSONEncoder().encode(profile)
         guard let json = String(data: data, encoding: .utf8) else { throw Failure.invalidProfile }
-        return try await api.publishProfile(organizationID: organizationID, layoutJSON: json, token: token).versionId
+        return try await api.publishProfile(organizationID: organizationID, layoutJSON: json, token: token, onlyIfAbsent: onlyIfAbsent).versionId
     }
 
     func fetch(organizationID: String, token: String) async throws -> StampProfile {

@@ -8,6 +8,20 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 import { createBusinessWorker } from './business-worker.mjs';
 
+test('authorized owner bootstrap creates JMD Hamoa once and preserves it', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const uid = `owner-${randomUUID()}`, identity = { uid, email: 'owner@example.com', emailVerified: true };
+  const service = new BusinessService({ transaction, verifyToken: async token => token,
+    canCreateOrganization: async user => user.email === 'owner@example.com' });
+  const first = await service.ensureOwnerOrganization(identity);
+  const second = await service.ensureOwnerOrganization(identity);
+  assert.equal(second.organizationId, first.organizationId);
+  const org = await transaction(tx => tx.organization(first.organizationId));
+  assert.equal(org.name, 'JMD Hamoa'); assert.equal(org.ownerId, uid);
+  await assert.rejects(service.ensureOwnerOrganization({ ...identity, email: 'other@example.com' }), /forbidden/);
+});
+
 test('capture listing respects member ownership in the Firestore query flow', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business', org = randomUUID();
   const root = `${origin}/v1/projects/${projectId}/databases/(default)/documents`, s = stringValue => ({ stringValue });

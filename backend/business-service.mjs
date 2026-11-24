@@ -45,6 +45,36 @@ export class BusinessService {
     });
   }
 
+  /** Initial organization is idempotent and restricted to the configured verified owner. */
+  async ensureOwnerOrganization(token) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof identity.email !== 'string' ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identity.email) || typeof this.canCreateOrganization !== 'function' ||
+        await this.canCreateOrganization(identity) !== true) throw new Error('forbidden');
+    const raw = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`photomark-jmd-hamoa:${identity.uid}`)));
+    raw[6] = (raw[6] & 15) | 64; raw[8] = (raw[8] & 63) | 128;
+    const hex = Array.from(raw.slice(0, 16), byte => byte.toString(16).padStart(2, '0')).join('');
+    const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    return this.transaction(async tx => {
+      const indexes = await tx.userOrganizations(identity.uid);
+      if (!Array.isArray(indexes) || indexes.length > 500) throw new Error('invalid-index');
+      for (const existingId of indexes) {
+        const org = await tx.organization(existingId);
+        const member = await tx.membership(existingId, identity.uid);
+        if (org?.ownerId === identity.uid && org.name?.trim().toLowerCase() === 'jmd hamoa' && member?.active === true && member.role === 'owner') return { organizationId: existingId };
+      }
+      const reserved = await tx.organization(id);
+      if (reserved) {
+        const member = await tx.membership(id, identity.uid);
+        if (reserved.ownerId === identity.uid && member?.active === true && member.role === 'owner') return { organizationId: id };
+        throw new Error('organization-conflict');
+      }
+      await tx.initializeOrganization({ id, ownerId: identity.uid, name: 'JMD Hamoa', contactEmail: identity.email.trim().toLowerCase() },
+        identity.email.trim().toLowerCase(), identity.displayName);
+      return { organizationId: id };
+    });
+  }
+
   async readOrganization(token, organizationId) {
     const identity = await this.verifyToken(token);
     if (!identity?.uid || typeof organizationId !== 'string' || !organizationId) throw new Error('invalid-request');
@@ -68,10 +98,11 @@ export class BusinessService {
         const org = await tx.organization(id);
         const member = await tx.membership(id, identity.uid);
         if (org?.id === id && mayReadPublishedProfile(identity, org, member)) {
+          const latest = await tx.latestProfile(id);
           const captureReady = member.storageStatus === 'granted' && typeof member.oneDriveFolderId === 'string' && !!member.oneDriveFolderId &&
             typeof member.oneDriveParentId === 'string' && !!member.oneDriveParentId &&
             typeof member.oneDriveMemberIdentityId === 'string' && !!member.oneDriveMemberIdentityId;
-          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '', captureReady });
+          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '', captureReady, profileReady: !!latest });
         }
       }
       return { organizations };
@@ -655,7 +686,7 @@ export class BusinessService {
     });
   }
 
-  async publishProfile(token, organizationId, layoutJSON) {
+  async publishProfile(token, organizationId, layoutJSON, onlyIfAbsent = false) {
     const identity = await this.verifyToken(token);
     if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
         typeof layoutJSON !== 'string' || new TextEncoder().encode(layoutJSON).length > 65536) throw new Error('invalid-request');
@@ -667,7 +698,14 @@ export class BusinessService {
     return this.transaction(async tx => {
       const org = await tx.organization(organizationId);
       const member = await tx.membership(organizationId, identity.uid);
-      if (!mayManage(identity, org, member)) throw new Error('forbidden');
+      if (!mayManage(identity, org, member) || (onlyIfAbsent && member.role !== 'owner')) throw new Error('forbidden');
+      if (onlyIfAbsent) {
+        const existing = await tx.latestProfile(organizationId);
+        if (existing) {
+          if (existing.organizationId !== organizationId || typeof existing.versionId !== 'string') throw new Error('invalid-profile');
+          return { versionId: existing.versionId };
+        }
+      }
       await tx.publishProfile({ organizationId, versionId, layoutJSON, publishedBy: identity.uid, publishedAt: this.clock() });
       return { versionId };
     });

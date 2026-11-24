@@ -6,7 +6,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
     try {
       if (request.method !== 'POST') return reply(405, { error: 'method-not-allowed' });
       const match = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/invitations(?:\/([A-Za-z0-9_-]{1,128})\/accept)?$/.exec(new URL(request.url).pathname);
-      const profile = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/profile\/(read|publish)$/.exec(new URL(request.url).pathname);
+      const profile = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/profile\/(read|publish|initialize)$/.exec(new URL(request.url).pathname);
       const settings = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/settings\/(read|update)$/.exec(new URL(request.url).pathname);
       const members = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/list$/.exec(new URL(request.url).pathname);
       const removeMember = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/members\/([A-Za-z0-9_-]{1,128})\/remove$/.exec(new URL(request.url).pathname);
@@ -25,7 +25,8 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const asset = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/assets\/(upload|[A-Za-z0-9_-]{1,128}\/read)$/.exec(new URL(request.url).pathname);
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !connectOneDrive && !provisionOwnerFolder && !bindMicrosoftMember && !provisionMemberFolder && !connectGoogleMail && !removeMember && !reserveCapture && !listCaptures && !readCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
+      const bootstrapOwner = new URL(request.url).pathname === '/v1/organizations/bootstrap-owner';
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !bootstrapOwner && !connectOneDrive && !provisionOwnerFolder && !bindMicrosoftMember && !provisionMemberFolder && !connectGoogleMail && !removeMember && !reserveCapture && !listCaptures && !readCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -66,6 +67,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       }
       const service = serviceForIdentity(identity);
       try {
+        if (bootstrapOwner) {
+          if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.ensureOwnerOrganization(null));
+        }
         if (readCapture) {
           if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });
           const body = await service.readCapture(null, readCapture[1], readCapture[2], readCapture[3] === 'thumbnail');
@@ -140,7 +145,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
             return reply(200, await service.readProfile(null, profile[1]));
           }
           if (Object.keys(payload).length !== 1 || typeof payload.layoutJSON !== 'string') return reply(400, { error: 'invalid-body' });
-          return reply(201, await service.publishProfile(null, profile[1], payload.layoutJSON));
+          return reply(201, await service.publishProfile(null, profile[1], payload.layoutJSON, profile[2] === 'initialize'));
         }
         if (settings) {
           if (settings[2] === 'read') {

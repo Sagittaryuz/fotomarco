@@ -119,8 +119,8 @@ struct BusinessOrganizationsView: View {
         busy = true
         defer { busy = false }
         do {
-            organizations = try await client.myOrganizations(token: identity.verifiedToken()).organizations
             await BusinessProfileSync.refresh(into: profiles)
+            organizations = try await client.myOrganizations(token: identity.verifiedToken()).organizations
         }
         catch { message = "Não foi possível carregar as organizações. Confira sua conexão e seu acesso." }
     }

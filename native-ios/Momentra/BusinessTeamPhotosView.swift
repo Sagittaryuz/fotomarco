@@ -80,7 +80,7 @@ struct BusinessTeamPhotosView: View {
                 guard cursor.isEmpty || seen.insert(cursor).inserted else { throw BusinessAPIClient.Failure.invalidResponse }
             } while !cursor.isEmpty
         } catch {
-            if !Task.isCancelled && identity.userID == userID && loadID == requestID { error = "Não foi possível carregar as fotos. Confira sua conexão e seu acesso." }
+            if !Task.isCancelled && identity.userID == userID && loadID == requestID { self.error = "Não foi possível carregar as fotos. Confira sua conexão e seu acesso." }
         }
     }
 }

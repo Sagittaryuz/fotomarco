@@ -101,21 +101,22 @@ final class StampProfilesStoreTests: XCTestCase {
         defaults.set("Nota existente", forKey: "native.profile.piresco.note")
         defaults.set("old-logo.png", forKey: "native.profile.piresco.logo")
         let store = StampProfilesStore(defaults: defaults)
-        XCTAssertEqual(store.profiles.count, 1)
+        XCTAssertEqual(store.profiles.count, 2)
+        XCTAssertEqual(store.profiles.first?.name, "Pessoal")
         XCTAssertEqual(store.selected.name, "Padrão")
         XCTAssertEqual(store.selected.note, "Nota existente")
         XCTAssertEqual(store.selected.logoName, "old-logo.png")
         XCTAssertEqual(defaults.string(forKey: "native.profile.piresco.logo"), "old-logo.png")
     }
 
-    func testFiveProfilesPersistAndSixthIsRejected() {
+    func testSixProfilesPersistAndSeventhIsRejected() {
         let store = StampProfilesStore(defaults: defaults)
-        for _ in 0..<4 { XCTAssertTrue(store.create()) }
+        for _ in 0..<5 { XCTAssertTrue(store.create()) }
         XCTAssertFalse(store.create())
-        XCTAssertEqual(store.profiles.count, 5)
+        XCTAssertEqual(store.profiles.count, 6)
         store.rename("Projeto")
         let restored = StampProfilesStore(defaults: defaults)
-        XCTAssertEqual(restored.profiles.count, 5)
+        XCTAssertEqual(restored.profiles.count, 6)
         XCTAssertEqual(restored.selected.name, "Projeto")
     }
 
@@ -126,7 +127,35 @@ final class StampProfilesStoreTests: XCTestCase {
         XCTAssertTrue(store.create())
         store.removeSelected()
         XCTAssertEqual(store.profiles.count, 1)
-        XCTAssertEqual(store.selected.name, "Padrão")
+        XCTAssertEqual(store.selected.name, "Pessoal")
+    }
+
+    func testNewPersonalProfileIsSimpleAndExistingProfilesArePreserved() throws {
+        let old = StampProfile(name: "JMD Hamoa", note: "Condomínio", logoName: "logo.png")
+        defaults.set(try JSONEncoder().encode([old]), forKey: "native.stamp.layoutProfiles.v1")
+        defaults.set(old.id.uuidString, forKey: "native.stamp.selectedLayoutProfile.v1")
+        let store = StampProfilesStore(defaults: defaults)
+        let personal = try XCTUnwrap(store.profiles.first)
+        XCTAssertEqual(personal.name, "Pessoal")
+        XCTAssertEqual(personal.layout.mode, .separate)
+        XCTAssertTrue(personal.layout.showsMap)
+        XCTAssertTrue(personal.layout.showsInformation)
+        XCTAssertFalse(personal.layout.showsLogo)
+        XCTAssertGreaterThan(personal.layout.map.y, 0.5)
+        XCTAssertLessThan(personal.layout.map.x, 0.5)
+        XCTAssertEqual(store.selected, old)
+        XCTAssertEqual(StampProfilesStore(defaults: defaults).profiles.count, 2)
+    }
+
+    func testPersonalDefaultDoesNotDiscardFiveExistingProfiles() throws {
+        let old = (1...5).map { StampProfile(name: "Perfil \($0)") }
+        defaults.set(try JSONEncoder().encode(old), forKey: "native.stamp.layoutProfiles.v1")
+        defaults.set(old[3].id.uuidString, forKey: "native.stamp.selectedLayoutProfile.v1")
+        let store = StampProfilesStore(defaults: defaults)
+        XCTAssertEqual(store.profiles.count, 6)
+        XCTAssertEqual(store.profiles.first?.name, "Pessoal")
+        XCTAssertEqual(Set(store.profiles.dropFirst().map(\.id)), Set(old.map(\.id)))
+        XCTAssertEqual(store.selectedID, old[3].id)
     }
 
     func testNormalizedPositionIsBoundedAndClampedIntoPhoto() {
