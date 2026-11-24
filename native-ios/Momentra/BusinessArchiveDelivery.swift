@@ -27,14 +27,13 @@ actor BusinessArchiveDelivery {
             captures.sort { $0.createdAt < $1.createdAt }
             let idsToDisplay = pendingIDs
             await MainActor.run { CloudUploadProgress.shared.prepareBusinessPending(idsToDisplay) }
-            let currentUser = await MainActor.run { BusinessIdentity.shared.userID }
             for item in captures {
-                guard item.userID == currentUser, item.ready, let api = BusinessAPIClient.configured() else {
+                guard item.ready, let api = BusinessAPIClient.configured() else {
                     summary.pending += 1; continue
                 }
                 do {
                     try Task.checkCancellation()
-                    let token = try await BusinessIdentity.shared.verifiedToken()
+                    let token = try await BusinessIdentity.shared.verifiedToken(expectedUserID: item.userID)
                     await MainActor.run { CloudUploadProgress.shared.start(item.id) }
                     try await deliver(item, journal: journal, api: api, token: token)
                     await MainActor.run { CloudUploadProgress.shared.finish(item.id) }

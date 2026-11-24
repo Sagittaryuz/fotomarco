@@ -6,7 +6,7 @@ enum BusinessProfileSync {
     static func refresh(into store: StampProfilesStore, identity: BusinessIdentity = .shared) async {
         guard let userID = identity.userID, identity.emailVerified, let api = BusinessAPIClient.configured() else { return }
         do {
-            let token = try await identity.verifiedToken()
+            let token = try await identity.verifiedToken(expectedUserID: userID)
             var ownerOrganizationID: String?
             if identity.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mrpires72@gmail.com" {
                 ownerOrganizationID = try await api.ensureOwnerOrganization(token: token).organizationId

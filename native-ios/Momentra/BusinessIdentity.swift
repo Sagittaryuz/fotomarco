@@ -4,6 +4,17 @@ import FirebaseCore
 import FirebaseAuth
 import UIKit
 
+/// Rejects a token if its capture owner changes while the async operation runs.
+@MainActor enum BusinessTokenBinding {
+    static func acquire(expectedUserID: String, currentUserID: () -> String?,
+                        operation: () async throws -> String) async throws -> String {
+        guard currentUserID() == expectedUserID else { throw BusinessIdentity.IdentityError.signedOut }
+        let token = try await operation()
+        guard currentUserID() == expectedUserID else { throw BusinessIdentity.IdentityError.signedOut }
+        return token
+    }
+}
+
 /// Business identity is independent of the user's Google Drive and OneDrive sessions.
 @MainActor
 final class BusinessIdentity: ObservableObject {
@@ -71,20 +82,29 @@ final class BusinessIdentity: ObservableObject {
         update(result.user)
     }
 
-    func verifiedToken() async throws -> String {
-        guard let user = try auth().currentUser else { throw IdentityError.signedOut }
+    func verifiedToken(expectedUserID: String? = nil) async throws -> String {
+        let service = try auth()
+        guard let user = service.currentUser,
+              expectedUserID == nil || user.uid == expectedUserID else { throw IdentityError.signedOut }
+        let uid = user.uid
         try await user.reload()
+        guard service.currentUser?.uid == uid else { throw IdentityError.signedOut }
         update(user)
         guard user.isEmailVerified else { throw IdentityError.unverifiedEmail }
-        return try await user.getIDToken(forcingRefresh: true)
+        return try await BusinessTokenBinding.acquire(expectedUserID: uid, currentUserID: { service.currentUser?.uid }) {
+            try await user.getIDToken(forcingRefresh: true)
+        }
     }
 
     /// Reuses Firebase's cached token for repeated image requests; the server
     /// still checks the signature and current organization membership each time.
     func cachedVerifiedToken() async throws -> String {
-        guard let user = try auth().currentUser else { throw IdentityError.signedOut }
+        let service = try auth()
+        guard let user = service.currentUser else { throw IdentityError.signedOut }
         guard user.isEmailVerified else { throw IdentityError.unverifiedEmail }
-        return try await user.getIDToken(forcingRefresh: false)
+        return try await BusinessTokenBinding.acquire(expectedUserID: user.uid, currentUserID: { service.currentUser?.uid }) {
+            try await user.getIDToken(forcingRefresh: false)
+        }
     }
 
     func sendPasswordReset(email: String) async throws {
