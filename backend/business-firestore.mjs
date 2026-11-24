@@ -96,6 +96,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       invitation: (org, id) => read(path(org, 'invitations', id)),
       asset: (org, id) => read(path(org, 'assets', id)),
+      oneDriveCredential: org => read(path(org, 'private', 'onedrive')),
       latestProfile: async org => {
         const head = await read(path(org, 'state', 'profile'));
         if (!head) return null;
@@ -110,6 +111,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       createInvitation: async invitation => put(path(invitation.organizationId, 'invitations', invitation.id), invitation, { exists: false }),
       createAsset: async asset => put(path(asset.organizationId, 'assets', asset.assetId), asset, { exists: false }),
+      setOneDriveCredential: async (org, record) => put(path(org, 'private', 'onedrive'), record),
       publishProfile: async profile => {
         put(path(profile.organizationId, 'profiles', profile.versionId), profile, { exists: false });
         put(path(profile.organizationId, 'state', 'profile'), { versionId: profile.versionId });

@@ -1,6 +1,8 @@
 import { createBusinessApp } from './business-app.mjs';
 import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { googleServiceAccountToken } from './business-google-credential.mjs';
+import { createCredentialVault } from './business-credential-vault.mjs';
+import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
 
 /** Isolated Worker: never log credentials, tokens, emails, request bodies or provider responses. */
 export function createBusinessWorker(env, overrides = {}) {
@@ -18,7 +20,17 @@ export function createBusinessWorker(env, overrides = {}) {
     return (await env.BUSINESS_IP_LIMIT.limit({ key: ip })).success === true;
   };
   const rateLimit = async uid => (await env.BUSINESS_UID_LIMIT.limit({ key: uid })).success === true;
+  const prepareOneDrive = overrides.prepareOneDrive ?? (async ({ organizationId, ownerId, refreshToken }) => {
+    const exchange = microsoftBusinessCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(refreshToken);
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const sealed = await vault.seal(organizationId, ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
+    return { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId };
+  });
   return createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
+    prepareOneDrive,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),

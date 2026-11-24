@@ -87,7 +87,8 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   const seconds = 1800000000;
   const authenticate = createFirebaseVerifier({ projectId, now: () => seconds * 1000, resolveKey: async () => keys.publicKey });
   const app = createBusinessApp({ projectId, authenticate, serverAccessToken: async () => 'owner', emulatorOrigin: origin,
-    preAuthLimit: async () => true, rateLimit: async () => true, newId: () => 'invite', clock: () => 100 });
+    preAuthLimit: async () => true, rateLimit: async () => true, newId: () => 'invite', clock: () => 100,
+    prepareOneDrive: async () => ({ version: 1, iv: 'iv', ciphertext: 'encrypted', providerAccountId: 'account', driveId: 'drive' }) });
   const token = async (uid, email) => new SignJWT({ auth_time: seconds - 1, email, email_verified: true })
     .setProtectedHeader({ alg: 'RS256', kid: 'key1' }).setIssuer(`https://securetoken.google.com/${projectId}`)
     .setAudience(projectId).setSubject(uid).setIssuedAt(seconds - 1).setExpirationTime(seconds + 60).sign(keys.privateKey);
@@ -112,6 +113,13 @@ test('authenticated HTTP invitation and acceptance use the transactional databas
   assert.deepEqual(members.map(member => member.userId).sort(), ['member', 'owner']);
   assert.equal(members.find(member => member.userId === 'member').email, 'member@example.com');
   assert.equal((await app(req(membersPath, memberToken, {}))).status, 403);
+  const storagePath = `/v1/organizations/${org}/storage/onedrive/connect`;
+  assert.equal((await app(req(storagePath, memberToken, { refreshToken: 'token-private' }))).status, 403);
+  assert.equal((await app(req(storagePath, ownerToken, { refreshToken: 'token-private' }))).status, 200);
+  const saved = await fetch(`${root}/organizations/${org}/private/onedrive`, { headers: { authorization: 'Bearer owner' } });
+  const persisted = await saved.json();
+  assert.equal(persisted.fields.ciphertext.stringValue, 'encrypted');
+  assert.equal(JSON.stringify(persisted).includes('token-private'), false);
   const asset = `/v1/organizations/${org}/assets`;
   assert.equal((await app(req(`${asset}/upload`, ownerToken, { mimeType: 'image/png', base64: 'iVBORw0KGgo=' }))).status, 201);
   const logo = await app(req(`${asset}/invite/read`, memberToken, {}));

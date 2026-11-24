@@ -43,12 +43,13 @@ final class CloudArchiveOAuth {
         let requiredScope: String
         let scopes: String
 
-        init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:]) throws {
+        init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:], forBusiness: Bool = false) throws {
             self.provider = provider
             let urlTypes = info["CFBundleURLTypes"] as? [[String: Any]] ?? []
             let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
             switch provider {
             case .googleDrive:
+                guard !forBusiness else { throw Failure.notConfigured }
                 guard let client = info["GIDClientID"] as? String,
                       client.range(of: #"^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$"#,
                                    options: .regularExpression) != nil else { throw Failure.notConfigured }
@@ -69,8 +70,9 @@ final class CloudArchiveOAuth {
                 authorizeURL = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize")!
                 tokenURL = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/token")!
                 identityURL = URL(string: "https://graph.microsoft.com/oidc/userinfo")!
-                requiredScope = "Files.ReadWrite.AppFolder"
-                scopes = "openid email profile offline_access https://graph.microsoft.com/" + requiredScope
+                requiredScope = forBusiness ? "Files.ReadWrite" : "Files.ReadWrite.AppFolder"
+                scopes = "openid email profile offline_access https://graph.microsoft.com/" + requiredScope +
+                    (forBusiness ? " https://graph.microsoft.com/User.Read" : "")
             }
             guard registeredSchemes.contains(callbackScheme) else { throw Failure.notConfigured }
         }

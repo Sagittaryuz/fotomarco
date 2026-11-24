@@ -8,6 +8,7 @@ function fixture() {
   const invites = new Map();
   let profile;
   let asset;
+  let storedCredential;
   const tx = {
     organization: async id => id === 'org' ? organization : null,
     membership: async (_, id) => records.get(id),
@@ -23,9 +24,11 @@ function fixture() {
     createAsset: async value => { asset = value; },
     asset: async () => asset,
     updateOrganization: async (_, updates) => { Object.assign(organization, updates); },
+    setOneDriveCredential: async (_, value) => { storedCredential = value; },
+    oneDriveCredential: async () => storedCredential,
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100 });
-  return { service, records, invites };
+  return { service, records, invites, storedCredential: () => storedCredential };
 }
 
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
@@ -35,6 +38,29 @@ test('a verified invited user can join only as member, and cannot reuse invitati
   assert.deepEqual(await service.accept(recipient, 'org', 'invite'), { organizationId: 'org' });
   assert.equal(records.get('member').role, 'member');
   await assert.rejects(service.accept(recipient, 'org', 'invite'), /invalid-invitation/);
+});
+
+test('only the owner can connect a verified and encrypted OneDrive credential', async () => {
+  const { service, records, storedCredential } = fixture();
+  let calls = 0;
+  service.prepareOneDrive = async () => {
+    calls++;
+    return { version: 1, iv: 'iv', ciphertext: 'encrypted', driveId: 'drive', providerAccountId: 'account' };
+  };
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  await assert.rejects(service.connectOneDrive({ uid: 'member' }, 'org', 'secret'), /forbidden/);
+  assert.equal(calls, 0);
+  assert.deepEqual(await service.connectOneDrive({ uid: 'owner' }, 'org', 'secret'), { connected: true });
+  assert.equal(JSON.stringify(storedCredential()).includes('secret'), false);
+  service.prepareOneDrive = async () => ({ version: 1, iv: 'iv', ciphertext: 'other', driveId: 'another-drive', providerAccountId: 'another' });
+  await assert.rejects(service.connectOneDrive({ uid: 'owner' }, 'org', 'secret'), /storage-account-change-requires-migration/);
+  assert.equal(storedCredential().ciphertext, 'encrypted');
+  service.prepareOneDrive = async () => {
+    records.get('owner').active = false;
+    return { version: 1, iv: 'iv', ciphertext: 'replacement', driveId: 'drive', providerAccountId: 'account' };
+  };
+  await assert.rejects(service.connectOneDrive({ uid: 'owner' }, 'org', 'secret'), /forbidden/);
+  assert.equal(storedCredential().ciphertext, 'encrypted');
 });
 
 test('organization discovery checks live membership rather than trusting an index', async () => {

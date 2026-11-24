@@ -7,12 +7,13 @@ import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile } fr
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
     this.clock = clock;
     this.canCreateOrganization = canCreateOrganization;
+    this.prepareOneDrive = prepareOneDrive;
   }
 
   async createOrganization(token, name, contactEmail) {
@@ -113,6 +114,32 @@ export class BusinessService {
         throw new Error('invalid-members');
       }
       return { members: members.map(({ userId, role, email }) => ({ userId, role, ...(typeof email === 'string' ? { email } : {}) })) };
+    });
+  }
+
+  async connectOneDrive(token, organizationId, refreshToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
+        typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 16384 ||
+        typeof this.prepareOneDrive !== 'function') throw new Error('invalid-request');
+    const verifyOwner = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member) || member.role !== 'owner') throw new Error('forbidden');
+    };
+    await this.transaction(verifyOwner);
+    const record = await this.prepareOneDrive({ organizationId, ownerId: identity.uid, refreshToken });
+    if (!record || record.version !== 1 || typeof record.iv !== 'string' || typeof record.ciphertext !== 'string' ||
+        typeof record.driveId !== 'string' || typeof record.providerAccountId !== 'string' ||
+        Object.keys(record).sort().join(',') !== 'ciphertext,driveId,iv,providerAccountId,version') throw new Error('invalid-provider-credential');
+    return this.transaction(async tx => {
+      await verifyOwner(tx);
+      const existing = await tx.oneDriveCredential(organizationId);
+      if (existing && (existing.providerAccountId !== record.providerAccountId || existing.driveId !== record.driveId)) {
+        throw new Error('storage-account-change-requires-migration');
+      }
+      await tx.setOneDriveCredential(organizationId, record);
+      return { connected: true };
     });
   }
 

@@ -31,6 +31,20 @@ final class CloudArchiveOAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testBusinessOneDriveRequestsBroaderScopeOnlyWhenExplicitlySelected() throws {
+        let info: [String: Any] = [
+            "MomentraMicrosoftClientID": "4befebdc-2a06-49a0-b14a-13de07c6ac08",
+            "CFBundleURLTypes": [["CFBundleURLSchemes": ["msauth.br.com.momentra.camera"]]]
+        ]
+        let personal = try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: info)
+        let business = try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: info, forBusiness: true)
+        XCTAssertEqual(personal.requiredScope, "Files.ReadWrite.AppFolder")
+        XCTAssertEqual(business.requiredScope, "Files.ReadWrite")
+        XCTAssertTrue(business.includesStorageScope("https://graph.microsoft.com/Files.ReadWrite"))
+        XCTAssertFalse(business.includesStorageScope("Files.ReadWrite.AppFolder"))
+    }
+
+    @MainActor
     func testMicrosoftAppFolderCanResolveWithoutParentReference() throws {
         let folder = try JSONDecoder().decode(CloudArchiveOAuth.OneDriveFolder.self,
             from: Data(#"{"id":"app-folder-id","specialFolder":{"name":"approot"}}"#.utf8))

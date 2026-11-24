@@ -70,6 +70,11 @@ struct BusinessOrganizationsView: View {
                         BusinessMembersView(api: client, organizationID: org.id,
                             accessToken: { try await identity.verifiedToken() })
                     }
+                    if org.role == "owner" {
+                        NavigationLink("OneDrive da organização") {
+                            BusinessOneDriveView(api: client, organizationID: org.id)
+                        }
+                    }
                 }
                 Text("O carimbo da equipe pode ser selecionado na câmera.").font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle(org.name)
