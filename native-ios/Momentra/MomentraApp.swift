@@ -10,7 +10,9 @@ struct MomentraApp: App {
                 BusinessIdentity.shared.start()
                 if #available(iOS 18.0, *) { await LockedCaptureImporter.watch() }
             }.onOpenURL { url in
-                if url.scheme == "momentra" {
+                if BusinessGoogleOAuth.shared.handle(url) {
+                    return
+                } else if url.scheme == "momentra" {
                     Task { await DirectUpdateAccess.shared.activate(url) }
                 } else if NativeGoogleAuth.configured { _ = GIDSignIn.sharedInstance.handle(url) }
             }

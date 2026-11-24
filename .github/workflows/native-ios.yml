@@ -40,6 +40,16 @@ jobs:
           MOMENTRA_GOOGLE_IOS_CLIENT_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_CLIENT_ID }}
           MOMENTRA_GOOGLE_IOS_REVERSED_ID: ${{ vars.MOMENTRA_GOOGLE_IOS_REVERSED_ID }}
         run: python3 native-ios/scripts/configure-google.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
+      - name: Configure Business authentication callback
+        env:
+          SIGNING_CANDIDATE: ${{ inputs.signing_candidate }}
+        run: |
+          APP="$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app"
+          if [ "$SIGNING_CANDIDATE" = "true" ]; then
+            python3 native-ios/scripts/configure-business-auth.py "$APP" --required
+          else
+            python3 native-ios/scripts/configure-business-auth.py "$APP"
+          fi
       - name: Configure Microsoft public client when available
         env:
           MOMENTRA_MICROSOFT_CLIENT_ID: ${{ vars.MOMENTRA_MICROSOFT_CLIENT_ID }}
@@ -126,6 +136,8 @@ jobs:
       - name: Compile for iOS Simulator
         working-directory: native-ios
         run: xcodebuild -project Fotomarco.xcodeproj -scheme Momentra -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/momentra-simulator" CODE_SIGNING_ALLOWED=NO -quiet build
+      - name: Configure Business authentication callback
+        run: python3 native-ios/scripts/configure-business-auth.py "$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app"
       - name: Run native unit tests
         working-directory: native-ios
         run: |

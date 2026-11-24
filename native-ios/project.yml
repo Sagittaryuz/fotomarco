@@ -4,6 +4,9 @@ options:
   deploymentTarget:
     iOS: '17.0'
 packages:
+  AppAuth:
+    url: https://github.com/openid/AppAuth-iOS.git
+    from: 3.0.0
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk.git
     exactVersion: 13.2.0
@@ -31,6 +34,8 @@ targets:
           - processing
         MomentraInstallerHost: '$(MOMENTRA_INSTALLER_HOST)'
     dependencies:
+      - package: AppAuth
+        product: AppAuth
       - package: Firebase
         product: FirebaseCore
       - package: Firebase

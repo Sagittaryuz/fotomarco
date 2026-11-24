@@ -7,7 +7,7 @@ struct BusinessMembersView: View {
     let accessToken: () async throws -> String
     @State private var members: [BusinessAPIClient.Member] = []
     @State private var busy = false
-    @State private var error: String?
+    @State private var loadError: String?
 
     var body: some View {
         List {
@@ -21,8 +21,8 @@ struct BusinessMembersView: View {
                     }
                 }
             }
-            if let error {
-                Text(error).font(.footnote).foregroundStyle(.secondary)
+            if let loadError {
+                Text(loadError).font(.footnote).foregroundStyle(.secondary)
                 Button("Tentar novamente") { Task { await load() } }
             }
         }
@@ -42,13 +42,13 @@ struct BusinessMembersView: View {
 
     @MainActor private func load() async {
         guard !busy else { return }
-        busy = true; error = nil
+        busy = true; loadError = nil
         defer { busy = false }
         do {
             let token = try await accessToken()
             members = try await api.listMembers(organizationID: organizationID, token: token).members
         } catch {
-            error = "Não foi possível carregar os membros. Verifique sua conexão e seu acesso."
+            loadError = "Não foi possível carregar os membros. Verifique sua conexão e seu acesso."
         }
     }
 }
