@@ -5,7 +5,8 @@ import AVFoundation
 enum ReleaseNews {
     static let version = "0.1.51"
     static let items = [
-        "Ao sair do aplicativo, as fotos capturadas na sessão são preparadas para colar em outros aplicativos."
+        "Ao sair do aplicativo, as fotos capturadas na sessão são preparadas para colar em outros aplicativos.",
+        "O foco acompanha o centro do enquadramento durante o zoom."
     ]
 
     static func items(for version: String) -> [String] {

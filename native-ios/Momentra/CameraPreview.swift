@@ -158,6 +158,11 @@ enum CameraPointFocus {
         return [.autoFocus, .continuousAutoFocus].first(where: supports)
     }
 
+    static func zoomFocusMode(pointSupported: Bool, supports: (AVCaptureDevice.FocusMode) -> Bool) -> AVCaptureDevice.FocusMode? {
+        guard pointSupported else { return nil }
+        return [.continuousAutoFocus, .autoFocus].first(where: supports)
+    }
+
     static func exposureMode(pointSupported: Bool, supports: (AVCaptureDevice.ExposureMode) -> Bool) -> AVCaptureDevice.ExposureMode? {
         guard pointSupported else { return nil }
         return [.continuousAutoExposure, .autoExpose].first(where: supports)

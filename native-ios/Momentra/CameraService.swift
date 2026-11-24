@@ -308,6 +308,16 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             do {
                 try device.lockForConfiguration()
                 device.videoZoomFactor = deviceFactor
+                // Zoom targets the centre of the frame; continuous AF keeps tracking it
+                // without restarting a focus sweep for every pinch update.
+                if let mode = CameraPointFocus.zoomFocusMode(pointSupported: device.isFocusPointOfInterestSupported,
+                                                             supports: device.isFocusModeSupported) {
+                    let center = CGPoint(x: 0.5, y: 0.5)
+                    if device.focusPointOfInterest != center || device.focusMode != mode {
+                        device.focusPointOfInterest = center
+                        device.focusMode = mode
+                    }
+                }
                 device.unlockForConfiguration()
                 DispatchQueue.main.async { self.zoomFactor = factor }
             } catch { self.report("Não foi possível alterar o zoom da câmera.") }
