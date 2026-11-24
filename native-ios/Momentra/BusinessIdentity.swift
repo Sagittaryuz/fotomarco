@@ -36,7 +36,10 @@ final class BusinessIdentity: ObservableObject {
         if FirebaseApp.app() == nil { FirebaseApp.configure() }
         guard listener == nil else { return }
         listener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            Task { @MainActor in self?.update(user) }
+            Task { @MainActor in
+                guard let self, let service = try? self.auth(), service.currentUser?.uid == user?.uid else { return }
+                self.update(user)
+            }
         }
     }
 
@@ -52,17 +55,21 @@ final class BusinessIdentity: ObservableObject {
     }
 
     func signIn(email: String, password: String) async throws {
-        let result = try await auth().signIn(withEmail: email, password: password)
+        let service = try auth()
+        let result = try await service.signIn(withEmail: email, password: password)
+        guard service.currentUser?.uid == result.user.uid else { throw IdentityError.signedOut }
         update(result.user)
     }
 
     func register(email: String, password: String, fullName: String) async throws {
         let name = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 160, name.rangeOfCharacter(from: .controlCharacters) == nil else { throw IdentityError.notConfigured }
-        let result = try await auth().createUser(withEmail: email, password: password)
+        let service = try auth()
+        let result = try await service.createUser(withEmail: email, password: password)
         let changes = result.user.createProfileChangeRequest()
         changes.displayName = name
         try await changes.commitChanges()
+        guard service.currentUser?.uid == result.user.uid else { throw IdentityError.signedOut }
         update(result.user)
         try await result.user.sendEmailVerification()
     }
@@ -70,7 +77,9 @@ final class BusinessIdentity: ObservableObject {
     func signInMicrosoft() async throws {
         let provider = OAuthProvider(providerID: "microsoft.com")
         let credential = try await provider.credential(with: nil)
-        let result = try await auth().signIn(with: credential)
+        let service = try auth()
+        let result = try await service.signIn(with: credential)
+        guard service.currentUser?.uid == result.user.uid else { throw IdentityError.signedOut }
         update(result.user)
     }
 
@@ -78,7 +87,9 @@ final class BusinessIdentity: ObservableObject {
     func signInGoogle(presenting controller: UIViewController) async throws {
         let tokens = try await BusinessGoogleOAuth.shared.authorize(presenting: controller)
         let credential = GoogleAuthProvider.credential(withIDToken: tokens.idToken, accessToken: tokens.accessToken)
-        let result = try await auth().signIn(with: credential)
+        let service = try auth()
+        let result = try await service.signIn(with: credential)
+        guard service.currentUser?.uid == result.user.uid else { throw IdentityError.signedOut }
         update(result.user)
     }
 
