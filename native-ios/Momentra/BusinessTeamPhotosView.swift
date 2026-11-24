@@ -110,7 +110,7 @@ private struct TeamPhotoImage: View {
         let key = "\(userID):\(organizationID):\(photo.id):\(thumbnail)" as NSString
         if let cached = TeamPhotoCache.shared.images.object(forKey: key) { image = cached; return }
         do {
-            let token = try await identity.verifiedToken()
+            let token = try await identity.cachedVerifiedToken()
             let data = try await api.teamPhotoData(organizationID: organizationID, captureID: photo.id, thumbnail: thumbnail, token: token)
             guard !Task.isCancelled, identity.userID == userID, let decoded = UIImage(data: data) else { return }
             TeamPhotoCache.shared.images.setObject(decoded, forKey: key, cost: decoded.cgImage.map { $0.bytesPerRow * $0.height } ?? data.count)

@@ -79,6 +79,14 @@ final class BusinessIdentity: ObservableObject {
         return try await user.getIDToken(forcingRefresh: true)
     }
 
+    /// Reuses Firebase's cached token for repeated image requests; the server
+    /// still checks the signature and current organization membership each time.
+    func cachedVerifiedToken() async throws -> String {
+        guard let user = try auth().currentUser else { throw IdentityError.signedOut }
+        guard user.isEmailVerified else { throw IdentityError.unverifiedEmail }
+        return try await user.getIDToken(forcingRefresh: false)
+    }
+
     func sendVerification() async throws {
         guard let user = try auth().currentUser else { throw IdentityError.signedOut }
         try await user.sendEmailVerification()
