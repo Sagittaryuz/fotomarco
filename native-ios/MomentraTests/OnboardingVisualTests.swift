@@ -26,7 +26,7 @@ import UIKit
                     guard let context = CGContext(data: buffer.baseAddress, width: cg.width, height: cg.height,
                         bitsPerComponent: 8, bytesPerRow: cg.width * 4, space: CGColorSpaceCreateDeviceRGB(),
                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
-                    context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+                    context.draw(cg, in: CGRect(x: 0, y: 0, width: CGFloat(cg.width), height: CGFloat(cg.height)))
                     return true
                 }
                 XCTAssertTrue(rendered)
