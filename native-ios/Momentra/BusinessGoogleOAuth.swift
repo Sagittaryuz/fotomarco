@@ -11,7 +11,12 @@ final class BusinessGoogleOAuth {
 
     func handle(_ url: URL) -> Bool {
         guard let flow = currentFlow else { return false }
-        return (try? flow.resumeExternalUserAgentFlow(url)) == true
+        do {
+            try flow.resumeExternalUserAgentFlow(url)
+            return true
+        } catch {
+            return false
+        }
     }
 
     func authorize(presenting controller: UIViewController) async throws -> (idToken: String, accessToken: String) {
