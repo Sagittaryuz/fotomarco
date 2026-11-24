@@ -2,6 +2,12 @@ import XCTest
 @testable import Momentra
 
 final class BusinessLegacyCloudStageTests: XCTestCase {
+    func testOneDriveCaptureDateUsesProviderTimestampAndRejectsInvalidValues() throws {
+        XCTAssertEqual(try XCTUnwrap(OneDriveArchive.takenDate("2026-11-23T12:00:00Z")).timeIntervalSince1970,
+                       try XCTUnwrap(OneDriveArchive.takenDate("2026-11-23T09:00:00-03:00")).timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertNil(OneDriveArchive.takenDate("not-a-date"))
+        XCTAssertNil(OneDriveArchive.takenDate(nil))
+    }
     func testStagesBothVersionsWithoutChangingSourceFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

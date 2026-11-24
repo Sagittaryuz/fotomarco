@@ -72,7 +72,7 @@ import Foundation
                     pages += 1
                     guard pages <= 1000 else { throw CocoaError(.fileReadCorruptFile) }
                     for item in next.items {
-                        guard let date = dates[item.captureID] ?? CloudArchiveFilename(item.name)?.capturedAt, date <= cutoff else { continue }
+                        guard let date = dates[item.captureID] ?? CloudArchiveFilename(item.name)?.capturedAt ?? item.providerCaptureDate, date <= cutoff else { continue }
                         if item.isOriginal { if originals[item.captureID] == nil { originals[item.captureID] = item } }
                         else if stamped[item.captureID] == nil { stamped[item.captureID] = item; knownDates[item.captureID] = date }
                     }

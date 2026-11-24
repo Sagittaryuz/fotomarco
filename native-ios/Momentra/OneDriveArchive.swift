@@ -10,6 +10,7 @@ struct OneDriveArchive {
         let name: String
         let date: Date?
         let revision: String?
+        let captureDate: Date?
     }
 
     struct Page {
@@ -41,6 +42,7 @@ struct OneDriveArchive {
         struct Folder: Decodable {}
         struct File: Decodable {}
         struct Parent: Decodable { let id: String? }
+        struct Photo: Decodable { let takenDateTime: String? }
         let id: String
         let name: String
         let size: Int64?
@@ -49,6 +51,7 @@ struct OneDriveArchive {
         let parentReference: Parent?
         let folder: Folder?
         let file: File?
+        let photo: Photo?
     }
 
     private struct Listing: Decodable {
@@ -62,7 +65,7 @@ struct OneDriveArchive {
 
     private static let graph = URL(string: "https://graph.microsoft.com/v1.0/me/drive")!
     private static let fields = URLQueryItem(name: "$select",
-        value: "id,name,size,file,folder,parentReference,createdDateTime,eTag")
+        value: "id,name,size,file,folder,parentReference,createdDateTime,eTag,photo")
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
@@ -163,11 +166,18 @@ struct OneDriveArchive {
             guard item.file != nil, item.folder == nil, item.parentReference?.id == folder,
                   Self.validID(item.id), Self.validName(item.name) else { return nil }
             let date = item.createdDateTime.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
-            return Item(id: item.id, name: item.name, date: date, revision: item.eTag)
+            let captured = Self.takenDate(item.photo?.takenDateTime)
+            return Item(id: item.id, name: item.name, date: date, revision: item.eTag, captureDate: captured)
         }
         let next = listing.nextLink.flatMap { Self.paginationURL($0, folder: folder)?.absoluteString }
         if listing.nextLink != nil && next == nil { throw Failure.invalidResponse }
         return Page(items: items, nextPage: next)
+    }
+
+    static func takenDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        return (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(value))
+            ?? (try? Date.ISO8601FormatStyle().parse(value))
     }
 
     /// The caller owns the temporary file and must remove it after use.

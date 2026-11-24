@@ -56,8 +56,9 @@ fileprivate struct ArchiveGalleryPhoto: Identifiable {
     let profile: CaptureProfileTag?
     let thumbnailLink: String?
     let revision: String?
+    let providerCaptureDate: Date?
 
-    init?(id: String, name: String, date: Date?, thumbnailLink: String? = nil, revision: String? = nil) {
+    init?(id: String, name: String, date: Date?, thumbnailLink: String? = nil, revision: String? = nil, providerCaptureDate: Date? = nil) {
         guard let metadata = CloudArchiveFilename(name) else { return nil }
         self.id = id
         self.name = name
@@ -67,6 +68,7 @@ fileprivate struct ArchiveGalleryPhoto: Identifiable {
         profile = metadata.profile
         self.thumbnailLink = thumbnailLink
         self.revision = revision
+        self.providerCaptureDate = providerCaptureDate
     }
 
     var versionLabel: String { isOriginal ? "Original" : "Com carimbo" }
@@ -97,6 +99,7 @@ struct GalleryCloudItem: Identifiable {
     var provider: CloudDeliveryPlan.Provider { destination.provider }
     var captureID: UUID { photo.captureID }
     var date: Date? { photo.date }
+    var providerCaptureDate: Date? { photo.providerCaptureDate }
     var name: String { photo.name }
     var isOriginal: Bool { photo.isOriginal }
 
@@ -474,7 +477,7 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
             page = (result.files.compactMap { Self.googlePhoto($0, trashed: false) }, result.nextPageToken)
         case .oneDrive:
             let result = try await OneDriveArchive().list(accessToken: token, nextPage: pageToken)
-            page = (result.items.compactMap { ArchiveGalleryPhoto(id: $0.id, name: $0.name, date: $0.date, revision: $0.revision) },
+            page = (result.items.compactMap { ArchiveGalleryPhoto(id: $0.id, name: $0.name, date: $0.date, revision: $0.revision, providerCaptureDate: $0.captureDate) },
                     result.nextPage)
         }
         try Task.checkCancellation()
