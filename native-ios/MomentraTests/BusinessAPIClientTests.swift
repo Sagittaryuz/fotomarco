@@ -2,6 +2,16 @@ import XCTest
 @testable import Momentra
 
 final class BusinessAPIClientTests: XCTestCase {
+    func testOrganizationDiscoveryUsesAuthenticatedEndpoint() async throws {
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.url?.path, "/v1/organizations/mine")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"organizations":[{"id":"org","name":"Equipe","role":"member","photoAssetId":""}]}"#.utf8), response)
+        }
+        let result = try await client.myOrganizations(token: "token")
+        XCTAssertEqual(result.organizations.first?.name, "Equipe")
+    }
     func testMemberListDecodesOnlyServerResponse() async throws {
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
             XCTAssertEqual(request.url?.path, "/v1/organizations/org/members/list")
