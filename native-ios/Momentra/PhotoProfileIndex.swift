@@ -15,6 +15,9 @@ struct CaptureProfileRecord: Codable {
     var cloudMediaIDs: [String]
     var latitude: Double? = nil
     var longitude: Double? = nil
+    /// Separate association preserves the historical profile and all file bindings.
+    var organizationID: UUID? = nil
+    var organizationName: String? = nil
 }
 
 struct PhotoProfileLookup {
@@ -72,19 +75,44 @@ enum PhotoProfileIndex {
             guard let data = try? Data(contentsOf: file), data.count <= 16384,
                   let record = try? JSONDecoder().decode(CaptureProfileRecord.self, from: data),
                   file.deletingPathExtension().lastPathComponent == record.captureID.uuidString else { continue }
-            lookup.captures[record.captureID] = record.profile
+            let associated = record.organizationID.map { CaptureProfileTag(id: $0, name: record.organizationName ?? "Organização") }
+            let displayProfile = associated ?? record.profile
+            lookup.captures[record.captureID] = displayProfile
             if let latitude = record.latitude, let longitude = record.longitude {
                 let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
                 if CLLocationCoordinate2DIsValid(coordinate) { lookup.locations[record.captureID] = coordinate }
             }
             if let date = record.captureDate { lookup.dates[record.captureID] = date }
             if let id = record.localAssetID {
-                lookup.assets[id] = record.profile
+                lookup.assets[id] = displayProfile
                 lookup.assetCaptures[id] = record.captureID
             }
-            for id in record.cloudMediaIDs { lookup.cloud[id] = record.profile }
+            for id in record.cloudMediaIDs { lookup.cloud[id] = displayProfile }
         }
         return lookup
+    }
+
+    /// Associates only previously indexed captures. It never moves or modifies images.
+    /// A different existing organization is retained; retries are safe.
+    static func associateLegacyCaptures(organizationID: UUID, name: String, before cutoff: Date, root: URL? = nil) throws -> Int {
+        lock.lock(); defer { lock.unlock() }
+        let directory = try indexDirectory(root: root)
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.creationDateKey])
+        var changed = 0
+        for file in files where file.pathExtension == "json" {
+            let data = try Data(contentsOf: file)
+            guard data.count <= 16384, var record = try? JSONDecoder().decode(CaptureProfileRecord.self, from: data),
+                  file.deletingPathExtension().lastPathComponent == record.captureID.uuidString else { continue }
+            guard record.organizationID == nil || record.organizationID == organizationID else { continue }
+            let date = record.captureDate ?? (try? file.resourceValues(forKeys: [.creationDateKey]).creationDate)
+            guard let date, date <= cutoff else { continue }
+            guard record.organizationID != organizationID else { continue }
+            record.organizationID = organizationID
+            record.organizationName = String(name.prefix(60))
+            try save(record, to: file)
+            changed += 1
+        }
+        return changed
     }
 
     private static func update(captureID: UUID, root: URL?, mutate: (inout CaptureProfileRecord) -> Void) throws {

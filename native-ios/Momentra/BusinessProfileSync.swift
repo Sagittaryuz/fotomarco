@@ -10,6 +10,15 @@ enum BusinessProfileSync {
             var ownerOrganizationID: String?
             if identity.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mrpires72@gmail.com" {
                 ownerOrganizationID = try await api.ensureOwnerOrganization(token: token).organizationId
+                if let ownerOrganizationID, let orgID = UUID(uuidString: ownerOrganizationID) {
+                    // User requested the historical association on 23 Nov 2026 (São Paulo).
+                    // The cutoff prevents captures subsequently made in Pessoal from being reassigned.
+                    _ = try await Task.detached(priority: .utility) {
+                        try PhotoProfileIndex.associateLegacyCaptures(organizationID: orgID, name: "JMD Hamoa",
+                            before: Date(timeIntervalSince1970: 1_795_484_909))
+                    }.value
+                    guard !Task.isCancelled, identity.userID == userID else { return }
+                }
             }
             let organizations = try await api.myOrganizations(token: token).organizations
             var snapshots: [(organizationID: String, profile: StampProfile)] = []

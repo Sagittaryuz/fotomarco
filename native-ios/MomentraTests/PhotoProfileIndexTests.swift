@@ -3,6 +3,22 @@ import CoreLocation
 @testable import Momentra
 
 final class PhotoProfileIndexTests: XCTestCase {
+    func testLegacyAssociationPreservesOriginalProfileAndSkipsNewCaptures() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = UUID(), newer = UUID(), original = CaptureProfileTag(id: UUID(), name: "Anterior"), org = UUID()
+        try PhotoProfileIndex.register(captureID: old, profile: original, captureDate: Date(timeIntervalSince1970: 100), root: root)
+        try PhotoProfileIndex.register(captureID: newer, profile: original, captureDate: Date(timeIntervalSince1970: 300), root: root)
+        try PhotoProfileIndex.bindLocal(captureID: old, assetID: "asset", root: root)
+        XCTAssertEqual(try PhotoProfileIndex.associateLegacyCaptures(organizationID: org, name: "JMD Hamoa", before: Date(timeIntervalSince1970: 200), root: root), 1)
+        let index = PhotoProfileIndex.load(root: root)
+        XCTAssertEqual(index.captures[old], CaptureProfileTag(id: org, name: "JMD Hamoa"))
+        XCTAssertEqual(index.assets["asset"]?.id, org)
+        XCTAssertEqual(index.captures[newer], original)
+        XCTAssertEqual(try PhotoProfileIndex.associateLegacyCaptures(organizationID: org, name: "JMD Hamoa", before: Date(timeIntervalSince1970: 200), root: root), 0)
+        let stored = try Data(contentsOf: root.appendingPathComponent("CaptureProfiles/\(old.uuidString).json"))
+        XCTAssertEqual(try JSONDecoder().decode(CaptureProfileRecord.self, from: stored).profile, original)
+    }
     func testCaptureCoordinatesPersistForMapWithoutChangingPhoto() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
