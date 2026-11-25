@@ -49,3 +49,27 @@ export async function sendGoogleDriveChunk({ session, offset, totalBytes, bytes,
   if (!validId(file?.id) || offset + bytes.length !== totalBytes) throw new Error('upload-status-uncertain');
   return { complete: true, fileId: file.id };
 }
+
+/** Reconcile an interrupted request before deciding whether to retry any bytes. */
+export async function googleDriveUploadOffset({ session, totalBytes, fetchImpl = fetch }) {
+  const url = sessionURL(session);
+  if (!validSize(totalBytes)) throw new Error('invalid-upload-request');
+  let response;
+  try { response = await fetchImpl(url, { method: 'PUT', redirect: 'manual', signal: AbortSignal.timeout(15000),
+    headers: { 'content-length': '0', 'content-range': `bytes */${totalBytes}` } }); }
+  catch { throw new Error('upload-status-uncertain'); }
+  if (response.status === 404) return { state: 'expired' };
+  if (response.status === 308) {
+    const range = response.headers.get('range');
+    const match = range == null ? null : /^bytes=0-(\d+)$/.exec(range);
+    if (range != null && !match) throw new Error('upload-status-uncertain');
+    const nextOffset = match ? Number(match[1]) + 1 : 0;
+    if (!Number.isSafeInteger(nextOffset) || nextOffset < 0 || nextOffset >= totalBytes) throw new Error('upload-status-uncertain');
+    return { state: 'uploading', nextOffset };
+  }
+  if (response.status !== 200 && response.status !== 201) throw new Error('upload-status-uncertain');
+  let file;
+  try { file = await response.json(); } catch { throw new Error('upload-status-uncertain'); }
+  if (!validId(file?.id)) throw new Error('upload-status-uncertain');
+  return { state: 'uploaded', fileId: file.id };
+}
