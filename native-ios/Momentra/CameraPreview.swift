@@ -61,6 +61,7 @@ struct CameraPreview: View {
     }
 
     private func tapPreview(at position: CGPoint) {
+        guard !pinching else { return }
         onTap()
         guard let device, let point = bridge.view?.captureDevicePoint(at: position) else { return }
         let request = UUID()
