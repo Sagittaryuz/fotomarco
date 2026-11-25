@@ -1,6 +1,31 @@
 import SwiftUI
 import UIKit
 
+struct BusinessStorageSelectionView: View {
+    let api: BusinessAPIClient
+    let organizationID: String
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink("OneDrive") {
+                    BusinessOneDriveView(api: api, organizationID: organizationID)
+                }
+                NavigationLink("Google Drive") {
+                    ContentUnavailableView("Google Drive", systemImage: "externaldrive.badge.icloud", description:
+                        Text("O armazenamento compartilhado pelo Google Drive está em desenvolvimento."))
+                        .navigationTitle("Google Drive")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            } header: {
+                Text("Escolha o armazenamento das fotos da organização")
+            }
+        }
+        .navigationTitle("Armazenamento")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct BusinessOneDriveView: View {
     let api: BusinessAPIClient
     let organizationID: String

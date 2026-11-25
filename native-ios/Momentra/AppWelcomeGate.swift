@@ -9,7 +9,8 @@ enum ReleaseNews {
         "As opções de configurações têm áreas de toque maiores.",
         "A conexão do OneDrive da organização informa melhor quando ocorre uma falha.",
         "A seleção de fotos da sessão considera capturas concluídas durante a saída do aplicativo.",
-        "Os planos Pro e Business podem ser comparados em Configurações, em Upgrade do plano."
+        "Os planos Pro e Business podem ser comparados em Configurações, em Upgrade do plano.",
+        "O armazenamento compartilhado da organização tem uma tela de escolha de provedor."
     ]
 
     static func items(for version: String) -> [String] {

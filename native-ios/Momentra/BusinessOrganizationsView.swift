@@ -77,8 +77,8 @@ struct BusinessOrganizationsView: View {
                             accessToken: { try await identity.verifiedToken() })
                     }
                     if org.role == "owner" {
-                        NavigationLink("OneDrive da organização") {
-                            BusinessOneDriveView(api: client, organizationID: org.id)
+                        NavigationLink("Armazenamento compartilhado") {
+                            BusinessStorageSelectionView(api: client, organizationID: org.id)
                         }
                         NavigationLink("E-mail de convites") {
                             BusinessOrganizationEmailView(api: client, organizationID: org.id)
