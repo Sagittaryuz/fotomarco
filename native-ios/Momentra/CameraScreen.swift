@@ -1091,14 +1091,14 @@ struct CameraScreen: View {
                     Text("Adicionar conta Google Drive")
                 } icon: {
                     Image("GoogleDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
-                }
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.disabled(connectingArchive)
             Button { FotomarcoHaptics.play(.buttons); connectArchive(.oneDrive) } label: {
                 Label {
                     Text("Adicionar OneDrive ou Microsoft 365")
                 } icon: {
                     Image("OneDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
-                }
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.disabled(connectingArchive)
             if connectingArchive { ProgressView("Confirmando a conta…").font(.footnote) }
             if let archiveNotice { Text(archiveNotice).font(.footnote) }
@@ -1196,21 +1196,24 @@ struct CameraScreen: View {
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
                             if directUpdate.ready {
-                                Button("Atualizar agora") { requestUpdate(version) }
+                                Button { requestUpdate(version) } label: { settingsRowLabel("Atualizar agora") }
                                     .disabled(directUpdate.busy)
                             } else {
                                 Text("Para atualizar diretamente, ative uma vez pelo link pessoal de instalação.")
                                     .font(.footnote).foregroundStyle(.secondary)
-                                Link("Ver instruções", destination: UpdateService.releasesURL)
+                                Link(destination: UpdateService.releasesURL) { settingsRowLabel("Ver instruções") }
                             }
                         }
-                        Button(updates.checking ? "Verificando…" : "Buscar atualizações") {
+                        Button {
                             FotomarcoHaptics.play(.buttons)
                             Task { await updates.check() }
-                        }.disabled(updates.checking)
+                        } label: { settingsRowLabel(updates.checking ? "Verificando…" : "Buscar atualizações") }
+                            .disabled(updates.checking)
                         if let status = updates.status { Text(status).font(.footnote).foregroundStyle(.secondary) }
                         if let message = directUpdate.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                        Link("Privacidade e créditos", destination: URL(string: "https://momentra-camera.vercel.app/privacidade.html")!)
+                        Link(destination: URL(string: "https://momentra-camera.vercel.app/privacidade.html")!) {
+                            settingsRowLabel("Privacidade e créditos")
+                        }
                     } header: {
                         Text("Sobre")
                     } footer: {
