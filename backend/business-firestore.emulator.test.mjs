@@ -36,6 +36,23 @@ test('Google Drive binding preserves an existing OneDrive credential', { skip: !
   assert.deepEqual(saved.google, googleDrive);
 });
 
+test('verified Google account cannot be bound to two members of an organization', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const owner = `owner-${randomUUID()}`, org = randomUUID(), first = `first-${randomUUID()}`, second = `second-${randomUUID()}`;
+  await transaction(tx => tx.initializeOrganization({ id: org, ownerId: owner, name: 'Equipe', contactEmail: 'owner@example.com' }, 'owner@example.com'));
+  for (const uid of [first, second]) await transaction(async tx => {
+    await tx.occupiedSeats(org);
+    await tx.addMember({ organizationId: org, userId: uid, role: 'member', active: true, storageStatus: 'not-started' });
+  });
+  const service = new BusinessService({ transaction, verifyToken: async token => token,
+    verifyGoogleDriveMember: async () => ({ providerAccountId: 'google-account', permissionId: 'permission-id', email: 'person@example.com' }) });
+  assert.deepEqual(await service.bindGoogleDriveMember({ uid: first, emailVerified: true }, org, 'synthetic-access'), { linked: true });
+  await assert.rejects(service.bindGoogleDriveMember({ uid: second, emailVerified: true }, org, 'synthetic-access'), /provider-account-already-linked/);
+  const secondMember = await transaction(tx => tx.membership(org, second));
+  assert.equal(secondMember.googleDrivePendingIdentityId, undefined);
+});
+
 test('authorized owner bootstrap creates JMD Hamoa once and preserves it', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
   const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
