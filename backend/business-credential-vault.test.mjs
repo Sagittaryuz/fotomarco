@@ -19,6 +19,9 @@ test('provider credentials remain confidential and bound to organization and own
   await assert.rejects(vault.open('org', 'owner', mail, 'onedrive'), /invalid-vault-data/);
   await assert.rejects(vault.open('org', 'owner', mail, 'gmail'), /invalid-vault-data/);
   await assert.rejects(vault.open('other', 'owner', mail, 'microsoft-mail'), /invalid-vault-data/);
+  const googleDrive = await vault.seal('org', 'owner', credential, 'google-drive');
+  assert.deepEqual(await vault.open('org', 'owner', googleDrive, 'google-drive'), credential);
+  await assert.rejects(vault.open('org', 'owner', googleDrive, 'gmail'), /invalid-vault-data/);
   const bytes = Buffer.from(first.ciphertext, 'base64'); bytes[0] ^= 1;
   await assert.rejects(vault.open('org', 'owner', { ...first, ciphertext: bytes.toString('base64') }), /invalid-vault-data/);
   await assert.rejects(vault.seal('org', 'owner', { ...credential, extra: 'unexpected' }), /invalid-credential/);

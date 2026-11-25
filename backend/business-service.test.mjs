@@ -11,6 +11,7 @@ function fixture(withMail = true) {
   let storedCredential;
   let storedMail = withMail ? { version: 1, iv: 'iv', ciphertext: 'cipher', providerAccountId: 'id', email: 'owner@example.com' } : undefined;
   let storedMicrosoftMail;
+  let storedGoogleDrive;
   const sent = [];
   const tx = {
     organization: async id => id === 'org' ? organization : null,
@@ -33,13 +34,28 @@ function fixture(withMail = true) {
     googleMailCredential: async () => storedMail,
     microsoftMailCredential: async () => storedMicrosoftMail,
     setMicrosoftMailCredential: async (_, value) => { storedMicrosoftMail = value; },
+    googleDriveCredential: async () => storedGoogleDrive,
+    setGoogleDriveCredential: async (_, value) => { storedGoogleDrive = value; },
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100,
     prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async values => { sent.push(values); } }) });
   return { service, records, invites, sent, storedCredential: () => storedCredential, storedMail: () => storedMail,
     storedMicrosoftMail: () => storedMicrosoftMail,
+    storedGoogleDrive: () => storedGoogleDrive,
     replaceMail: value => { storedMail = value; } };
 }
+
+test('only owner can bind Google Drive; changing accounts requires migration and preserves the original', async () => {
+  const { service, records, storedGoogleDrive } = fixture();
+  const record = { version: 1, iv: 'iv', ciphertext: 'sealed', providerAccountId: 'google-id', ownerPermissionId: 'permission-id' };
+  service.prepareGoogleDrive = async () => record;
+  assert.deepEqual(await service.connectGoogleDrive({ uid: 'owner' }, 'org', 'refresh'), { connected: true });
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  await assert.rejects(service.connectGoogleDrive({ uid: 'member' }, 'org', 'refresh'), /forbidden/);
+  service.prepareGoogleDrive = async () => ({ ...record, providerAccountId: 'other' });
+  await assert.rejects(service.connectGoogleDrive({ uid: 'owner' }, 'org', 'refresh'), /storage-account-change-requires-migration/);
+  assert.deepEqual(storedGoogleDrive(), record);
+});
 
 test('only owner can bind a matching verified Microsoft mailbox and failures preserve existing credentials', async () => {
   const { service, records, storedMail, storedMicrosoftMail } = fixture();

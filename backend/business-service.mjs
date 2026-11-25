@@ -8,13 +8,14 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
     this.clock = clock;
     this.canCreateOrganization = canCreateOrganization;
     this.prepareOneDrive = prepareOneDrive;
+    this.prepareGoogleDrive = prepareGoogleDrive;
     this.prepareOwnerFolder = prepareOwnerFolder;
     this.prepareMemberFolder = prepareMemberFolder;
     this.grantMemberFolder = grantMemberFolder;
@@ -276,6 +277,30 @@ export class BusinessService {
       if (!Number.isInteger(seats) || seats < 2) throw new Error('invalid-seat-counter');
       await tx.completeMemberRevocation(organizationId, targetId);
       return { complete: true };
+    });
+  }
+
+  async connectGoogleDrive(token, organizationId, refreshToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId || typeof refreshToken !== 'string' ||
+        !refreshToken || refreshToken.length > 16384 || typeof this.prepareGoogleDrive !== 'function') throw new Error('invalid-request');
+    const verifyOwner = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member) || member.role !== 'owner' || org.ownerId !== identity.uid) throw new Error('forbidden');
+    };
+    await this.transaction(verifyOwner);
+    const record = await this.prepareGoogleDrive({ organizationId, ownerId: identity.uid, refreshToken });
+    if (!record || record.version !== 1 || typeof record.iv !== 'string' || !record.iv ||
+        typeof record.ciphertext !== 'string' || !record.ciphertext || typeof record.providerAccountId !== 'string' ||
+        !record.providerAccountId || typeof record.ownerPermissionId !== 'string' || !record.ownerPermissionId ||
+        Object.keys(record).sort().join(',') !== 'ciphertext,iv,ownerPermissionId,providerAccountId,version') throw new Error('invalid-provider-credential');
+    return this.transaction(async tx => {
+      await verifyOwner(tx);
+      const existing = await tx.googleDriveCredential(organizationId);
+      if (existing && (existing.providerAccountId !== record.providerAccountId || existing.ownerPermissionId !== record.ownerPermissionId)) throw new Error('storage-account-change-requires-migration');
+      await tx.setGoogleDriveCredential(organizationId, record);
+      return { connected: true };
     });
   }
 
