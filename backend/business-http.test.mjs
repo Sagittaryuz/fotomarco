@@ -44,6 +44,21 @@ test('Microsoft mailbox connection requires authentication and accepts only a cr
   assert.equal(calls, 1);
 });
 
+test('Google Drive owner connection rejects unauthenticated and extraneous input', async () => {
+  let calls = 0;
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async token => token === 'valid.token' ? { uid: 'owner' } : null,
+    rateLimit: async () => true, serviceForIdentity: identity => ({ connectGoogleDrive: async (_, org, token) => {
+      calls++; assert.equal(identity.uid, 'owner'); assert.equal(org, 'org'); assert.equal(token, 'test-token');
+      return { connected: true };
+    } }) });
+  const path = '/v1/organizations/org/storage/google-drive/connect';
+  assert.equal((await handler(request(path, '{"refreshToken":"test-token"}', 'bad'))).status, 401);
+  assert.equal((await handler(request(path, '{"refreshToken":"test-token","role":"owner"}'))).status, 400);
+  assert.equal((await handler(request(path, '{"refreshToken":"test-token"}'))).status, 200);
+  assert.equal(calls, 1);
+});
+
 test('OneDrive connection exposes only allowlisted diagnostics, never provider details', async () => {
   let reason = 'provider-token-unavailable';
   const handler = createBusinessHandler({ preAuthLimit: async () => true,
