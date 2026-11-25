@@ -1148,57 +1148,81 @@ struct CameraScreen: View {
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
-                    Section("Conta e organização") {
+                    Section("Conta") {
+                        NavigationLink { BusinessAccountView() } label: { settingsRowLabel("Minha conta") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         NavigationLink { BusinessPlansView() } label: { settingsRowLabel("Upgrade do plano") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        NavigationLink { BusinessAccountView() } label: { settingsRowLabel("Conta Business") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: { settingsRowLabel("Gerenciar organização") }
+                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: { settingsRowLabel("Organização e equipe") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
-                    archiveSettingsSection
-                    Section("Ajustes da câmera") {
-                        NavigationLink { PhotoStylesView(selected: $photoStyle) } label: { settingsRowLabel("Estilos fotográficos") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        Toggle("Escanear QR Codes", isOn: $scanQR)
-                        Toggle("Mostrar Texto Detectado", isOn: $scanText)
-                        Text("QR Codes e textos são reconhecidos automaticamente na prévia. Toque no resultado para abrir ou selecionar.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        if !camera.recognition.available {
-                            Text("A leitura automática não está disponível com a configuração atual da câmera.")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                    }
-                    Section("Preferências") {
-                        NavigationLink { HapticSettingsView { publishCaptureContext() } } label: { settingsRowLabel("Vibrações") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                    }
-                    Section("Composição") {
-                        Toggle("Grade", isOn: $showGrid)
-                    }
-                    Section("Aparência") {
-                        NavigationLink { AppIconPicker() } label: { settingsRowLabel("Ícone do aplicativo") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                    }
-                    Section("Carimbo") {
+                    Section {
                         NavigationLink {
-                            StampLayoutEditor(store: stampProfiles)
+                            Form {
+                                Section("Câmera") {
+                                    NavigationLink { PhotoStylesView(selected: $photoStyle) } label: { settingsRowLabel("Estilos fotográficos") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                                    Toggle("Grade", isOn: $showGrid)
+                                    Toggle("Localização", isOn: $gpsEnabled)
+                                    Text("A localização também é usada pelo mapa e pelas informações das capturas.")
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                    Toggle("Escanear QR Codes", isOn: $scanQR)
+                                    Toggle("Mostrar Texto Detectado", isOn: $scanText)
+                                    Text("QR Codes e textos são reconhecidos automaticamente na prévia. Toque no resultado para abrir ou selecionar.")
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                    if !camera.recognition.available {
+                                        Text("A leitura automática não está disponível com a configuração atual da câmera.")
+                                            .font(.footnote).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Câmera")
+                        } label: { settingsRowLabel("Câmera") }
+                        .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                        NavigationLink {
+                            Form {
+                                Section("Layout e perfis") {
+                                    NavigationLink { StampLayoutEditor(store: stampProfiles) } label: { settingsRowLabel("Escolher e editar perfil") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                                    if stampProfiles.profiles.count > 1 {
+                                        Picker("Perfil ao abrir o app", selection: Binding(
+                                            get: { stampProfiles.startupSelection }, set: { stampProfiles.setStartup($0) }
+                                        )) {
+                                            Text("Usado por último").tag("last")
+                                            ForEach(stampProfiles.profiles) { item in
+                                                Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id.uuidString)
+                                            }
+                                        }
+                                    }
+                                    Toggle("Carimbo", isOn: $stampEnabled)
+                                }
+                            }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Layout e perfis")
                         } label: { settingsRowLabel("Layout e perfis") }
                         .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        if stampProfiles.profiles.count > 1 {
-                            Picker("Perfil ao abrir o app", selection: Binding(
-                                get: { stampProfiles.startupSelection },
-                                set: { stampProfiles.setStartup($0) }
-                            )) {
-                                Text("Usado por último").tag("last")
-                                ForEach(stampProfiles.profiles) { item in
-                                    Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id.uuidString)
+                        NavigationLink {
+                            Form { archiveSettingsSection }
+                                .toggleStyle(DirectionalSwitchStyle()).navigationTitle("Armazenamento")
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text("Armazenamento")
+                                if archiveStatus.pending + businessArchiveStatus.pending > 0 {
+                                    Text("\(archiveStatus.pending + businessArchiveStatus.pending) captura(s) aguardando envio")
+                                        .font(.caption).foregroundStyle(.secondary)
                                 }
-                            }
+                            }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                         }
+                        NavigationLink {
+                            Form {
+                                NavigationLink { HapticSettingsView { publishCaptureContext() } } label: { settingsRowLabel("Vibrações") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                                NavigationLink { AppIconPicker() } label: { settingsRowLabel("Ícone do aplicativo") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                            }.navigationTitle("Preferências")
+                        } label: { settingsRowLabel("Preferências") }
+                        .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
-                    Toggle("Localização", isOn: $gpsEnabled)
-                    Toggle("Carimbo", isOn: $stampEnabled)
+                    Section {
+                        NavigationLink {
+                            Form {
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                         if let version = updates.availableVersion {
@@ -1227,6 +1251,10 @@ struct CameraScreen: View {
                     } footer: {
                         Text("Desenvolvido por Marcos Rodrigues Pires · 2026")
                             .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                            }.navigationTitle("Sobre")
+                        } label: { settingsRowLabel("Sobre") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                 }
                 .toggleStyle(DirectionalSwitchStyle())
