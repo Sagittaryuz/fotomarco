@@ -3,6 +3,7 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { googleServiceAccountToken } from './business-google-credential.mjs';
 import { createCredentialVault } from './business-credential-vault.mjs';
 import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
+import { microsoftBusinessMailCredential } from './business-microsoft-mail-oauth.mjs';
 import { invitationLanding } from './business-invitation-landing.mjs';
 import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 import { gmailInvitationSender } from './business-gmail-invitation.mjs';
@@ -47,6 +48,15 @@ export function createBusinessWorker(env, overrides = {}) {
     const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
     const sealed = await vault.seal(organizationId, ownerId,
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'gmail');
+    return { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email };
+  });
+  const prepareMicrosoftMail = overrides.prepareMicrosoftMail ?? (async ({ organizationId, ownerId, refreshToken }) => {
+    const exchange = microsoftBusinessMailCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(refreshToken);
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const sealed = await vault.seal(organizationId, ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'microsoft-mail');
     return { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email };
   });
   const prepareOwnerFolder = overrides.prepareOwnerFolder ?? (async ({ organizationId, org, storage, marker, name, email }) => {
@@ -235,7 +245,7 @@ export function createBusinessWorker(env, overrides = {}) {
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
     prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
     verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
-    prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
+    prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),
