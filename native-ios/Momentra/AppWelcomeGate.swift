@@ -3,10 +3,12 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.51"
+    static let version = "0.1.52"
     static let items = [
-        "Ao sair do aplicativo, as fotos capturadas na sessão são preparadas para colar em outros aplicativos.",
-        "O foco acompanha o centro do enquadramento durante o zoom."
+        "A galeria inicia a sincronização em segundo plano e prepara miniaturas para acesso mais rápido.",
+        "As opções de configurações têm áreas de toque maiores.",
+        "A conexão do OneDrive da organização informa melhor quando ocorre uma falha.",
+        "A seleção de fotos da sessão considera capturas concluídas durante a saída do aplicativo."
     ]
 
     static func items(for version: String) -> [String] {
