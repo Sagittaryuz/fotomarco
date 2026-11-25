@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BusinessService } from './business-service.mjs';
+import { createCredentialVault } from './business-credential-vault.mjs';
+import { microsoftBusinessMailCredential } from './business-microsoft-mail-oauth.mjs';
+import { microsoftInvitationSender } from './business-microsoft-invitation.mjs';
 
 function fixture(withMail = true) {
   const organization = { id: 'org', ownerId: 'owner', name: 'Equipe', contactEmail: 'owner@example.com' };
@@ -97,6 +100,40 @@ test('does not send an invitation when its mail provider changes during preparat
   await assert.rejects(service.invite({ uid: 'owner' }, 'org', 'member@example.com'), /mail-configuration-changed/);
   assert.equal(sent.length, 0);
   assert.equal(invites.size, 0);
+});
+
+test('verified Microsoft credential is encrypted and used to submit an invitation to the intended recipient', async () => {
+  const { service, storedMicrosoftMail } = fixture();
+  const org = '11111111-1111-4111-8111-111111111111';
+  // The fixture uses a trusted fixed organization; adapt the public UUID at the sender boundary.
+  const vault = await createCredentialVault(Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64'));
+  let mailRequests = 0;
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/token')) return { status: 200, json: async () => ({ access_token: 'access', refresh_token: 'rotated', scope: 'Mail.Send User.Read' }) };
+    if (url.includes('/me?$select=id,mail')) return { status: 200, json: async () => ({ id: 'ms-id', mail: 'owner@example.com' }) };
+    if (url.includes('/me?$select=id')) return { status: 200, json: async () => ({ id: 'ms-id' }) };
+    if (url.endsWith('/sendMail')) { mailRequests++; assert.equal(JSON.parse(options.body).message.toRecipients[0].emailAddress.address, 'member@example.com'); return { status: 202 }; }
+    throw new Error('unexpected request');
+  };
+  const exchange = microsoftBusinessMailCredential({ clientId: '12345678-1234-1234-1234-123456789abc', fetchImpl });
+  service.prepareMicrosoftMail = async ({ organizationId, ownerId, refreshToken }) => {
+    const verified = await exchange(refreshToken);
+    const sealed = await vault.seal(organizationId, ownerId, { providerAccountId: verified.providerAccountId, refreshToken: verified.refreshToken }, 'microsoft-mail');
+    return { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email };
+  };
+  await service.connectMicrosoftMail({ uid: 'owner' }, 'org', 'synthetic-refresh');
+  assert.ok(!JSON.stringify(storedMicrosoftMail()).includes('synthetic-refresh'));
+  const sender = microsoftInvitationSender({ invitationOrigin: 'https://business.example', fetchImpl });
+  service.prepareMailDelivery = async ({ mail, provider }) => {
+    assert.equal(provider, 'microsoft');
+    const saved = await vault.open('org', 'owner', mail, 'microsoft-mail');
+    const verified = await exchange(saved.refreshToken);
+    return { record: mail, send: ({ recipientEmail, organizationName }) => sender({ accessToken: verified.accessToken,
+      expectedAccountId: verified.providerAccountId, recipientEmail, organizationName, organizationId: org,
+      invitationId: '22222222-2222-4222-8222-222222222222' }) };
+  };
+  await service.invite({ uid: 'owner' }, 'org', 'member@example.com');
+  assert.equal(mailRequests, 1);
 });
 
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
