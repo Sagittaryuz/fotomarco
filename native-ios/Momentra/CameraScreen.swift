@@ -173,6 +173,7 @@ struct CameraScreen: View {
     @State private var captureSessionID = UUID()
     @State private var sessionStartedCount = 0
     @State private var cameraShareTask: Task<Void, Never>?
+    @State private var cameraShareProgress: GalleryShareProgress?
     @State private var cameraShare: GalleryShareBatch?
     @State private var cameraShareFailed = false
     @State private var galleryThumbnailRevision = UUID()
@@ -936,6 +937,7 @@ struct CameraScreen: View {
         }
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
+        .overlay { if let cameraShareProgress { GalleryShareProgressOverlay(progress: cameraShareProgress) } }
         .sheet(item: $cameraShare) { batch in
             batch.sheet {}
         }
@@ -1019,9 +1021,12 @@ struct CameraScreen: View {
         let files = sessionCaptureFiles.isEmpty ? [thumbnail.file] : sessionCaptureFiles
         FotomarcoHaptics.play(.quickShare)
         cameraShareTask = Task {
-            defer { cameraShareTask = nil }
+            defer { cameraShareTask = nil; cameraShareProgress = nil }
             do {
-                let batch = try await GalleryShareBatch.prepare(files, copy: copyCameraThumbnail)
+                let batch = try await GalleryShareBatch.prepare(files, progress: { completed, total in
+                    cameraShareProgress = GalleryShareProgress(completed: completed, total: total)
+                }, copy: copyCameraThumbnail)
+                cameraShareProgress = nil
                 try Task.checkCancellation()
                 cameraShare = batch
             } catch {

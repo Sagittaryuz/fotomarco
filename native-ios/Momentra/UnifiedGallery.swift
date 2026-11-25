@@ -36,7 +36,6 @@ struct OriginalsView: View {
     @State private var pane: Pane?
     @State private var detail: GalleryItem?
     @State private var trashItem: GalleryItem?
-    @State private var quickShare: GalleryItem?
     @State private var shared: GalleryShareBatch?
     @State private var shareProgress: GalleryShareProgress?
     @State private var confirmBatch = false
@@ -148,7 +147,7 @@ struct OriginalsView: View {
                     GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
                                 contentVersion: projectionVersion, newestScrollRequest: scrollRequest,
                                 bottomInset: galleryFooterHeight,
-                                tile: tile, open: open, longPress: tab == .trash ? nil : { quickShare = $0 },
+                                tile: tile, open: open, longPress: tab == .trash ? nil : { shareItems([$0]) },
                                 reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
                                 dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) },
                                 userStartedScrolling: { openedAtNewest = false })
@@ -228,9 +227,6 @@ struct OriginalsView: View {
                                       if item.origin != .local { cloudRefresh += 1 }
                                   },
                                   onSavedCopy: { reloadVersion += 1 })
-        }
-        .fullScreenCover(item: $quickShare) { item in
-            GalleryQuickShare(load: { try await item.input() }, isVideo: item.isVideo)
         }
         .sheet(item: $trashItem) { item in trashDetail(item) }
         .sheet(item: $shared) { $0.sheet(onSuccess: resetSelection) }
@@ -730,8 +726,12 @@ struct OriginalsView: View {
     }
 
     private func shareSelection(_ items: [GalleryItem]) {
-        let chosen = items.filter { selected.contains($0.id) }
+        shareItems(items.filter { selected.contains($0.id) })
+    }
+
+    private func shareItems(_ chosen: [GalleryItem]) {
         guard !busy, !chosen.isEmpty else { return }
+        FotomarcoHaptics.play(.quickShare)
         busy = true
         Task {
             defer { busy = false; shareProgress = nil }

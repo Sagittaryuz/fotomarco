@@ -224,7 +224,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             cell.showSelected(parent.selected.contains(item.id))
             if !parent.selecting, let longPress = parent.longPress {
                 cell.accessibilityCustomActions = [
-                    UIAccessibilityCustomAction(name: "Ampliar e compartilhar") { _ in longPress(item); return true }
+                    UIAccessibilityCustomAction(name: "Compartilhar foto") { _ in longPress(item); return true }
                 ]
             } else {
                 cell.accessibilityCustomActions = nil
@@ -285,7 +285,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
                     if parent.selecting { cell.accessibilityCustomActions = nil }
                     else if let longPress = parent.longPress {
                         cell.accessibilityCustomActions = [
-                            UIAccessibilityCustomAction(name: "Ampliar e compartilhar") { _ in longPress(item); return true }
+                            UIAccessibilityCustomAction(name: "Compartilhar foto") { _ in longPress(item); return true }
                         ]
                     }
                 }
