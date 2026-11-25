@@ -38,3 +38,21 @@ test('classifies token and Graph failures without returning provider responses',
   });
   await assert.rejects(graphFailure('refresh'), error => error.message === 'provider-graph-unavailable');
 });
+
+test('classifies network and malformed response failures without exposing upstream details', async () => {
+  for (const failingStage of ['token', 'graph']) {
+    for (const failure of ['network', 'json']) {
+      const fetchImpl = async url => {
+        const isToken = url.includes('/token');
+        if ((failingStage === 'token') === isToken) {
+          if (failure === 'network') throw new Error('private network details');
+          return { status: 200, json: async () => { throw new Error('private response'); } };
+        }
+        return { status: 200, json: async () => ({ access_token: 'access', scope: 'Files.ReadWrite' }) };
+      };
+      const exchange = microsoftBusinessCredential({ clientId, fetchImpl });
+      await assert.rejects(exchange('refresh'), error =>
+        error.message === `provider-${failingStage}-unavailable`);
+    }
+  }
+});

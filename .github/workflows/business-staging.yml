@@ -1,5 +1,6 @@
 name: Publish isolated Business staging
 on:
+  workflow_dispatch:
   push:
     branches: [feat/business-organizations-foundation]
     paths: [.github/workflows/business-staging.yml, backend/wrangler.business.staging.json]
