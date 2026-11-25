@@ -4,6 +4,7 @@ export function verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermis
   if (!validId(ownerPermissionId) || (memberPermissionId !== undefined && (!validId(memberPermissionId) || memberPermissionId === ownerPermissionId)) ||
       !folder || !validId(folder.id) || folder.mimeType !== 'application/vnd.google-apps.folder' || folder.trashed !== false ||
       folder.driveId || !folder.capabilities || folder.capabilities.canListChildren !== true ||
+      (memberPermissionId !== undefined && folder.writersCanShare !== false) ||
       !permissions || !Array.isArray(permissions.permissions) || permissions.nextPageToken || !permissions.permissions.length) {
     throw new Error('unsafe-google-folder');
   }
@@ -35,7 +36,7 @@ export async function checkGoogleDriveFolderAccess({ accessToken, folderId, expe
     try { return await response.json(); } catch { throw new Error('storage-unavailable'); }
   };
   const metadata = new URL(base);
-  metadata.searchParams.set('fields', 'id,mimeType,trashed,driveId,parents,capabilities(canListChildren)');
+  metadata.searchParams.set('fields', 'id,mimeType,trashed,driveId,parents,writersCanShare,capabilities(canListChildren)');
   const folder = await get(metadata.toString());
   if (!folder || folder.id !== folderId || !Array.isArray(folder.parents) || folder.parents.length !== 1 || folder.parents[0] !== expectedParentId) throw new Error('unsafe-google-folder');
   const acl = new URL(`${base}/permissions`);

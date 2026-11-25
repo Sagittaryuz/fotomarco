@@ -26,7 +26,7 @@ export async function createGoogleDrivePrivateFolder({ accessToken, parentId, pa
     let response;
     try { response = await fetchImpl('https://www.googleapis.com/drive/v3/files?fields=id%2Cname%2CmimeType%2Cparents%2CappProperties%2Ctrashed', {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ name: name.trim(), mimeType: 'application/vnd.google-apps.folder', parents: [parentId], appProperties: { photomarkMarker: marker.toLowerCase() } })
+      body: JSON.stringify({ name: name.trim(), mimeType: 'application/vnd.google-apps.folder', parents: [parentId], writersCanShare: false, appProperties: { photomarkMarker: marker.toLowerCase() } })
     }); } catch { throw new Error('storage-create-unconfirmed'); }
     if (response.status !== 200) throw new Error('storage-create-unconfirmed');
     try { folder = await response.json(); } catch { throw new Error('storage-create-unconfirmed'); }
