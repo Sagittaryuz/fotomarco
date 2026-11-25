@@ -29,3 +29,19 @@ test('never creates under a publicly shared parent', async () => {
   await assert.rejects(createGoogleDrivePrivateFolder({ ...args, fetchImpl }), /unsafe-google-folder/);
   assert.equal(created, false);
 });
+
+test('recovers a prior marked folder without creating another and rejects ambiguous results', async () => {
+  let created = 0, duplicates = false;
+  const existing = { id: 'child', name: 'Photomark', mimeType: folderMime, parents: ['parent'], trashed: false, appProperties: { photomarkMarker: marker } };
+  const fetchImpl = async (url, options) => {
+    if (options.method === 'POST') { created++; throw new Error('unexpected'); }
+    if (url.includes('/permissions?')) return { status: 200, json: async () => ({ permissions: [{ id: 'owner', type: 'user', role: 'owner' }] }) };
+    if (url.includes('/files/parent?')) return { status: 200, json: async () => ({ id: 'parent', parents: ['root'], mimeType: folderMime, trashed: false, capabilities: { canListChildren: true } }) };
+    if (url.includes('/files/child?')) return { status: 200, json: async () => ({ id: 'child', parents: ['parent'], mimeType: folderMime, trashed: false, capabilities: { canListChildren: true } }) };
+    return { status: 200, json: async () => ({ files: duplicates ? [existing, existing] : [existing] }) };
+  };
+  assert.deepEqual(await createGoogleDrivePrivateFolder({ ...args, fetchImpl }), { folderId: 'child' });
+  duplicates = true;
+  await assert.rejects(createGoogleDrivePrivateFolder({ ...args, fetchImpl }), /ambiguous-google-folder/);
+  assert.equal(created, 0);
+});
