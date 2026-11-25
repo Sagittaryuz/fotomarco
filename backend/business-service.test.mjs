@@ -56,6 +56,21 @@ test('only owner can bind a matching verified Microsoft mailbox and failures pre
   assert.deepEqual(storedMicrosoftMail(), record);
 });
 
+test('invites use the selected Microsoft mailbox without changing the existing Gmail credential', async () => {
+  const { service, sent, storedMail } = fixture();
+  const originalGmail = storedMail();
+  const record = { version: 1, iv: 'iv-ms', ciphertext: 'sealed-ms', providerAccountId: 'ms-id', email: 'owner@example.com' };
+  service.prepareMicrosoftMail = async () => record;
+  await service.connectMicrosoftMail({ uid: 'owner' }, 'org', 'refresh');
+  service.prepareMailDelivery = async ({ provider, mail }) => {
+    assert.equal(provider, 'microsoft'); assert.deepEqual(mail, record);
+    return { record: mail, send: async values => { sent.push(values); } };
+  };
+  await service.invite({ uid: 'owner' }, 'org', 'member@example.com');
+  assert.equal(sent[0].recipientEmail, 'member@example.com');
+  assert.deepEqual(storedMail(), originalGmail);
+});
+
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
   const { service, records, sent } = fixture();
   await service.invite({ uid: 'owner' }, 'org', ' PERSON@example.com ');

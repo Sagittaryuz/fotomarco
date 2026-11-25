@@ -184,24 +184,27 @@ export class BusinessService {
       const membership = await tx.membership(organizationId, identity.uid);
       const seats = await tx.occupiedSeats(organizationId);
       if (!mayInvite(identity, organization, membership, seats)) throw new Error('forbidden-or-full');
-      const mail = await tx.googleMailCredential(organizationId);
+      const provider = organization.mailProvider ?? 'gmail';
+      if (!['gmail', 'microsoft'].includes(provider)) throw new Error('mail-not-configured');
+      const mail = provider === 'microsoft' ? await tx.microsoftMailCredential(organizationId) : await tx.googleMailCredential(organizationId);
       if (!mail || mail.email !== organization.contactEmail || typeof this.prepareMailDelivery !== 'function') throw new Error('mail-not-configured');
-      return { organization, mail };
+      return { organization, mail, provider };
     };
     const context = await this.transaction(loadInvitationContext);
-    const prepared = await this.prepareMailDelivery({ organizationId, organization: context.organization, mail: context.mail });
+    const prepared = await this.prepareMailDelivery({ organizationId, organization: context.organization, mail: context.mail, provider: context.provider });
     if (!prepared || typeof prepared.send !== 'function' || !prepared.record || prepared.record.version !== 1 ||
         typeof prepared.record.iv !== 'string' || !prepared.record.iv || typeof prepared.record.ciphertext !== 'string' || !prepared.record.ciphertext ||
         prepared.record.email !== context.organization.contactEmail || prepared.record.providerAccountId !== context.mail.providerAccountId ||
         Object.keys(prepared.record).sort().join(',') !== 'ciphertext,email,iv,providerAccountId,version') throw new Error('invalid-provider-credential');
     const receipt = await this.transaction(async tx => {
       const current = await loadInvitationContext(tx);
-      if (current.organization.ownerId !== context.organization.ownerId || current.organization.contactEmail !== context.organization.contactEmail ||
+      if (current.provider !== context.provider || current.organization.ownerId !== context.organization.ownerId || current.organization.contactEmail !== context.organization.contactEmail ||
           current.mail.ciphertext !== context.mail.ciphertext || current.mail.iv !== context.mail.iv) throw new Error('mail-configuration-changed');
       const invitation = { id, organizationId, email: address, invitedBy: identity.uid, state: 'pending',
         expiresAt: this.clock() + 7 * 24 * 60 * 60 * 1000 };
       await tx.createInvitation(invitation);
-      await tx.setGoogleMailCredential(organizationId, prepared.record);
+      if (context.provider === 'microsoft') await tx.setMicrosoftMailCredential(organizationId, prepared.record);
+      else await tx.setGoogleMailCredential(organizationId, prepared.record);
       return { id, expiresAt: invitation.expiresAt };
     });
     await prepared.send({ recipientEmail: address, organizationName: context.organization.name, organizationId, invitationId: id });
@@ -660,6 +663,7 @@ export class BusinessService {
       const current = await readOwner(tx);
       if (current.contactEmail !== record.email) throw new Error('mailbox-mismatch');
       await tx.setMicrosoftMailCredential(organizationId, record);
+      await tx.updateOrganization(organizationId, { mailProvider: 'microsoft' });
       return { connected: true };
     });
   }
@@ -685,6 +689,7 @@ export class BusinessService {
       const current = await readOwner(tx);
       if (current.contactEmail !== record.email) throw new Error('mailbox-mismatch');
       await tx.setGoogleMailCredential(organizationId, record);
+      await tx.updateOrganization(organizationId, { mailProvider: 'gmail' });
       return { connected: true };
     });
   }

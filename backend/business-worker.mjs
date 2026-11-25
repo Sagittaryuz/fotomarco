@@ -7,6 +7,7 @@ import { microsoftBusinessMailCredential } from './business-microsoft-mail-oauth
 import { invitationLanding } from './business-invitation-landing.mjs';
 import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 import { gmailInvitationSender } from './business-gmail-invitation.mjs';
+import { microsoftInvitationSender } from './business-microsoft-invitation.mjs';
 import { revokeOneDriveMemberFolder } from './business-onedrive-revoke.mjs';
 import { verifyOneDriveMemberFolder } from './business-onedrive-verify.mjs';
 import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusinessUpload, sendBusinessUploadChunk, verifyBusinessUploadedItem } from './business-onedrive-upload.mjs';
@@ -105,8 +106,25 @@ export function createBusinessWorker(env, overrides = {}) {
       fetchImpl: boundedFetch });
     return true;
   });
-  const prepareMailDelivery = overrides.prepareMailDelivery ?? (async ({ organizationId, organization, mail }) => {
+  const prepareMailDelivery = overrides.prepareMailDelivery ?? (async ({ organizationId, organization, mail, provider }) => {
     const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    if (provider === 'microsoft') {
+      const saved = await vault.open(organizationId, organization.ownerId, mail, 'microsoft-mail');
+      if (saved.providerAccountId !== mail.providerAccountId) throw new Error('provider-identity-mismatch');
+      const exchange = microsoftBusinessMailCredential({ clientId: env.BUSINESS_MICROSOFT_CLIENT_ID,
+        ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+      const verified = await exchange(saved.refreshToken);
+      if (verified.providerAccountId !== mail.providerAccountId || verified.email !== organization.contactEmail) throw new Error('mailbox-mismatch');
+      const sealed = await vault.seal(organizationId, organization.ownerId,
+        { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'microsoft-mail');
+      const sender = microsoftInvitationSender({ invitationOrigin: env.BUSINESS_PUBLIC_ORIGIN,
+        ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+      return { record: { ...sealed, providerAccountId: verified.providerAccountId, email: verified.email },
+        send: ({ recipientEmail, organizationName, organizationId: org, invitationId }) => sender({
+          accessToken: verified.accessToken, expectedAccountId: verified.providerAccountId, recipientEmail, organizationName, organizationId: org, invitationId
+        }) };
+    }
+    if (provider !== 'gmail') throw new Error('mail-not-configured');
     const saved = await vault.open(organizationId, organization.ownerId, mail, 'gmail');
     if (saved.providerAccountId !== mail.providerAccountId) throw new Error('provider-identity-mismatch');
     const exchange = googleBusinessMailCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID,
