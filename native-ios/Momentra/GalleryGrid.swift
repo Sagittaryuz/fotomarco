@@ -2,10 +2,6 @@ import SwiftUI
 import UIKit
 
 enum GallerySelectionRange {
-    static func beginsRangeSelection(velocity: CGPoint) -> Bool {
-        abs(velocity.x) > 0 && abs(velocity.x) > abs(velocity.y) * 1.25
-    }
-
     static func applying<ID: Hashable>(_ ids: [ID], from: Int, through: Int, initial: Set<ID>, selecting: Bool) -> Set<ID> {
         guard ids.indices.contains(from), ids.indices.contains(through) else { return initial }
         var result = initial

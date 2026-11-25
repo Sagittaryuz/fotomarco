@@ -2,15 +2,6 @@ import XCTest
 @testable import Momentra
 
 final class GallerySelectionRangeTests: XCTestCase {
-    func testVerticalAndAmbiguousDragsRemainAvailableForScrolling() {
-        XCTAssertFalse(GallerySelectionRange.beginsRangeSelection(velocity: CGPoint(x: 0, y: 500)))
-        XCTAssertFalse(GallerySelectionRange.beginsRangeSelection(velocity: CGPoint(x: 200, y: -500)))
-        XCTAssertFalse(GallerySelectionRange.beginsRangeSelection(velocity: CGPoint(x: 100, y: 100)))
-        XCTAssertFalse(GallerySelectionRange.beginsRangeSelection(velocity: .zero))
-        XCTAssertTrue(GallerySelectionRange.beginsRangeSelection(velocity: CGPoint(x: 500, y: 100)))
-        XCTAssertTrue(GallerySelectionRange.beginsRangeSelection(velocity: CGPoint(x: -500, y: 100)))
-    }
-
     func testDragSelectsContiguousRangeInEitherDirection() {
         let items = ["a", "b", "c", "d", "e"]
         XCTAssertEqual(GallerySelectionRange.applying(items, from: 1, through: 3, initial: ["e"], selecting: true), ["b", "c", "d", "e"])
