@@ -1149,6 +1149,8 @@ struct CameraScreen: View {
             NavigationStack {
                 Form {
                     Section("Conta e organização") {
+                        NavigationLink { BusinessPlansView() } label: { settingsRowLabel("Upgrade do plano") }
+                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         NavigationLink { BusinessAccountView() } label: { settingsRowLabel("Conta Business") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: { settingsRowLabel("Gerenciar organização") }

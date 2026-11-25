@@ -13,7 +13,6 @@ struct BusinessSignInView: View {
     @State private var registering = false
     @State private var busy = false
     @State private var message: String?
-    @State private var showPlans = false
     @FocusState private var focus: Field?
     private enum Field { case email, password }
 
@@ -68,21 +67,12 @@ struct BusinessSignInView: View {
                     }.buttonStyle(.plain).modifier(GalleryControlSurface(rounded: true)).disabled(busy)
                     Button("Continuar sem conta") { FotomarcoHaptics.play(.buttons); continueWithoutAccount() }
                         .foregroundStyle(.secondary).disabled(busy)
-                    Button("Conhecer os planos") { FotomarcoHaptics.play(.buttons); showPlans = true }
-                        .foregroundStyle(.secondary).disabled(busy)
                     if busy { ProgressView().tint(.white) }
                 }
                 .frame(maxWidth: 420).padding(24).frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively)
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showPlans) {
-            NavigationStack {
-                BusinessPlansView().toolbar {
-                    ToolbarItem(placement: .confirmationAction) { Button("Concluído") { showPlans = false } }
-                }
-            }
-        }
         .alert("Photomark", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK", role: .cancel) { message = nil }
         } message: { Text(message ?? "") }

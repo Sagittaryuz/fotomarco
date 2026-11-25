@@ -8,7 +8,8 @@ enum ReleaseNews {
         "A galeria inicia a sincronização em segundo plano e prepara miniaturas para acesso mais rápido.",
         "As opções de configurações têm áreas de toque maiores.",
         "A conexão do OneDrive da organização informa melhor quando ocorre uma falha.",
-        "A seleção de fotos da sessão considera capturas concluídas durante a saída do aplicativo."
+        "A seleção de fotos da sessão considera capturas concluídas durante a saída do aplicativo.",
+        "Os planos Pro e Business podem ser comparados em Configurações, em Upgrade do plano."
     ]
 
     static func items(for version: String) -> [String] {
@@ -61,7 +62,7 @@ struct AppWelcomeGate: View {
             identity.start()
             if registering { try await identity.register(email: email, password: password, fullName: name) }
             else { try await identity.signIn(email: email, password: password) }
-            page = 3
+            finishOnboarding()
         }, signInWithProvider: { provider in
             let identity = BusinessIdentity.shared
             identity.start()
@@ -73,8 +74,13 @@ struct AppWelcomeGate: View {
                 while let presented = controller.presentedViewController { controller = presented }
                 try await identity.signInGoogle(presenting: controller)
             }
-            page = 3
-        }, continueWithoutAccount: { page = 3 })
+            finishOnboarding()
+        }, continueWithoutAccount: { finishOnboarding() })
+    }
+
+    private func finishOnboarding() {
+        lastPresentedVersion = currentVersion
+        completed = true
     }
 
     private var currentVersion: String {
