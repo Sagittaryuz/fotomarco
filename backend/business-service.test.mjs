@@ -71,6 +71,18 @@ test('invites use the selected Microsoft mailbox without changing the existing G
   assert.deepEqual(storedMail(), originalGmail);
 });
 
+test('does not send an invitation when its mail provider changes during preparation', async () => {
+  const { service, invites, sent } = fixture();
+  service.prepareMicrosoftMail = async () => ({ version: 1, iv: 'ms-iv', ciphertext: 'ms-cipher', providerAccountId: 'ms-id', email: 'owner@example.com' });
+  service.prepareMailDelivery = async ({ mail }) => {
+    await service.connectMicrosoftMail({ uid: 'owner' }, 'org', 'refresh');
+    return { record: mail, send: async value => { sent.push(value); } };
+  };
+  await assert.rejects(service.invite({ uid: 'owner' }, 'org', 'member@example.com'), /mail-configuration-changed/);
+  assert.equal(sent.length, 0);
+  assert.equal(invites.size, 0);
+});
+
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
   const { service, records, sent } = fixture();
   await service.invite({ uid: 'owner' }, 'org', ' PERSON@example.com ');
