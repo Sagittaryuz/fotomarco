@@ -29,6 +29,22 @@ test('fails closed when the limiter is unavailable or the body is oversized', as
   assert.equal((await active(request('/v1/organizations/org/invitations', 'x'.repeat(4097)))).status, 413);
 });
 
+test('OneDrive connection exposes only allowlisted diagnostics, never provider details', async () => {
+  let reason = 'provider-token-unavailable';
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async () => ({ uid: 'owner' }), rateLimit: async () => true,
+    serviceForIdentity: () => ({ connectOneDrive: async () => { throw new Error(reason); } }) });
+  const path = '/v1/organizations/org/storage/onedrive/connect';
+  const body = JSON.stringify({ refreshToken: 'private-test-token' });
+  const expected = await handler(request(path, body));
+  assert.equal(expected.status, 503);
+  assert.deepEqual(await expected.json(), { error: 'provider-token-unavailable' });
+  reason = 'private-test-token';
+  const unknown = await handler(request(path, body));
+  assert.equal(unknown.status, 503);
+  assert.deepEqual(await unknown.json(), { error: 'unavailable' });
+});
+
 test('reconciliation requires an authenticated caller and an empty request', async () => {
   let calls = 0;
   const handler = createBusinessHandler({ preAuthLimit: async () => true,

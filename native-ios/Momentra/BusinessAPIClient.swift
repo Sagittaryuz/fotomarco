@@ -12,7 +12,8 @@ struct BusinessAPIClient {
               !raw.contains("$"), let url = URL(string: raw) else { return nil }
         return try? BusinessAPIClient(endpoint: url)
     }
-    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch, mailNotConfigured }
+    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch, mailNotConfigured, microsoftToken, microsoftDrive, microsoftPermission, microsoftIdentity, microsoftConfiguration }
+    private struct SafeServerError: Decodable { let error: String }
     struct OrganizationReceipt: Decodable { let organizationId: String }
     struct InvitationReceipt: Decodable { let id: String; let expiresAt: Int64 }
     struct ProfileReceipt: Decodable { let organizationId: String; let versionId: String; let layoutJSON: String }
@@ -231,6 +232,17 @@ struct BusinessAPIClient {
         if http.statusCode == 412 { throw Failure.mailNotConfigured }
         if http.statusCode == 422 { throw Failure.mailboxMismatch }
         if http.statusCode == 401 || http.statusCode == 403 { throw Failure.unauthorized }
+        if http.statusCode == 503, path.suffix(3).elementsEqual(["storage", "onedrive", "connect"]), data.count <= 1024,
+           let code = try? JSONDecoder().decode(SafeServerError.self, from: data).error {
+            switch code {
+            case "provider-token-unavailable": throw Failure.microsoftToken
+            case "provider-graph-unavailable": throw Failure.microsoftDrive
+            case "provider-permission-missing": throw Failure.microsoftPermission
+            case "provider-identity-mismatch": throw Failure.microsoftIdentity
+            case "invalid-microsoft-client": throw Failure.microsoftConfiguration
+            default: break
+            }
+        }
         guard (200...299).contains(http.statusCode) else { throw Failure.unavailable }
         return (data, http)
     }

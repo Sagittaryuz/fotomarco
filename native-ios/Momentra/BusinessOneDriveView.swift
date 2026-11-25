@@ -82,6 +82,16 @@ struct BusinessOneDriveView: View {
             message = "Esta organização já utiliza outra conta OneDrive. A troca exige uma migração para preservar as fotos."
         } catch BusinessAPIClient.Failure.unauthorized {
             message = "A sessão ou a permissão da organização não foi confirmada. Entre novamente e tente conectar o OneDrive."
+        } catch BusinessAPIClient.Failure.microsoftToken {
+            message = "O servidor não conseguiu renovar a autorização Microsoft. Reconecte a conta e tente novamente."
+        } catch BusinessAPIClient.Failure.microsoftDrive {
+            message = "A Microsoft não confirmou o acesso ao OneDrive. Verifique se o OneDrive está ativo nessa conta."
+        } catch BusinessAPIClient.Failure.microsoftPermission {
+            message = "A autorização não incluiu a permissão necessária para os arquivos do OneDrive."
+        } catch BusinessAPIClient.Failure.microsoftIdentity {
+            message = "Não foi possível confirmar que o OneDrive pertence à conta Microsoft autorizada."
+        } catch BusinessAPIClient.Failure.microsoftConfiguration {
+            message = "A conexão Microsoft do servidor precisa ser configurada."
         } catch BusinessAPIClient.Failure.unavailable {
             message = "Não foi possível confirmar o OneDrive no servidor. Confira a conexão e tente novamente."
         } catch {

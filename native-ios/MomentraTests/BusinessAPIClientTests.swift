@@ -115,6 +115,17 @@ final class BusinessAPIClientTests: XCTestCase {
         } catch BusinessAPIClient.Failure.invalidRequest { } catch { XCTFail("Unexpected error") }
     }
 
+    func testOneDriveConnectionReportsOnlyRecognizedServerDiagnostics() async throws {
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"error":"provider-token-unavailable"}"#.utf8), response)
+        }
+        do {
+            _ = try await client.connectOneDrive(organizationID: "org", refreshToken: "credential", token: "token")
+            XCTFail("Expected provider diagnostic")
+        } catch BusinessAPIClient.Failure.microsoftToken { } catch { XCTFail("Unexpected error") }
+    }
+
     func testOrganizationSettingsAreSentWithoutChangingAccountCredentials() async throws {
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
             XCTAssertEqual(request.url?.path, "/v1/organizations/org/settings/update")

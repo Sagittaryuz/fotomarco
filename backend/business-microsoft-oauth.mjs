@@ -8,7 +8,7 @@ export function microsoftBusinessCredential({ clientId, fetchImpl = fetch }) {
     const tokenResponse = await fetchImpl('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form.toString()
     });
-    if (tokenResponse.status !== 200) throw new Error('provider-unavailable');
+    if (tokenResponse.status !== 200) throw new Error('provider-token-unavailable');
     const token = await tokenResponse.json();
     const rotatedRefresh = token.refresh_token ?? refreshToken;
     if (typeof token.access_token !== 'string' || !token.access_token || token.access_token.length > 16384 ||
@@ -18,7 +18,7 @@ export function microsoftBusinessCredential({ clientId, fetchImpl = fetch }) {
     }
     const get = async url => {
       const response = await fetchImpl(url, { redirect: 'manual', headers: { authorization: `Bearer ${token.access_token}` } });
-      if (response.status !== 200) throw new Error('provider-unavailable');
+      if (response.status !== 200) throw new Error('provider-graph-unavailable');
       return response.json();
     };
     const user = await get('https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName');

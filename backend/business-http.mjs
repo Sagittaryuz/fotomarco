@@ -170,6 +170,12 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
         if (Object.keys(payload).length !== 1 || typeof payload.email !== 'string') return reply(400, { error: 'invalid-body' });
         return reply(201, await service.invite(null, match[1], payload.email));
       } catch (error) {
+        // Return only a fixed, non-sensitive diagnostic for the authenticated
+        // owner connection flow; never forward provider responses or credentials.
+        if (connectOneDrive && ['provider-token-unavailable', 'provider-graph-unavailable',
+          'provider-permission-missing', 'provider-identity-mismatch', 'invalid-microsoft-client'].includes(error?.message)) {
+          return reply(503, { error: error.message });
+        }
         if (error?.message === 'storage-account-change-requires-migration') return reply(409, { error: 'storage-account-change-requires-migration' });
         if (error?.message === 'mailbox-mismatch') return reply(422, { error: 'mailbox-mismatch' });
         if (error?.message === 'mail-not-configured') return reply(412, { error: 'mail-not-configured' });
