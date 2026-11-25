@@ -21,3 +21,25 @@ export async function verifyGoogleDriveUpload({ accessToken, fileId, folderId, p
       file.appProperties?.photomarkMarker !== marker.toLowerCase()) throw new Error('upload-integrity-mismatch');
   return { verified: true, fileId };
 }
+
+/** A missing match remains uncertain; the caller must not immediately start another upload. */
+export async function findVerifiedGoogleDriveUpload({ accessToken, folderId, parentId, ownerPermissionId, memberPermissionId, expectedBytes, expectedSha256, marker, fetchImpl = fetch }) {
+  if (typeof folderId !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(folderId) || typeof marker !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(marker)) throw new Error('invalid-upload-verification');
+  await checkGoogleDriveFolderAccess({ accessToken, folderId, expectedParentId: parentId, ownerPermissionId, memberPermissionId, requiredMemberRole: 'writer', fetchImpl });
+  const url = new URL('https://www.googleapis.com/drive/v3/files');
+  url.searchParams.set('q', `'${folderId}' in parents and trashed = false and appProperties has { key='photomarkMarker' and value='${marker.toLowerCase()}' }`);
+  url.searchParams.set('fields', 'nextPageToken,files(id)');
+  url.searchParams.set('pageSize', '100');
+  let listing;
+  try {
+    const response = await fetchImpl(url.toString(), { redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { authorization: `Bearer ${accessToken}` } });
+    if (response.status !== 200) throw new Error('upstream');
+    listing = await response.json();
+  } catch { throw new Error('upload-verification-unavailable'); }
+  if (!listing || !Array.isArray(listing.files) || listing.nextPageToken || listing.files.length > 1) throw new Error('upload-verification-ambiguous');
+  if (!listing.files.length) return { state: 'unconfirmed' };
+  const result = await verifyGoogleDriveUpload({ accessToken, fileId: listing.files[0]?.id, folderId, parentId, ownerPermissionId,
+    memberPermissionId, expectedBytes, expectedSha256, marker, fetchImpl });
+  return { state: 'verified', fileId: result.fileId };
+}

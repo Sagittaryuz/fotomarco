@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyGoogleDriveUpload } from './business-google-drive-verify.mjs';
+import { findVerifiedGoogleDriveUpload, verifyGoogleDriveUpload } from './business-google-drive-verify.mjs';
 const marker = '11111111-1111-4111-8111-111111111111';
 const hash = 'a'.repeat(64);
 const args = { accessToken: 'private', fileId: 'file', folderId: 'folder', parentId: 'parent', ownerPermissionId: 'owner',
@@ -16,4 +16,16 @@ test('verifies file identity, parent, size and checksum in a private member fold
   for (const override of [{ sha256Checksum: 'b'.repeat(64) }, { parents: ['other'] }, { size: '124' }, { appProperties: {} }]) {
     await assert.rejects(verifyGoogleDriveUpload({ ...args, fetchImpl: provider(override) }), /upload-integrity-mismatch/);
   }
+});
+
+test('a missing or ambiguous marked file is never assumed safe to retry or verified', async () => {
+  let files = [];
+  const base = provider();
+  const fetchImpl = async (url, options) => url.startsWith('https://www.googleapis.com/drive/v3/files?')
+    ? { status: 200, json: async () => ({ files }) } : base(url, options);
+  assert.deepEqual(await findVerifiedGoogleDriveUpload({ ...args, fetchImpl }), { state: 'unconfirmed' });
+  files = [{ id: 'file' }];
+  assert.deepEqual(await findVerifiedGoogleDriveUpload({ ...args, fetchImpl }), { state: 'verified', fileId: 'file' });
+  files = [{ id: 'file' }, { id: 'other' }];
+  await assert.rejects(findVerifiedGoogleDriveUpload({ ...args, fetchImpl }), /upload-verification-ambiguous/);
 });
