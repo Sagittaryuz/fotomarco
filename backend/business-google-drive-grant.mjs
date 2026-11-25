@@ -7,7 +7,7 @@ export async function grantGoogleDriveMember({ accessToken, folderId, parentId, 
       memberPermissionId === ownerPermissionId || typeof memberEmail !== 'string' || memberEmail.length > 254 ||
       !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(memberEmail) || typeof verifyRecipientIdentity !== 'function' ||
       await verifyRecipientIdentity(memberEmail.toLowerCase(), memberPermissionId) !== true) throw new Error('invalid-member-identity');
-  const shared = { accessToken, folderId, expectedParentId: parentId, ownerPermissionId, memberPermissionId, fetchImpl };
+  const shared = { accessToken, folderId, expectedParentId: parentId, ownerPermissionId, memberPermissionId, requiredMemberRole: 'writer', fetchImpl };
   try {
     await checkGoogleDriveFolderAccess(shared);
     return { ready: true };

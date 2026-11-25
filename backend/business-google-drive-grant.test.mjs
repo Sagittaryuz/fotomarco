@@ -27,3 +27,16 @@ test('refuses an unverified member before contacting Drive', async () => {
   await assert.rejects(grantGoogleDriveMember({ ...args, verifyRecipientIdentity: async () => false, fetchImpl: async () => { called = true; } }), /invalid-member-identity/);
   assert.equal(called, false);
 });
+
+test('does not treat read-only access as permission to upload', async () => {
+  let writes = 0;
+  const fetchImpl = async (url, options) => {
+    if (options.method === 'POST') { writes++; return { status: 200 }; }
+    if (url.includes('/permissions?')) return { status: 200, json: async () => ({ permissions: [
+      { id: 'owner', type: 'user', role: 'owner' }, { id: 'member', type: 'user', role: 'reader' }] }) };
+    return { status: 200, json: async () => ({ id: 'folder', parents: ['parent'], mimeType: 'application/vnd.google-apps.folder',
+      trashed: false, writersCanShare: false, capabilities: { canListChildren: true } }) };
+  };
+  await assert.rejects(grantGoogleDriveMember({ ...args, fetchImpl }), /unsafe-google-folder/);
+  assert.equal(writes, 0);
+});

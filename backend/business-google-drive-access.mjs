@@ -1,7 +1,7 @@
 /** Fail closed unless the full Drive ACL contains only the expected principals. */
-export function verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermissionId, memberPermissionId, requireNoReshare = false }) {
+export function verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermissionId, memberPermissionId, requireNoReshare = false, requiredMemberRole }) {
   const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
-  if (!validId(ownerPermissionId) || (memberPermissionId !== undefined && (!validId(memberPermissionId) || memberPermissionId === ownerPermissionId)) ||
+  if (!validId(ownerPermissionId) || (requiredMemberRole !== undefined && requiredMemberRole !== 'writer') || (memberPermissionId !== undefined && (!validId(memberPermissionId) || memberPermissionId === ownerPermissionId)) ||
       !folder || !validId(folder.id) || folder.mimeType !== 'application/vnd.google-apps.folder' || folder.trashed !== false ||
       folder.driveId || !folder.capabilities || folder.capabilities.canListChildren !== true ||
       ((memberPermissionId !== undefined || requireNoReshare) && folder.writersCanShare !== false) ||
@@ -15,7 +15,7 @@ export function verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermis
         !['owner', 'writer', 'reader'].includes(permission.role) || permission.allowFileDiscovery === true) throw new Error('unsafe-google-folder');
     seen.add(permission.id);
     if (permission.id === ownerPermissionId && permission.role === 'owner') owners++;
-    else if (permission.id === memberPermissionId && ['writer', 'reader'].includes(permission.role)) members++;
+    else if (permission.id === memberPermissionId && (requiredMemberRole ? permission.role === requiredMemberRole : ['writer', 'reader'].includes(permission.role))) members++;
     else throw new Error('unsafe-google-folder');
   }
   if (owners !== 1 || (memberPermissionId !== undefined && members !== 1)) throw new Error('unsafe-google-folder');
@@ -23,7 +23,7 @@ export function verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermis
 }
 
 /** Read a specific folder and its ACL using only fixed Drive API endpoints. */
-export async function checkGoogleDriveFolderAccess({ accessToken, folderId, expectedParentId, ownerPermissionId, memberPermissionId, requireNoReshare = false, fetchImpl = fetch }) {
+export async function checkGoogleDriveFolderAccess({ accessToken, folderId, expectedParentId, ownerPermissionId, memberPermissionId, requireNoReshare = false, requiredMemberRole, fetchImpl = fetch }) {
   const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
   if (typeof accessToken !== 'string' || !accessToken || accessToken.length > 16384 ||
       !validId(folderId) || !validId(expectedParentId)) throw new Error('invalid-storage-configuration');
@@ -43,6 +43,6 @@ export async function checkGoogleDriveFolderAccess({ accessToken, folderId, expe
   acl.searchParams.set('fields', 'nextPageToken,permissions(id,type,role,deleted,allowFileDiscovery)');
   acl.searchParams.set('pageSize', '100');
   const permissions = await get(acl.toString());
-  verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermissionId, memberPermissionId, requireNoReshare });
+  verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermissionId, memberPermissionId, requireNoReshare, requiredMemberRole });
   return { folderId };
 }
