@@ -15,6 +15,7 @@ import { businessUploadOffset, createBusinessUploadSession, findVerifiedBusiness
 import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 import { ensurePrivateMemberFolder } from './business-onedrive-folders.mjs';
 import { verifiedMicrosoftMember } from './business-microsoft-member.mjs';
+import { verifiedGoogleDriveMember } from './business-google-drive-member.mjs';
 import { grantOneDriveMemberFolder } from './business-onedrive-grant.mjs';
 import { openBusinessPhoto } from './business-onedrive-download.mjs';
 
@@ -273,6 +274,7 @@ export function createBusinessWorker(env, overrides = {}) {
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
     prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
     verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
+    verifyGoogleDriveMember: overrides.verifyGoogleDriveMember ?? (token => verifiedGoogleDriveMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
     prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
       typeof identity.email === 'string' && identity.email.trim().toLowerCase() === ownerEmail,

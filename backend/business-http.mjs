@@ -14,6 +14,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const connectGoogleDrive = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/google-drive\/connect$/.exec(new URL(request.url).pathname);
       const provisionOwnerFolder = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/provision-owner$/.exec(new URL(request.url).pathname);
       const bindMicrosoftMember = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/bind-member$/.exec(new URL(request.url).pathname);
+      const bindGoogleDriveMember = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/google-drive\/bind-member$/.exec(new URL(request.url).pathname);
       const provisionMemberFolder = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/storage\/onedrive\/provision-member$/.exec(new URL(request.url).pathname);
       const connectGoogleMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/gmail\/connect$/.exec(new URL(request.url).pathname);
       const connectMicrosoftMail = /^\/v1\/organizations\/([A-Za-z0-9_-]{1,128})\/mail\/microsoft\/connect$/.exec(new URL(request.url).pathname);
@@ -28,7 +29,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       const createOrganization = new URL(request.url).pathname === '/v1/organizations';
       const mine = new URL(request.url).pathname === '/v1/organizations/mine';
       const bootstrapOwner = new URL(request.url).pathname === '/v1/organizations/bootstrap-owner';
-      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !bootstrapOwner && !connectOneDrive && !connectGoogleDrive && !provisionOwnerFolder && !bindMicrosoftMember && !provisionMemberFolder && !connectGoogleMail && !connectMicrosoftMail && !removeMember && !reserveCapture && !listCaptures && !readCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
+      if (!match && !createOrganization && !profile && !asset && !settings && !members && !mine && !bootstrapOwner && !connectOneDrive && !connectGoogleDrive && !provisionOwnerFolder && !bindMicrosoftMember && !bindGoogleDriveMember && !provisionMemberFolder && !connectGoogleMail && !connectMicrosoftMail && !removeMember && !reserveCapture && !listCaptures && !readCapture && !startUpload && !uploadChunk && !verifyCapture && !reconcileCapture) return reply(404, { error: 'not-found' });
       const auth = /^Bearer ([A-Za-z0-9_.-]{1,16384})$/.exec(request.headers.get('authorization') ?? '');
       if (!auth) return reply(401, { error: 'unauthorized' });
       if (typeof preAuthLimit !== 'function') return reply(503, { error: 'unavailable' });
@@ -43,7 +44,7 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
       try { allowed = await rateLimit(identity.uid); } catch { return reply(503, { error: 'unavailable' }); }
       if (allowed !== true) return reply(429, { error: 'rate-limited' });
       const size = request.headers.get('content-length');
-      const limit = uploadChunk ? 320 * 1024 * 10 : asset?.[2] === 'upload' ? 360448 : profile?.[2] === 'publish' ? 98304 : (connectOneDrive || connectGoogleDrive || connectGoogleMail || connectMicrosoftMail || bindMicrosoftMember || provisionMemberFolder) ? 20000 : 4096;
+      const limit = uploadChunk ? 320 * 1024 * 10 : asset?.[2] === 'upload' ? 360448 : profile?.[2] === 'publish' ? 98304 : (connectOneDrive || connectGoogleDrive || connectGoogleMail || connectMicrosoftMail || bindMicrosoftMember || bindGoogleDriveMember || provisionMemberFolder) ? 20000 : 4096;
       if (!size || !/^\d{1,7}$/.test(size) || Number(size) < 1 || Number(size) > limit) return reply(413, { error: 'invalid-size' });
       const expectedType = uploadChunk ? /^application\/octet-stream(?:\s*;|\s*$)/i : /^application\/json(?:\s*;|\s*$)/i;
       if (!expectedType.test(request.headers.get('content-type') ?? '')) return reply(415, { error: 'invalid-content-type' });
@@ -89,6 +90,10 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
         if (bindMicrosoftMember) {
           if (Object.keys(payload).length !== 1 || typeof payload.accessToken !== 'string') return reply(400, { error: 'invalid-body' });
           return reply(200, await service.bindMicrosoftMember(null, bindMicrosoftMember[1], payload.accessToken));
+        }
+        if (bindGoogleDriveMember) {
+          if (Object.keys(payload).length !== 1 || typeof payload.accessToken !== 'string') return reply(400, { error: 'invalid-body' });
+          return reply(200, await service.bindGoogleDriveMember(null, bindGoogleDriveMember[1], payload.accessToken));
         }
         if (provisionOwnerFolder) {
           if (Object.keys(payload).length) return reply(400, { error: 'invalid-body' });

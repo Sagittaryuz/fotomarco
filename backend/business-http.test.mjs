@@ -59,6 +59,21 @@ test('Google Drive owner connection rejects unauthenticated and extraneous input
   assert.equal(calls, 1);
 });
 
+test('Google Drive member identity binding accepts no caller-supplied identity or role', async () => {
+  let calls = 0;
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async token => token === 'valid.token' ? { uid: 'member' } : null,
+    rateLimit: async () => true, serviceForIdentity: identity => ({ bindGoogleDriveMember: async (_, org, token) => {
+      calls++; assert.equal(identity.uid, 'member'); assert.equal(org, 'org'); assert.equal(token, 'provider-token');
+      return { linked: true };
+    } }) });
+  const path = '/v1/organizations/org/storage/google-drive/bind-member';
+  assert.equal((await handler(request(path, '{"accessToken":"provider-token"}', 'bad'))).status, 401);
+  assert.equal((await handler(request(path, '{"accessToken":"provider-token","email":"other@example.com"}'))).status, 400);
+  assert.equal((await handler(request(path, '{"accessToken":"provider-token"}'))).status, 200);
+  assert.equal(calls, 1);
+});
+
 test('OneDrive connection exposes only allowlisted diagnostics, never provider details', async () => {
   let reason = 'provider-token-unavailable';
   const handler = createBusinessHandler({ preAuthLimit: async () => true,
