@@ -116,6 +116,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
       },
       oneDriveCredential: org => read(path(org, 'private', 'onedrive')),
       googleMailCredential: org => read(path(org, 'private', 'gmail')),
+      microsoftMailCredential: org => read(path(org, 'private', 'microsoft-mail')),
       latestProfile: async org => {
         const head = await read(path(org, 'state', 'profile'));
         if (!head) return null;
@@ -197,6 +198,7 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
           updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
       },
       setGoogleMailCredential: async (org, record) => put(path(org, 'private', 'gmail'), record),
+      setMicrosoftMailCredential: async (org, record) => put(path(org, 'private', 'microsoft-mail'), record),
       publishProfile: async profile => {
         put(path(profile.organizationId, 'profiles', profile.versionId), profile, { exists: false });
         put(path(profile.organizationId, 'state', 'profile'), { versionId: profile.versionId });

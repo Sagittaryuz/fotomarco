@@ -8,7 +8,7 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, prepareGoogleMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -21,6 +21,7 @@ export class BusinessService {
     this.openCapture = openCapture;
     this.verifyMicrosoftMember = verifyMicrosoftMember;
     this.prepareGoogleMail = prepareGoogleMail;
+    this.prepareMicrosoftMail = prepareMicrosoftMail;
     this.prepareMailDelivery = prepareMailDelivery;
     this.revokeMemberStorage = revokeMemberStorage;
     this.prepareUpload = prepareUpload;
@@ -634,6 +635,32 @@ export class BusinessService {
       await tx.reconcileCapture(organizationId, recordId, result, current.capture.byteCount, this.clock());
       if (result.state === 'verified') return { state: 'verified', nextOffset: current.capture.byteCount };
       return { state: result.state === 'restart' ? 'reserved' : 'uploading', nextOffset: result.state === 'restart' ? 0 : result.nextOffset };
+    });
+  }
+
+  async connectMicrosoftMail(token, organizationId, refreshToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || typeof organizationId !== 'string' || !organizationId ||
+        typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 16384 ||
+        typeof this.prepareMicrosoftMail !== 'function') throw new Error('invalid-request');
+    const readOwner = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayManage(identity, org, member) || member.role !== 'owner') throw new Error('forbidden');
+      return org;
+    };
+    const org = await this.transaction(readOwner);
+    const record = await this.prepareMicrosoftMail({ organizationId, ownerId: identity.uid, refreshToken });
+    if (!record || record.version !== 1 || typeof record.iv !== 'string' || !record.iv ||
+        typeof record.ciphertext !== 'string' || !record.ciphertext ||
+        typeof record.providerAccountId !== 'string' || !record.providerAccountId || typeof record.email !== 'string' ||
+        Object.keys(record).sort().join(',') !== 'ciphertext,email,iv,providerAccountId,version' ||
+        record.email !== org.contactEmail) throw new Error('mailbox-mismatch');
+    return this.transaction(async tx => {
+      const current = await readOwner(tx);
+      if (current.contactEmail !== record.email) throw new Error('mailbox-mismatch');
+      await tx.setMicrosoftMailCredential(organizationId, record);
+      return { connected: true };
     });
   }
 

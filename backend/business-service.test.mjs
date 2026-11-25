@@ -10,6 +10,7 @@ function fixture(withMail = true) {
   let asset;
   let storedCredential;
   let storedMail = withMail ? { version: 1, iv: 'iv', ciphertext: 'cipher', providerAccountId: 'id', email: 'owner@example.com' } : undefined;
+  let storedMicrosoftMail;
   const sent = [];
   const tx = {
     organization: async id => id === 'org' ? organization : null,
@@ -30,12 +31,30 @@ function fixture(withMail = true) {
     oneDriveCredential: async () => storedCredential,
     setGoogleMailCredential: async (_, value) => { storedMail = value; },
     googleMailCredential: async () => storedMail,
+    microsoftMailCredential: async () => storedMicrosoftMail,
+    setMicrosoftMailCredential: async (_, value) => { storedMicrosoftMail = value; },
   };
   const service = new BusinessService({ verifyToken: async token => token, transaction: fn => fn(tx), newId: () => 'invite', clock: () => 100,
     prepareMailDelivery: async ({ mail }) => ({ record: mail, send: async values => { sent.push(values); } }) });
   return { service, records, invites, sent, storedCredential: () => storedCredential, storedMail: () => storedMail,
+    storedMicrosoftMail: () => storedMicrosoftMail,
     replaceMail: value => { storedMail = value; } };
 }
+
+test('only owner can bind a matching verified Microsoft mailbox and failures preserve existing credentials', async () => {
+  const { service, records, storedMail, storedMicrosoftMail } = fixture();
+  const originalGmail = storedMail();
+  const record = { version: 1, iv: 'iv', ciphertext: 'sealed', providerAccountId: 'ms-id', email: 'owner@example.com' };
+  service.prepareMicrosoftMail = async () => record;
+  assert.deepEqual(await service.connectMicrosoftMail({ uid: 'owner' }, 'org', 'refresh'), { connected: true });
+  assert.deepEqual(storedMicrosoftMail(), record);
+  assert.deepEqual(storedMail(), originalGmail);
+  records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
+  await assert.rejects(service.connectMicrosoftMail({ uid: 'member' }, 'org', 'refresh'), /forbidden/);
+  service.prepareMicrosoftMail = async () => ({ ...record, email: 'other@example.com' });
+  await assert.rejects(service.connectMicrosoftMail({ uid: 'owner' }, 'org', 'refresh'), /mailbox-mismatch/);
+  assert.deepEqual(storedMicrosoftMail(), record);
+});
 
 test('a verified invited user can join only as member, and cannot reuse invitation', async () => {
   const { service, records, sent } = fixture();
