@@ -181,6 +181,11 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
           updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
       },
+      setGoogleDriveMemberIdentity: async (org, uid, providerAccountId, permissionId, email) => {
+        const data = { googleDrivePendingIdentityId: providerAccountId, googleDrivePendingPermissionId: permissionId, googleDrivePendingEmail: email };
+        writes.push({ update: { name: path(org, 'members', uid), fields: fields(data) },
+          updateMask: { fieldPaths: Object.keys(data) }, currentDocument: { exists: true } });
+      },
       providerBinding: (org, key) => read(path(org, 'providerBindings', key)),
       setProviderBinding: async (org, key, uid) => put(path(org, 'providerBindings', key), { userId: uid }, { exists: false }),
       leaseMemberFolder: async (org, uid, marker, name, email, lease, expiresAt) => {

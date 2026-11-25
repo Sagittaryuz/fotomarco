@@ -8,7 +8,8 @@ function fixture() {
   const bindings = new Map();
   const tx = { organization: async () => org, membership: async (_, uid) => uid === 'member' ? member : null,
     providerBinding: async (_, key) => bindings.get(key), setProviderBinding: async (_, key, uid) => bindings.set(key, { userId: uid }),
-    setMemberProviderIdentity: async (_, __, id, email) => Object.assign(member, { oneDrivePendingIdentityId: id, oneDrivePendingEmail: email }) };
+    setMemberProviderIdentity: async (_, __, id, email) => Object.assign(member, { oneDrivePendingIdentityId: id, oneDrivePendingEmail: email }),
+    setGoogleDriveMemberIdentity: async (_, __, id, permission, email) => Object.assign(member, { googleDrivePendingIdentityId: id, googleDrivePendingPermissionId: permission, googleDrivePendingEmail: email }) };
   const service = new BusinessService({ verifyToken: async x => x, transaction: action => action(tx),
     verifyMicrosoftMember: async () => ({ providerAccountId: 'verified-id', email: 'onedrive@example.com' }) });
   return { service, member, bindings };
@@ -23,6 +24,18 @@ test('binds only the provider-verified account of an active member', async () =>
   assert.equal('accessToken' in member, false);
   service.verifyMicrosoftMember = async () => ({ providerAccountId: 'different-id', email: 'other@example.com' });
   await assert.rejects(service.bindMicrosoftMember(user, 'org', 'other-token'), /storage-account-change-requires-migration/);
+});
+
+test('binds verified Google identity without changing the existing Microsoft identity', async () => {
+  const { service, member } = fixture();
+  await service.bindMicrosoftMember(user, 'org', 'token');
+  service.verifyGoogleDriveMember = async () => ({ providerAccountId: 'google-id', permissionId: 'permission-id', email: 'google@example.com' });
+  assert.deepEqual(await service.bindGoogleDriveMember(user, 'org', 'token'), { linked: true });
+  assert.equal(member.googleDrivePendingPermissionId, 'permission-id');
+  assert.equal(member.oneDrivePendingIdentityId, 'verified-id');
+  service.verifyGoogleDriveMember = async () => ({ providerAccountId: 'other', permissionId: 'other-permission', email: 'other@example.com' });
+  await assert.rejects(service.bindGoogleDriveMember(user, 'org', 'token'), /storage-account-change-requires-migration/);
+  assert.equal(member.googleDrivePendingIdentityId, 'google-id');
 });
 
 test('rejects revoked members and rechecks access after contacting Microsoft', async () => {

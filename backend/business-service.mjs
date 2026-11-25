@@ -8,7 +8,7 @@ import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, verifyGoogleDriveMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -21,6 +21,7 @@ export class BusinessService {
     this.grantMemberFolder = grantMemberFolder;
     this.openCapture = openCapture;
     this.verifyMicrosoftMember = verifyMicrosoftMember;
+    this.verifyGoogleDriveMember = verifyGoogleDriveMember;
     this.prepareGoogleMail = prepareGoogleMail;
     this.prepareMicrosoftMail = prepareMicrosoftMail;
     this.prepareMailDelivery = prepareMailDelivery;
@@ -376,6 +377,35 @@ export class BusinessService {
       if (current.storage.ciphertext === context.storage.ciphertext && current.storage.iv === context.storage.iv) await tx.setOneDriveCredential(organizationId, result.ownerCredential);
       await tx.setOwnerFolderReady(organizationId, identity.uid, result);
       return { ready: true };
+    });
+  }
+
+  async bindGoogleDriveMember(token, organizationId, providerToken) {
+    const identity = await this.verifyToken(token);
+    if (!identity?.uid || identity.emailVerified !== true || typeof organizationId !== 'string' || !organizationId ||
+        typeof providerToken !== 'string' || !providerToken || providerToken.length > 16384 ||
+        typeof this.verifyGoogleDriveMember !== 'function') throw new Error('invalid-request');
+    const check = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      if (!mayReadPublishedProfile(identity, org, member) || member.role !== 'member') throw new Error('forbidden');
+      return member;
+    };
+    await this.transaction(check);
+    const provider = await this.verifyGoogleDriveMember(providerToken);
+    if (!provider || typeof provider.providerAccountId !== 'string' || !provider.providerAccountId ||
+        typeof provider.permissionId !== 'string' || !provider.permissionId || typeof provider.email !== 'string' || !provider.email) throw new Error('provider-identity-mismatch');
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`google-drive:${provider.providerAccountId}`)));
+    const bindingKey = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+    return this.transaction(async tx => {
+      const member = await check(tx);
+      const binding = await tx.providerBinding(organizationId, bindingKey);
+      if (binding && binding.userId !== identity.uid) throw new Error('provider-account-already-linked');
+      if (member.googleDrivePendingIdentityId && (member.googleDrivePendingIdentityId !== provider.providerAccountId ||
+          member.googleDrivePendingPermissionId !== provider.permissionId || member.googleDrivePendingEmail !== provider.email)) throw new Error('storage-account-change-requires-migration');
+      await tx.setGoogleDriveMemberIdentity(organizationId, identity.uid, provider.providerAccountId, provider.permissionId, provider.email);
+      if (!binding) await tx.setProviderBinding(organizationId, bindingKey, identity.uid);
+      return { linked: true };
     });
   }
 
