@@ -72,11 +72,6 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         view.register(GallerySectionHeader.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "header")
         view.dataSource = context.coordinator
         view.delegate = context.coordinator
-        let drag = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.dragSelection(_:)))
-        drag.maximumNumberOfTouches = 1
-        drag.delegate = context.coordinator
-        view.addGestureRecognizer(drag)
-        view.panGestureRecognizer.require(toFail: drag)
         view.panGestureRecognizer.addTarget(context.coordinator, action: #selector(Coordinator.refreshAtEnd(_:)))
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
         pinch.delegate = context.coordinator
@@ -86,6 +81,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         hold.numberOfTouchesRequired = 1
         hold.delegate = context.coordinator
         view.addGestureRecognizer(hold)
+        view.panGestureRecognizer.require(toFail: hold)
         if dragToCamera != nil {
             let swipe = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.cameraSwipe(_:)))
             swipe.maximumNumberOfTouches = 1
@@ -299,9 +295,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             }
             if gestureRecognizer is UIPinchGestureRecognizer { return !parent.selecting }
             guard collection.indexPathForItem(at: gestureRecognizer.location(in: collection)) != nil else { return false }
-            if gestureRecognizer is UILongPressGestureRecognizer { return !parent.selecting && parent.longPress != nil }
-            guard parent.selecting, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
-            return GallerySelectionRange.beginsRangeSelection(velocity: pan.velocity(in: collection))
+            if gestureRecognizer is UILongPressGestureRecognizer { return parent.selecting || parent.longPress != nil }
+            return false
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
             gestureRecognizer is UIPinchGestureRecognizer
@@ -321,24 +316,23 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             parent.columns = GalleryZoom.next(columns: parent.columns, magnification: gesture.scale)
         }
         @objc func preview(_ gesture: UILongPressGestureRecognizer) {
-            guard gesture.state == .began, !parent.selecting, let collection,
-                  let path = collection.indexPathForItem(at: gesture.location(in: collection)) else { return }
-            parent.longPress?(parent.groups[path.section].items[path.item])
-        }
-        @objc func dragSelection(_ gesture: UIPanGestureRecognizer) {
             guard let collection else { return }
             let point = gesture.location(in: collection)
+            if !parent.selecting {
+                guard gesture.state == .began, let path = collection.indexPathForItem(at: point) else { return }
+                parent.longPress?(parent.groups[path.section].items[path.item])
+                return
+            }
             switch gesture.state {
             case .began:
-                let translation = gesture.translation(in: collection)
-                let initialPoint = CGPoint(x: point.x - translation.x, y: point.y - translation.y)
-                guard let path = collection.indexPathForItem(at: initialPoint) else { return }
+                guard let path = collection.indexPathForItem(at: point) else { return }
                 dragOrigin = path; dragInitial = parent.selected
                 dragAdds = !dragInitial.contains(parent.groups[path.section].items[path.item].id)
                 lastPoint = point
+                FotomarcoHaptics.play(.gallery)
                 let displayLink = CADisplayLink(target: self, selector: #selector(autoScroll))
                 displayLink.add(to: .main, forMode: .common); timer = displayLink
-                applyRange(to: collection.indexPathForItem(at: point) ?? path)
+                applyRange(to: path)
             case .changed:
                 lastPoint = point
                 if let path = collection.indexPathForItem(at: point) { applyRange(to: path) }
