@@ -6,6 +6,7 @@ struct BusinessOrganizationEmailView: View {
     let organizationID: String
     @State private var oauth = CloudArchiveOAuth()
     @State private var pending: CloudArchiveOAuth.AuthorizedAccount?
+    @State private var pendingMicrosoft = false
     @State private var confirming = false
     @State private var busy = false
     @State private var connected = false
@@ -14,10 +15,11 @@ struct BusinessOrganizationEmailView: View {
     var body: some View {
         Form {
             Section("E-mail de convites") {
-                Text("Conecte o Gmail cadastrado como e-mail da organização. O Google solicitará permissão para enviar convites em nome dessa conta.")
+                Text("Escolha o serviço do e-mail cadastrado na organização. Será solicitada permissão para enviar convites em nome dessa conta.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Text("A conexão não altera as contas pessoais de armazenamento.").font(.footnote).foregroundStyle(.secondary)
-                Button(connected ? "Reconectar Gmail" : "Conectar Gmail") { Task { await connect() } }.disabled(busy)
+                Button("Gmail") { Task { await connect(microsoft: false) } }.disabled(busy)
+                Button("Outlook / Microsoft") { Task { await connect(microsoft: true) } }.disabled(busy)
                 if busy { ProgressView("Confirmando a conta…") }
                 if connected { Label("Conta conectada", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
             }
@@ -34,17 +36,19 @@ struct BusinessOrganizationEmailView: View {
         } message: { Text(message ?? "") }
     }
 
-    @MainActor private func connect() async {
+    @MainActor private func connect(microsoft: Bool) async {
         guard !busy, let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive }),
               let window = scene.windows.first(where: { $0.isKeyWindow }) else { return }
         busy = true
         defer { busy = false }
         do {
-            let configuration = try CloudArchiveOAuth.Configuration(provider: .googleDrive, forBusiness: true)
+            let configuration = try CloudArchiveOAuth.Configuration(provider: microsoft ? .oneDrive : .googleDrive,
+                forBusiness: true, microsoftMail: microsoft)
             pending = try await oauth.connect(configuration, presenting: window, knownDestinations: [])
+            pendingMicrosoft = microsoft
             confirming = true
-        } catch { message = "Não foi possível conectar o Gmail. Confira as permissões e tente novamente." }
+        } catch { message = "Não foi possível conectar o e-mail. Confira as permissões e tente novamente." }
     }
 
     @MainActor private func save() async {
@@ -53,8 +57,13 @@ struct BusinessOrganizationEmailView: View {
         defer { busy = false; pending = nil }
         do {
             let token = try await BusinessIdentity.shared.verifiedToken()
-            connected = try await api.connectGoogleMail(organizationID: organizationID,
-                refreshToken: account.credential.refreshToken, token: token).connected
+            if pendingMicrosoft {
+                connected = try await api.connectMicrosoftMail(organizationID: organizationID,
+                    refreshToken: account.credential.refreshToken, token: token).connected
+            } else {
+                connected = try await api.connectGoogleMail(organizationID: organizationID,
+                    refreshToken: account.credential.refreshToken, token: token).connected
+            }
         } catch BusinessAPIClient.Failure.mailboxMismatch {
             message = "Esta conta não corresponde ao e-mail cadastrado para a organização."
         } catch { message = "Não foi possível confirmar a conta. Tente novamente." }

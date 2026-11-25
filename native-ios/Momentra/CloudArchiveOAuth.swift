@@ -44,12 +44,15 @@ final class CloudArchiveOAuth {
         let scopes: String
         let identityOnly: Bool
         let businessStorage: Bool
+        let microsoftMail: Bool
 
-        init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:], forBusiness: Bool = false, identityOnly: Bool = false) throws {
+        init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:], forBusiness: Bool = false, identityOnly: Bool = false, microsoftMail: Bool = false) throws {
             self.provider = provider
             self.identityOnly = identityOnly
-            self.businessStorage = provider == .oneDrive && forBusiness && !identityOnly
-            guard !identityOnly || provider == .oneDrive else { throw Failure.notConfigured }
+            self.microsoftMail = microsoftMail
+            self.businessStorage = provider == .oneDrive && forBusiness && !identityOnly && !microsoftMail
+            guard (!identityOnly && !microsoftMail) || provider == .oneDrive else { throw Failure.notConfigured }
+            guard !(identityOnly && microsoftMail) else { throw Failure.notConfigured }
             let urlTypes = info["CFBundleURLTypes"] as? [[String: Any]] ?? []
             let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
             switch provider {
@@ -74,9 +77,9 @@ final class CloudArchiveOAuth {
                 authorizeURL = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize")!
                 tokenURL = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/token")!
                 identityURL = URL(string: "https://graph.microsoft.com/oidc/userinfo")!
-                requiredScope = identityOnly ? "User.Read" : (forBusiness ? "Files.ReadWrite" : "Files.ReadWrite.AppFolder")
+                requiredScope = microsoftMail ? "Mail.Send" : (identityOnly ? "User.Read" : (forBusiness ? "Files.ReadWrite" : "Files.ReadWrite.AppFolder"))
                 scopes = "openid email profile offline_access https://graph.microsoft.com/" + requiredScope +
-                    (forBusiness && !identityOnly ? " https://graph.microsoft.com/User.Read" : "")
+                    ((microsoftMail || (forBusiness && !identityOnly)) ? " https://graph.microsoft.com/User.Read" : "")
             }
             guard registeredSchemes.contains(callbackScheme) else { throw Failure.notConfigured }
         }
@@ -263,7 +266,7 @@ final class CloudArchiveOAuth {
         case .oneDrive:
             // Business storage is verified and bound by the server to the
             // organization's actual drive; it does not use the personal app folder.
-            if configuration.identityOnly || configuration.businessStorage {
+            if configuration.identityOnly || configuration.businessStorage || configuration.microsoftMail {
                 bindings = [identity.sub]
                 break
             }

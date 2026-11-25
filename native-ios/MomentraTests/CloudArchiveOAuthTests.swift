@@ -3,6 +3,16 @@ import XCTest
 
 final class CloudArchiveOAuthTests: XCTestCase {
     @MainActor
+    func testMicrosoftMailRequestsSendPermissionWithoutStorageAccess() throws {
+        let info: [String: Any] = ["MomentraMicrosoftClientID": "4befebdc-2a06-49a0-b14a-13de07c6ac08",
+            "CFBundleURLTypes": [["CFBundleURLSchemes": ["msauth.br.com.momentra.camera"]]]]
+        let configuration = try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: info, forBusiness: true, microsoftMail: true)
+        XCTAssertEqual(configuration.requiredScope, "Mail.Send")
+        XCTAssertTrue(configuration.scopes.contains("User.Read"))
+        XCTAssertFalse(configuration.scopes.contains("Files.ReadWrite"))
+        XCTAssertFalse(configuration.businessStorage)
+    }
+    @MainActor
     func testGoogleUsesExistingAppCallbackAndLeastPrivilegeScope() throws {
         let configuration = try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: [
             "GIDClientID": "123-abc.apps.googleusercontent.com",

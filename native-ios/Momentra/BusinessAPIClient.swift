@@ -108,6 +108,12 @@ struct BusinessAPIClient {
                               values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
     }
 
+    func connectMicrosoftMail(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
+        guard !refreshToken.isEmpty, refreshToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "mail", "microsoft", "connect"],
+                              values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
+    }
+
     func invite(organizationID: String, email: String, token: String) async throws -> InvitationReceipt {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "invitations"], values: ["email": email], token: token)
     }
