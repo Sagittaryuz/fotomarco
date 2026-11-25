@@ -37,9 +37,12 @@ struct BusinessOrganizationsView: View {
                                 }
                             }
                             if busy { ProgressView("Carregando…") }
-                            Button("Criar organização") {
+                            Button {
                                 organizationEmail = identity.email ?? ""
                                 showCreate = true
+                            } label: {
+                                Text("Criar organização")
+                                    .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                             }.disabled(!identity.emailVerified || busy)
                         }
                     }

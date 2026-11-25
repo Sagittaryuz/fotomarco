@@ -19,13 +19,19 @@ struct BusinessOneDriveView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 Text("Essa conexão é separada das contas de armazenamento pessoal já adicionadas.")
                     .font(.footnote).foregroundStyle(.secondary)
-                Button(connected ? "Reconectar OneDrive" : "Conectar OneDrive") {
+                Button {
                     FotomarcoHaptics.play(.buttons)
                     Task { await connect() }
+                } label: {
+                    Text(connected ? "Reconectar OneDrive" : "Conectar OneDrive")
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.disabled(busy)
-                Button("Preparar minha pasta") {
+                Button {
                     FotomarcoHaptics.play(.buttons)
                     Task { await prepareFolder() }
+                } label: {
+                    Text("Preparar minha pasta")
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.disabled(busy)
                 if busy { ProgressView("Confirmando a conta…") }
                 if connected { Label("Conta conectada", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
