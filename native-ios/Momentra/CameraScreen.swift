@@ -744,8 +744,10 @@ struct CameraScreen: View {
             if phase == .active {
                 Task { await updates.check() }
                 GalleryStartupSync.shared.start()
+                BusinessGalleryWarmup.shared.start()
             } else if phase == .background {
                 GalleryStartupSync.shared.stop()
+                BusinessGalleryWarmup.shared.stop()
             }
         }
         .onChange(of: directUpdate.ready) { _, ready in
@@ -921,11 +923,15 @@ struct CameraScreen: View {
     var body: some View {
         moreTrackedCamera
         .task(id: "\(businessIdentity.userID ?? "")-\(businessIdentity.emailVerified)") {
+            BusinessGalleryWarmup.shared.stop()
+            if scenePhase == .active { BusinessGalleryWarmup.shared.start() }
             stampProfiles.replaceOrganizationProfiles([])
             BusinessLegacyImportCoordinator.shared.configure(organizationID: nil, userID: nil)
             await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity)
         }
         .onReceive(NotificationCenter.default.publisher(for: .businessOrganizationsDidChange)) { _ in
+            BusinessGalleryWarmup.shared.stop()
+            if scenePhase == .active { BusinessGalleryWarmup.shared.start() }
             Task { await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity) }
         }
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
