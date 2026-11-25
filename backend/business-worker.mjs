@@ -4,6 +4,7 @@ import { googleServiceAccountToken } from './business-google-credential.mjs';
 import { createCredentialVault } from './business-credential-vault.mjs';
 import { microsoftBusinessCredential } from './business-microsoft-oauth.mjs';
 import { microsoftBusinessMailCredential } from './business-microsoft-mail-oauth.mjs';
+import { googleBusinessDriveCredential } from './business-google-drive-oauth.mjs';
 import { invitationLanding } from './business-invitation-landing.mjs';
 import { googleBusinessMailCredential } from './business-google-mail-oauth.mjs';
 import { gmailInvitationSender } from './business-gmail-invitation.mjs';
@@ -41,6 +42,15 @@ export function createBusinessWorker(env, overrides = {}) {
     const sealed = await vault.seal(organizationId, ownerId,
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId });
     return { ...sealed, providerAccountId: verified.providerAccountId, driveId: verified.driveId };
+  });
+  const prepareGoogleDrive = overrides.prepareGoogleDrive ?? (async ({ organizationId, ownerId, refreshToken }) => {
+    const exchange = googleBusinessDriveCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID,
+      ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) });
+    const verified = await exchange(refreshToken);
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const sealed = await vault.seal(organizationId, ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'google-drive');
+    return { ...sealed, providerAccountId: verified.providerAccountId, ownerPermissionId: verified.ownerPermissionId };
   });
   const prepareGoogleMail = overrides.prepareGoogleMail ?? (async ({ organizationId, ownerId, refreshToken }) => {
     const exchange = googleBusinessMailCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID,
@@ -261,7 +271,7 @@ export function createBusinessWorker(env, overrides = {}) {
     return { state: 'uploading', nextOffset, ownerCredential };
   });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
+    prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
     verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
     prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,
     canCreateOrganization: async identity => identity.emailVerified === true &&
