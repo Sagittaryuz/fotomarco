@@ -1479,7 +1479,7 @@ struct CameraScreen: View {
     private func showCapturedPhoto(_ capture: CameraService.CapturePreview) {
         finishPhotoFlight()
         sessionClipboard.record(capture.file, sessionID: capture.sessionID)
-        if scenePhase == .active && capture.sessionID == captureSessionID {
+        if capture.sessionID == captureSessionID {
             sessionCaptureFiles.append(capture.file)
             sessionCaptureCount = sessionCaptureFiles.count
             let thumbnail = capture.image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? capture.image
