@@ -28,6 +28,8 @@ jobs:
           fi
       - name: Select Xcode 26.3
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Validate Swift source encoding
+        run: python3 native-ios/scripts/check-swift-utf8.py
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Generate Xcode project
@@ -161,6 +163,8 @@ jobs:
           fi
       - name: Select Xcode 26.3
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Validate Swift source encoding
+        run: python3 native-ios/scripts/check-swift-utf8.py
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Generate Xcode project
