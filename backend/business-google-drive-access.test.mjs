@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyGoogleDriveFolderAccess } from './business-google-drive-access.mjs';
+import { checkGoogleDriveFolderAccess, verifyGoogleDriveFolderAccess } from './business-google-drive-access.mjs';
 
 const folder = { id: 'folder-id', mimeType: 'application/vnd.google-apps.folder', trashed: false, capabilities: { canListChildren: true } };
 const owner = { id: 'owner-id', type: 'user', role: 'owner' };
@@ -8,6 +8,25 @@ const member = { id: 'member-id', type: 'user', role: 'writer' };
 test('permits only the owner and the selected member', () => {
   assert.equal(verifyGoogleDriveFolderAccess({ folder, permissions: { permissions: [owner] }, ownerPermissionId: owner.id }), true);
   assert.equal(verifyGoogleDriveFolderAccess({ folder, permissions: { permissions: [owner, member] }, ownerPermissionId: owner.id, memberPermissionId: member.id }), true);
+});
+
+test('reads the fixed folder and complete ACL, and rejects a different parent', async () => {
+  const calls = [];
+  let parent = 'parent-id';
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return { status: 200, json: async () => url.includes('/permissions?')
+      ? { permissions: [owner, member] } : { ...folder, parents: [parent] } };
+  };
+  const args = { accessToken: 'private-token', folderId: folder.id, expectedParentId: parent,
+    ownerPermissionId: owner.id, memberPermissionId: member.id, fetchImpl };
+  assert.deepEqual(await checkGoogleDriveFolderAccess(args), { folderId: folder.id });
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(call => call.url.startsWith('https://www.googleapis.com/drive/v3/files/folder-id')));
+  assert.ok(calls.every(call => !call.url.includes(args.accessToken) && call.options.redirect === 'manual'));
+  parent = 'different-parent'; calls.length = 0;
+  await assert.rejects(checkGoogleDriveFolderAccess(args), /unsafe-google-folder/);
+  assert.equal(calls.length, 1);
 });
 test('rejects incomplete, public, foreign and ambiguous folder access', () => {
   const base = { folder, permissions: { permissions: [owner, member] }, ownerPermissionId: owner.id, memberPermissionId: member.id };
