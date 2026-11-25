@@ -19,7 +19,7 @@ export async function createCredentialVault(keyBase64) {
   const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt', 'decrypt']);
   keyBytes.fill(0);
   const context = (org, owner, purpose) => {
-    if (!['onedrive', 'gmail'].includes(purpose)) throw new Error('invalid-vault-context');
+    if (!['onedrive', 'gmail', 'microsoft-mail'].includes(purpose)) throw new Error('invalid-vault-context');
     return encoder.encode(`photomark:business-credential:v1:${purpose}:${id(org)}:${id(owner)}`);
   };
   return {
