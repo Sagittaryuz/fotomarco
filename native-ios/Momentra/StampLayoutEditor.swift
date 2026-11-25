@@ -21,6 +21,8 @@ struct StampLayoutEditor: View {
     @State private var editNote = false
     @State private var draftName = ""
     @State private var draftNote = ""
+    @AppStorage("native.stamp.enabled") private var savedStampEnabled = true
+    @State private var draftStampEnabled: Bool
     @State private var editingElement: Element
     enum Element: String, CaseIterable, Identifiable {
         case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo"
@@ -29,6 +31,7 @@ struct StampLayoutEditor: View {
 
     init(store: StampProfilesStore, initialElement: Element? = nil) {
         originalStore = store
+        _draftStampEnabled = State(initialValue: UserDefaults.standard.object(forKey: "native.stamp.enabled") as? Bool ?? true)
         _editingElement = State(initialValue: initialElement ?? (store.selected.layout.template == .original ? .map : .combined))
         _store = StateObject(wrappedValue: StampProfilesStore(draftOf: store))
     }
@@ -138,6 +141,8 @@ struct StampLayoutEditor: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Criar perfil")
             }
+            Toggle("Usar carimbo", isOn: $draftStampEnabled)
+                .toggleStyle(DirectionalSwitchStyle())
             Picker("Modelo", selection: Binding(
                 get: { layout.wrappedValue.template },
                 set: { value in
@@ -313,7 +318,7 @@ struct StampLayoutEditor: View {
                 Button("Voltar") { FotomarcoHaptics.play(.editor); dismiss() }.disabled(logoLoading)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Salvar") { FotomarcoHaptics.play(.editor); originalStore.applyDraft(store); dismiss() }.disabled(logoLoading)
+                Button("Salvar") { FotomarcoHaptics.play(.editor); originalStore.applyDraft(store); savedStampEnabled = draftStampEnabled; dismiss() }.disabled(logoLoading)
             }
         }
     }

@@ -1198,7 +1198,6 @@ struct CameraScreen: View {
                         }
                     }
                     Toggle("Localização", isOn: $gpsEnabled)
-                    Toggle("Carimbo", isOn: $stampEnabled)
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
                         if let version = updates.availableVersion {
