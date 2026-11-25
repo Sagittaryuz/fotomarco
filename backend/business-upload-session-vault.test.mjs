@@ -18,3 +18,16 @@ test('encrypts upload credentials and binds them to the organization, author and
   now = 10000;
   await assert.rejects(vault.open('org', 'user', 'capture-stamped', sealed), /invalid-vault-data/);
 });
+
+test('Google Drive upload session is encrypted and cannot be opened as OneDrive', async () => {
+  const key = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
+  const google = await createUploadSessionVault(key, { now: () => 1000, provider: 'google-drive' });
+  const onedrive = await createUploadSessionVault(key, { now: () => 1000 });
+  const value = { uploadUrl: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=private-token', expiresAt: 10000 };
+  const sealed = await google.seal('org', 'user', 'capture', value);
+  assert.ok(!JSON.stringify(sealed).includes('private-token'));
+  assert.deepEqual(await google.open('org', 'user', 'capture', sealed), value);
+  await assert.rejects(onedrive.open('org', 'user', 'capture', sealed), /invalid-vault-data/);
+  await assert.rejects(google.open('org', 'other', 'capture', sealed), /invalid-vault-data/);
+  await assert.rejects(google.seal('org', 'user', 'capture', { ...value, uploadUrl: 'https://evil.example/' }), /invalid-upload-session/);
+});

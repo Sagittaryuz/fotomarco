@@ -1,7 +1,10 @@
 import { graphUploadSessionURL } from './business-onedrive-upload.mjs';
+import { googleDriveUploadSessionURL } from './business-google-drive-upload.mjs';
 
 /** An upload URL is a bearer credential. Bind it to a single user and capture. */
-export async function createUploadSessionVault(keyBase64, { now = () => Date.now() } = {}) {
+export async function createUploadSessionVault(keyBase64, { now = () => Date.now(), provider = 'onedrive' } = {}) {
+  if (!['onedrive', 'google-drive'].includes(provider)) throw new Error('invalid-vault-context');
+  const validateURL = provider === 'google-drive' ? googleDriveUploadSessionURL : graphUploadSessionURL;
   if (typeof keyBase64 !== 'string' || !/^[A-Za-z0-9+/]{43}=$/.test(keyBase64)) throw new Error('invalid-vault-key');
   let bytes;
   try { bytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0)); } catch { throw new Error('invalid-vault-key'); }
@@ -10,7 +13,8 @@ export async function createUploadSessionVault(keyBase64, { now = () => Date.now
   bytes.fill(0);
   const context = (org, user, capture) => {
     if (![org, user, capture].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value))) throw new Error('invalid-vault-context');
-    return new TextEncoder().encode(`photomark:upload-session:v1:${org}:${user}:${capture}`);
+    const purpose = provider === 'onedrive' ? '' : ':google-drive';
+    return new TextEncoder().encode(`photomark:upload-session:v1${purpose}:${org}:${user}:${capture}`);
   };
   const encode = value => btoa(Array.from(value, n => String.fromCharCode(n)).join(''));
   const decode = value => {
@@ -22,7 +26,7 @@ export async function createUploadSessionVault(keyBase64, { now = () => Date.now
       const additionalData = context(org, user, capture);
       if (!session || Object.keys(session).sort().join(',') !== 'expiresAt,uploadUrl' ||
           !Number.isSafeInteger(session.expiresAt) || session.expiresAt <= now() || session.expiresAt > now() + 7 * 86400000) throw new Error('invalid-upload-session');
-      const uploadUrl = graphUploadSessionURL(session.uploadUrl);
+      const uploadUrl = validateURL(session.uploadUrl);
       const plaintext = new TextEncoder().encode(JSON.stringify({ uploadUrl, expiresAt: session.expiresAt }));
       const iv = crypto.getRandomValues(new Uint8Array(12));
       try {
@@ -41,7 +45,7 @@ export async function createUploadSessionVault(keyBase64, { now = () => Date.now
         const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
         if (!value || Object.keys(value).sort().join(',') !== 'expiresAt,uploadUrl' ||
             !Number.isSafeInteger(value.expiresAt) || value.expiresAt <= now()) throw new Error('invalid-vault-data');
-        return { uploadUrl: graphUploadSessionURL(value.uploadUrl), expiresAt: value.expiresAt };
+        return { uploadUrl: validateURL(value.uploadUrl), expiresAt: value.expiresAt };
       } catch { throw new Error('invalid-vault-data'); }
       finally { plaintext?.fill(0); }
     }

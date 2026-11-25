@@ -1,7 +1,7 @@
 const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
 const validSize = value => Number.isSafeInteger(value) && value > 0 && value <= 1024 * 1024 * 1024;
 const markerPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function sessionURL(value) {
+export function googleDriveUploadSessionURL(value) {
   let url;
   try { url = new URL(value); } catch { throw new Error('invalid-upload-session'); }
   if (url.protocol !== 'https:' || url.hostname !== 'www.googleapis.com' || url.port || url.username || url.password ||
@@ -24,12 +24,12 @@ export async function startGoogleDriveUpload({ accessToken, folderId, name, mime
     body: JSON.stringify({ name: name.trim(), mimeType, parents: [folderId], appProperties: { photomarkMarker: marker.toLowerCase() } })
   }); } catch { throw new Error('upload-start-unconfirmed'); }
   if (response.status !== 200) throw new Error('upload-start-unconfirmed');
-  return { session: sessionURL(response.headers.get('location')) };
+  return { session: googleDriveUploadSessionURL(response.headers.get('location')) };
 }
 
 /** A provider-confirmed offset, not bytes sent, determines the next chunk. */
 export async function sendGoogleDriveChunk({ session, offset, totalBytes, bytes, fetchImpl = fetch }) {
-  const url = sessionURL(session);
+  const url = googleDriveUploadSessionURL(session);
   if (!validSize(totalBytes) || !Number.isSafeInteger(offset) || offset < 0 || offset >= totalBytes ||
       !(bytes instanceof Uint8Array) || bytes.length < 1 || offset + bytes.length > totalBytes ||
       (offset + bytes.length < totalBytes && bytes.length % (256 * 1024) !== 0)) throw new Error('invalid-upload-chunk');
@@ -52,7 +52,7 @@ export async function sendGoogleDriveChunk({ session, offset, totalBytes, bytes,
 
 /** Reconcile an interrupted request before deciding whether to retry any bytes. */
 export async function googleDriveUploadOffset({ session, totalBytes, fetchImpl = fetch }) {
-  const url = sessionURL(session);
+  const url = googleDriveUploadSessionURL(session);
   if (!validSize(totalBytes)) throw new Error('invalid-upload-request');
   let response;
   try { response = await fetchImpl(url, { method: 'PUT', redirect: 'manual', signal: AbortSignal.timeout(15000),
