@@ -110,6 +110,18 @@ test('only the owner can connect a verified and encrypted OneDrive credential', 
   assert.equal(storedCredential().ciphertext, 'encrypted');
 });
 
+test('failed Microsoft verification preserves the existing OneDrive binding', async () => {
+  const { service, storedCredential } = fixture();
+  service.prepareOneDrive = async () => ({ version: 1, iv: 'iv', ciphertext: 'existing', driveId: 'drive', providerAccountId: 'account' });
+  await service.connectOneDrive({ uid: 'owner' }, 'org', 'first-token');
+  for (const failure of ['provider-token-unavailable', 'provider-graph-unavailable', 'provider-permission-missing', 'provider-identity-mismatch']) {
+    service.prepareOneDrive = async () => { throw new Error(failure); };
+    await assert.rejects(service.connectOneDrive({ uid: 'owner' }, 'org', 'replacement-token'), error => error.message === failure);
+    assert.equal(storedCredential().ciphertext, 'existing');
+    assert.equal(storedCredential().driveId, 'drive');
+  }
+});
+
 test('organization discovery checks live membership rather than trusting an index', async () => {
   const { service, records } = fixture();
   records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });
