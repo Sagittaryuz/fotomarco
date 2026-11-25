@@ -46,3 +46,28 @@ export async function checkGoogleDriveFolderAccess({ accessToken, folderId, expe
   verifyGoogleDriveFolderAccess({ folder, permissions, ownerPermissionId, memberPermissionId, requireNoReshare, requiredMemberRole });
   return { folderId };
 }
+
+/** Resolve the real root ID and refuse to create within a root with unsafe ACLs. */
+export async function checkGoogleDriveRootAccess({ accessToken, ownerPermissionId, fetchImpl = fetch }) {
+  if (typeof accessToken !== 'string' || !accessToken || accessToken.length > 16384) throw new Error('invalid-storage-configuration');
+  const headers = { authorization: `Bearer ${accessToken}` };
+  const get = async url => {
+    try {
+      const response = await fetchImpl(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+      if (response.status !== 200) throw new Error('upstream');
+      const value = await response.json();
+      if (!value || typeof value !== 'object') throw new Error('invalid response');
+      return value;
+    } catch { throw new Error('storage-unavailable'); }
+  };
+  const rootURL = new URL('https://www.googleapis.com/drive/v3/files/root');
+  rootURL.searchParams.set('fields', 'id,mimeType,trashed,driveId,parents,capabilities(canListChildren)');
+  const folder = await get(rootURL.toString());
+  if (!folder || typeof folder.id !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(folder.id) ||
+      (folder.parents !== undefined && (!Array.isArray(folder.parents) || folder.parents.length))) throw new Error('unsafe-google-folder');
+  const aclURL = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folder.id)}/permissions`);
+  aclURL.searchParams.set('fields', 'nextPageToken,permissions(id,type,role,deleted,allowFileDiscovery)');
+  aclURL.searchParams.set('pageSize', '100');
+  verifyGoogleDriveFolderAccess({ folder, permissions: await get(aclURL.toString()), ownerPermissionId });
+  return { folderId: folder.id };
+}

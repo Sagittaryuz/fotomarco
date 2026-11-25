@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkGoogleDriveFolderAccess, verifyGoogleDriveFolderAccess } from './business-google-drive-access.mjs';
+import { checkGoogleDriveFolderAccess, checkGoogleDriveRootAccess, verifyGoogleDriveFolderAccess } from './business-google-drive-access.mjs';
 
 const folder = { id: 'folder-id', mimeType: 'application/vnd.google-apps.folder', trashed: false, writersCanShare: false, capabilities: { canListChildren: true } };
 const owner = { id: 'owner-id', type: 'user', role: 'owner' };
@@ -8,6 +8,16 @@ const member = { id: 'member-id', type: 'user', role: 'writer' };
 test('permits only the owner and the selected member', () => {
   assert.equal(verifyGoogleDriveFolderAccess({ folder, permissions: { permissions: [owner] }, ownerPermissionId: owner.id }), true);
   assert.equal(verifyGoogleDriveFolderAccess({ folder, permissions: { permissions: [owner, member] }, ownerPermissionId: owner.id, memberPermissionId: member.id }), true);
+});
+
+test('resolves the true root ID and refuses a root accessible to others', async () => {
+  let publicAccess = false;
+  const fetchImpl = async url => ({ status: 200, json: async () => url.includes('/permissions?')
+    ? { permissions: [owner, ...(publicAccess ? [{ id: 'public', type: 'anyone', role: 'reader' }] : [])] }
+    : { ...folder, id: 'actual-root' } });
+  assert.deepEqual(await checkGoogleDriveRootAccess({ accessToken: 'private', ownerPermissionId: owner.id, fetchImpl }), { folderId: 'actual-root' });
+  publicAccess = true;
+  await assert.rejects(checkGoogleDriveRootAccess({ accessToken: 'private', ownerPermissionId: owner.id, fetchImpl }), /unsafe-google-folder/);
 });
 
 test('reads the fixed folder and complete ACL, and rejects a different parent', async () => {
