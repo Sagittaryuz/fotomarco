@@ -199,6 +199,7 @@ struct OriginalsView: View {
             if phase == .active { reloadVersion += 1; cloudActivation += 1 }
         }
         .onReceive(NotificationCenter.default.publisher(for: CloudGalleryCatalog.deliveryChanged)) { _ in
+            catalogLoaded = false
             reloadVersion += 1
             cloudActivation += 1
         }
@@ -581,18 +582,18 @@ struct OriginalsView: View {
         let lookup = await Task.detached(priority: .utility) { PhotoProfileIndex.load() }.value
         guard !Task.isCancelled else { return }
         if !trash && !catalogLoaded && !snapshots.isEmpty {
-            let alreadyShown = Set(remote.compactMap { item -> CloudDeliveryPlan.Destination? in
-                if case .cloud(let cloud) = item.source { return cloud.destination }
-                return nil
-            })
             let cached = accounts.flatMap { account -> [GalleryCloudItem] in
-                guard !alreadyShown.contains(account.id), let snapshot = snapshots[account.id] else { return [] }
+                guard let snapshot = snapshots[account.id] else { return [] }
                 let page = GalleryCloudItem.cachedPage(snapshot.entries, for: account, reusing: cloudPages[account.id])
                 cloudPages[account.id] = page
                 return page.items
             }
             catalogLoaded = true
-            if !cached.isEmpty { applyCloud(remote + cached.map { galleryItem($0, lookup: lookup) }, trash: false) }
+            let retained = remote.filter { item in
+                guard case .cloud(let cloud) = item.source else { return true }
+                return snapshots[cloud.destination] == nil
+            }
+            applyCloud(retained + cached.map { galleryItem($0, lookup: lookup) }, trash: false)
         }
         if !trash && !force && stale.isEmpty { return }
         cloudSyncing = true

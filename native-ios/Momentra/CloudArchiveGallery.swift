@@ -141,6 +141,10 @@ struct GalleryCloudItem: Identifiable {
         ArchiveMapThumbnail(photo: photo, images: images)
     }
 
+    @MainActor func warmThumbnail() async {
+        _ = await images.mapThumbnail(photo)
+    }
+
     @MainActor
     func fullImage(active: Bool = true) -> some View {
         ArchiveGalleryImage(photo: photo, images: images, fullView: true, active: active)
@@ -235,6 +239,60 @@ struct GalleryCloudItem: Identifiable {
         if let previousPage, previousPage.destination == account.id { return previousPage.images }
         return ArchiveGalleryImages(destination: account.id)
     }
+}
+
+/// Refresh the cloud catalog while the camera remains usable, then warm only
+/// provider thumbnails. Cached catalog revisions protect concurrent updates.
+@MainActor final class GalleryStartupSync {
+    static let shared = GalleryStartupSync()
+    private var task: Task<Void, Never>?
+    private var generation = UUID()
+
+    func start() {
+        guard task == nil else { return }
+        let current = UUID()
+        generation = current
+        task = Task(priority: .utility) { [weak self] in
+            defer { if self?.generation == current { self?.task = nil } }
+            let catalog = CloudGalleryCatalog.shared
+            let accounts = CloudArchiveAccounts.shared.accounts
+            var warm: [GalleryCloudItem] = []
+            var changed = false
+            for account in accounts {
+                guard !Task.isCancelled else { return }
+                let snapshot = await catalog.snapshot(for: account.id)
+                do {
+                    var token: String?
+                    var seen = Set<String>()
+                    var prior: GalleryCloudItem.Page?
+                    var items: [GalleryCloudItem] = []
+                    repeat {
+                        try Task.checkCancellation()
+                        let page = try await GalleryCloudItem.load(for: account, pageToken: token, reusing: prior)
+                        items.append(contentsOf: page.items)
+                        prior = page
+                        token = page.nextPage
+                        if let token, !seen.insert(token).inserted { throw URLError(.cannotParseResponse) }
+                    } while token != nil
+                    try Task.checkCancellation()
+                    if await catalog.replace(items.map(\.catalogEntry), for: account.id, replacing: snapshot?.revision) {
+                        warm.append(contentsOf: items)
+                        changed = true
+                    }
+                } catch {
+                    if Task.isCancelled { return }
+                    // Keep the last complete catalog when a provider is unavailable.
+                }
+            }
+            if changed { NotificationCenter.default.post(name: CloudGalleryCatalog.deliveryChanged, object: nil) }
+            for item in warm.sorted(by: { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) {
+                guard !Task.isCancelled else { return }
+                await item.warmThumbnail()
+            }
+        }
+    }
+
+    func stop() { task?.cancel(); task = nil; generation = UUID() }
 }
 
 private struct ArchiveAccountGallery: View {

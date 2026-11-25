@@ -741,7 +741,12 @@ struct CameraScreen: View {
         }
         .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && stampEditorSection == nil && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active { Task { await updates.check() } }
+            if phase == .active {
+                Task { await updates.check() }
+                GalleryStartupSync.shared.start()
+            } else if phase == .background {
+                GalleryStartupSync.shared.stop()
+            }
         }
         .onChange(of: directUpdate.ready) { _, ready in
             if ready { Task { await updates.check() } }
@@ -905,6 +910,8 @@ struct CameraScreen: View {
         .onChange(of: archiveAccounts.accounts.map { $0.enabled ? $0.id : nil }) { _, _ in
             publishCaptureContext()
             retryCloudCaptures()
+            GalleryStartupSync.shared.stop()
+            if scenePhase == .active { GalleryStartupSync.shared.start() }
         }
         .onChange(of: showSettings) { _, showing in if !showing { publishCaptureContext() } }
         .onChange(of: stampEditorSection) { _, section in if section == nil { publishCaptureContext() } }
@@ -1128,18 +1135,22 @@ struct CameraScreen: View {
         }
     }
 
+    private func settingsRowLabel(_ title: String) -> some View {
+        Text(title).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+    }
+
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
                     Section("Conta e organização") {
-                        NavigationLink("Conta Business") { BusinessAccountView() }
+                        NavigationLink { BusinessAccountView() } label: { settingsRowLabel("Conta Business") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        NavigationLink("Gerenciar organização") { BusinessOrganizationsView(profiles: stampProfiles) }
+                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: { settingsRowLabel("Gerenciar organização") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     archiveSettingsSection
                     Section("Ajustes da câmera") {
-                        NavigationLink("Estilos fotográficos") { PhotoStylesView(selected: $photoStyle) }
+                        NavigationLink { PhotoStylesView(selected: $photoStyle) } label: { settingsRowLabel("Estilos fotográficos") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         Toggle("Escanear QR Codes", isOn: $scanQR)
                         Toggle("Mostrar Texto Detectado", isOn: $scanText)
@@ -1151,20 +1162,20 @@ struct CameraScreen: View {
                         }
                     }
                     Section("Preferências") {
-                        NavigationLink("Vibrações") { HapticSettingsView { publishCaptureContext() } }
+                        NavigationLink { HapticSettingsView { publishCaptureContext() } } label: { settingsRowLabel("Vibrações") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     Section("Composição") {
                         Toggle("Grade", isOn: $showGrid)
                     }
                     Section("Aparência") {
-                        NavigationLink("Ícone do aplicativo") { AppIconPicker() }
+                        NavigationLink { AppIconPicker() } label: { settingsRowLabel("Ícone do aplicativo") }
                             .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     Section("Carimbo") {
-                        NavigationLink("Layout e perfis") {
+                        NavigationLink {
                             StampLayoutEditor(store: stampProfiles)
-                        }
+                        } label: { settingsRowLabel("Layout e perfis") }
                         .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         if stampProfiles.profiles.count > 1 {
                             Picker("Perfil ao abrir o app", selection: Binding(
