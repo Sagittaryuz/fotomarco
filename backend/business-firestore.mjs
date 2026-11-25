@@ -62,8 +62,10 @@ export function firestoreTransactions({ projectId, accessToken, fetchImpl = fetc
         put(path(org, 'state', 'seats'), { count: 1 }, { exists: false });
       },
       updateOrganization: async (org, updates) => {
+        const keys = Object.keys(updates);
+        if (!keys.length || keys.some(key => !['name', 'contactEmail', 'photoAssetId', 'mailProvider'].includes(key))) throw new Error('invalid-organization-update');
         writes.push({ update: { name: path(org), fields: fields(updates) },
-          updateMask: { fieldPaths: ['name', 'contactEmail', 'photoAssetId'] }, currentDocument: { exists: true } });
+          updateMask: { fieldPaths: keys }, currentDocument: { exists: true } });
       },
       organization: org => read(path(org)),
       membership: (org, user) => read(path(org, 'members', user)),

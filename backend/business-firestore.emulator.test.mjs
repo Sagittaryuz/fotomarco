@@ -8,6 +8,19 @@ import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 import { createBusinessWorker } from './business-worker.mjs';
 
+test('owner Microsoft mailbox binding and sender selection commit atomically', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const owner = `owner-${randomUUID()}`, org = randomUUID();
+  await transaction(tx => tx.initializeOrganization({ id: org, ownerId: owner, name: 'Equipe', contactEmail: 'owner@example.com' }, 'owner@example.com'));
+  const credential = { version: 1, iv: 'iv', ciphertext: 'sealed', providerAccountId: 'ms-id', email: 'owner@example.com' };
+  const service = new BusinessService({ transaction, verifyToken: async token => token, prepareMicrosoftMail: async () => credential });
+  assert.deepEqual(await service.connectMicrosoftMail({ uid: owner }, org, 'synthetic-refresh'), { connected: true });
+  const saved = await transaction(async tx => ({ org: await tx.organization(org), mail: await tx.microsoftMailCredential(org) }));
+  assert.equal(saved.org.mailProvider, 'microsoft');
+  assert.deepEqual(saved.mail, credential);
+});
+
 test('authorized owner bootstrap creates JMD Hamoa once and preserves it', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
   const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
