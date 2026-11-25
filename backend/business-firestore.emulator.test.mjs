@@ -21,6 +21,21 @@ test('owner Microsoft mailbox binding and sender selection commit atomically', {
   assert.deepEqual(saved.mail, credential);
 });
 
+test('Google Drive binding preserves an existing OneDrive credential', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const owner = `owner-${randomUUID()}`, org = randomUUID();
+  await transaction(tx => tx.initializeOrganization({ id: org, ownerId: owner, name: 'Equipe', contactEmail: 'owner@example.com' }, 'owner@example.com'));
+  const oneDrive = { version: 1, iv: 'iv1', ciphertext: 'sealed-one', providerAccountId: 'ms-id', driveId: 'drive' };
+  await transaction(tx => tx.setOneDriveCredential(org, oneDrive));
+  const googleDrive = { version: 1, iv: 'iv2', ciphertext: 'sealed-google', providerAccountId: 'google-id', ownerPermissionId: 'permission-id' };
+  const service = new BusinessService({ transaction, verifyToken: async token => token, prepareGoogleDrive: async () => googleDrive });
+  assert.deepEqual(await service.connectGoogleDrive({ uid: owner }, org, 'synthetic-refresh'), { connected: true });
+  const saved = await transaction(async tx => ({ one: await tx.oneDriveCredential(org), google: await tx.googleDriveCredential(org) }));
+  assert.deepEqual(saved.one, oneDrive);
+  assert.deepEqual(saved.google, googleDrive);
+});
+
 test('authorized owner bootstrap creates JMD Hamoa once and preserves it', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
   const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
