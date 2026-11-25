@@ -1,14 +1,20 @@
-import { checkGoogleDriveFolderAccess } from './business-google-drive-access.mjs';
+import { checkGoogleDriveFolderAccess, checkGoogleDriveRootAccess } from './business-google-drive-access.mjs';
 
 /** Caller must hold a persisted per-organization provisioning lease and marker. */
-export async function createGoogleDrivePrivateFolder({ accessToken, parentId, parentParentId, ownerPermissionId, name, marker, fetchImpl = fetch }) {
+export async function createGoogleDrivePrivateFolder({ accessToken, parentId, parentParentId, parentIsRoot = false, ownerPermissionId, name, marker, fetchImpl = fetch }) {
   const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
-  if (!validId(parentId) || !validId(parentParentId) || !validId(ownerPermissionId) || typeof accessToken !== 'string' ||
+  if (!validId(parentId) || typeof parentIsRoot !== 'boolean' || (!parentIsRoot && !validId(parentParentId)) ||
+      (parentIsRoot && parentParentId !== undefined) || !validId(ownerPermissionId) || typeof accessToken !== 'string' ||
       !accessToken || accessToken.length > 16384 || typeof name !== 'string' || !name.trim() || name.length > 200 ||
       /[\x00-\x1f\x7f/\\]/.test(name) || typeof marker !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(marker)) throw new Error('invalid-storage-configuration');
   const verify = folderId => checkGoogleDriveFolderAccess({ accessToken, folderId, expectedParentId: parentId, ownerPermissionId, fetchImpl });
-  await checkGoogleDriveFolderAccess({ accessToken, folderId: parentId, expectedParentId: parentParentId, ownerPermissionId, fetchImpl });
+  if (parentIsRoot) {
+    const root = await checkGoogleDriveRootAccess({ accessToken, ownerPermissionId, fetchImpl });
+    if (root.folderId !== parentId) throw new Error('unsafe-google-folder');
+  } else {
+    await checkGoogleDriveFolderAccess({ accessToken, folderId: parentId, expectedParentId: parentParentId, ownerPermissionId, fetchImpl });
+  }
   const headers = { authorization: `Bearer ${accessToken}` };
   const query = new URL('https://www.googleapis.com/drive/v3/files');
   query.searchParams.set('q', `'${parentId}' in parents and trashed = false and appProperties has { key='photomarkMarker' and value='${marker.toLowerCase()}' }`);
