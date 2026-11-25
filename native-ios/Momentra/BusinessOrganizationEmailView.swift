@@ -18,8 +18,18 @@ struct BusinessOrganizationEmailView: View {
                 Text("Escolha o serviço do e-mail cadastrado na organização. Será solicitada permissão para enviar convites em nome dessa conta.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Text("A conexão não altera as contas pessoais de armazenamento.").font(.footnote).foregroundStyle(.secondary)
-                Button("Gmail") { Task { await connect(microsoft: false) } }.disabled(busy)
-                Button("Outlook / Microsoft") { Task { await connect(microsoft: true) } }.disabled(busy)
+                Button {
+                    FotomarcoHaptics.play(.buttons)
+                    Task { await connect(microsoft: false) }
+                } label: {
+                    Text("Gmail").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }.disabled(busy)
+                Button {
+                    FotomarcoHaptics.play(.buttons)
+                    Task { await connect(microsoft: true) }
+                } label: {
+                    Text("Outlook / Microsoft").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }.disabled(busy)
                 if busy { ProgressView("Confirmando a conta…") }
                 if connected { Label("Conta conectada", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
             }
