@@ -46,13 +46,14 @@ final class CloudArchiveOAuth {
         let businessStorage: Bool
         let microsoftMail: Bool
 
-        init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:], forBusiness: Bool = false, identityOnly: Bool = false, microsoftMail: Bool = false) throws {
+        init(provider: CloudDeliveryPlan.Provider, info: [String: Any] = Bundle.main.infoDictionary ?? [:], forBusiness: Bool = false, identityOnly: Bool = false, microsoftMail: Bool = false, googleBusinessStorage: Bool = false) throws {
             self.provider = provider
             self.identityOnly = identityOnly
             self.microsoftMail = microsoftMail
             self.businessStorage = provider == .oneDrive && forBusiness && !identityOnly && !microsoftMail
             guard (!identityOnly && !microsoftMail) || provider == .oneDrive else { throw Failure.notConfigured }
             guard !(identityOnly && microsoftMail) else { throw Failure.notConfigured }
+            guard !googleBusinessStorage || (provider == .googleDrive && forBusiness && !identityOnly && !microsoftMail) else { throw Failure.notConfigured }
             let urlTypes = info["CFBundleURLTypes"] as? [[String: Any]] ?? []
             let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
             switch provider {
@@ -66,7 +67,7 @@ final class CloudArchiveOAuth {
                 authorizeURL = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
                 tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
                 identityURL = URL(string: "https://openidconnect.googleapis.com/v1/userinfo")!
-                requiredScope = forBusiness ? "https://www.googleapis.com/auth/gmail.send" : "https://www.googleapis.com/auth/drive.file"
+                requiredScope = forBusiness && !googleBusinessStorage ? "https://www.googleapis.com/auth/gmail.send" : "https://www.googleapis.com/auth/drive.file"
                 scopes = "openid email profile " + requiredScope
             case .oneDrive:
                 guard let client = info["MomentraMicrosoftClientID"] as? String,

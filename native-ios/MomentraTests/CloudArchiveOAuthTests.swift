@@ -29,10 +29,14 @@ final class CloudArchiveOAuthTests: XCTestCase {
             "CFBundleURLTypes": [["CFBundleURLSchemes": ["com.googleusercontent.apps.123-abc"]]]]
         let personal = try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info)
         let mail = try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info, forBusiness: true)
+        let businessDrive = try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info, forBusiness: true, googleBusinessStorage: true)
         XCTAssertTrue(personal.includesStorageScope("https://www.googleapis.com/auth/drive.file"))
         XCTAssertFalse(personal.includesStorageScope("https://www.googleapis.com/auth/gmail.send"))
         XCTAssertTrue(mail.includesStorageScope("https://www.googleapis.com/auth/gmail.send"))
         XCTAssertFalse(mail.includesStorageScope("https://www.googleapis.com/auth/drive.file"))
+        XCTAssertTrue(businessDrive.includesStorageScope("https://www.googleapis.com/auth/drive.file"))
+        XCTAssertFalse(businessDrive.includesStorageScope("https://www.googleapis.com/auth/gmail.send"))
+        XCTAssertThrowsError(try CloudArchiveOAuth.Configuration(provider: .googleDrive, info: info, googleBusinessStorage: true))
     }
 
     @MainActor
