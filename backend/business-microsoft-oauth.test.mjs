@@ -24,3 +24,17 @@ test('validates the actual Microsoft owner and required folder access', async ()
   const wrong = provider({ driveOwner: 'another' });
   await assert.rejects(microsoftBusinessCredential({ clientId, fetchImpl: wrong.fetch })('refresh'), /provider-identity-mismatch/);
 });
+
+test('classifies token and Graph failures without returning provider responses', async () => {
+  const tokenFailure = microsoftBusinessCredential({ clientId, fetchImpl: async () => ({
+    status: 400, json: async () => ({ error_description: 'private-provider-details' })
+  }) });
+  await assert.rejects(tokenFailure('refresh'), error => error.message === 'provider-token-unavailable');
+
+  const graphFailure = microsoftBusinessCredential({ clientId, fetchImpl: async url =>
+    url.includes('/token')
+      ? { status: 200, json: async () => ({ access_token: 'access', scope: 'Files.ReadWrite' }) }
+      : { status: 403, json: async () => ({ error: { message: 'private-provider-details' } }) }
+  });
+  await assert.rejects(graphFailure('refresh'), error => error.message === 'provider-graph-unavailable');
+});
