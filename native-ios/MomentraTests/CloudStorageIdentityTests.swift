@@ -22,4 +22,18 @@ final class CloudStorageIdentityTests: XCTestCase {
         XCTAssertEqual(result, "dec8d46104fcfc5f754c8e94a8afcc5e7d029f413995c47e924270686f8a0234")
         XCTAssertNil(CloudStorageIdentity.verifiedFingerprint(destination: destination, canonicalID: "drive-B", userID: "user-A", bindings: ["7:subjectdrive-B"]))
     }
+
+    func testDecisionHoldsWhenIdentityIsUnknownOrUnavailable() async throws {
+        let first = String(repeating: "a", count: 64), second = String(repeating: "b", count: 64)
+        let same = try await CloudStorageIdentity.decide(organization: { first }, personal: { first })
+        let different = try await CloudStorageIdentity.decide(organization: { first }, personal: { second })
+        let unknown = try await CloudStorageIdentity.decide(organization: { nil }, personal: { first })
+        XCTAssertEqual(same, .same)
+        XCTAssertEqual(different, .different)
+        XCTAssertEqual(unknown, .unknown)
+        do {
+            _ = try await CloudStorageIdentity.decide(organization: { throw URLError(.notConnectedToInternet) }, personal: { first })
+            XCTFail("Offline resolution must not be treated as a verified destination")
+        } catch let error as URLError { XCTAssertEqual(error.code, .notConnectedToInternet) }
+    }
 }

@@ -107,10 +107,12 @@ actor CloudArchiveDelivery {
                     if organizationStorageIdentity == nil {
                         organizationStorageIdentity = try await Self.businessStorageIdentity(for: context)
                     }
-                    let personalIdentity = try await CloudArchiveAccounts.shared.storageFingerprint(for: destination, userID: context.userID)
+                    let decision = try await CloudStorageIdentity.decide(organization: { organizationStorageIdentity }, personal: {
+                        try await CloudArchiveAccounts.shared.storageFingerprint(for: destination, userID: context.userID)
+                    })
                     let stillSignedIn = await MainActor.run { BusinessIdentity.shared.userID == context.userID && BusinessIdentity.shared.emailVerified }
                     guard stillSignedIn else { throw CocoaError(.userCancelled) }
-                    switch CloudStorageIdentity.compare(organizationStorageIdentity, personalIdentity) {
+                    switch decision {
                     case .same:
                         item.plan.markDuplicate(destination: destination)
                         try journal.write(item)
