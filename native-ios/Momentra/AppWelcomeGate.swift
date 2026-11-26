@@ -5,7 +5,11 @@ import AVFoundation
 enum ReleaseNews {
     static let version = "0.1.66"
     static let items = [
-        "As miniaturas do mapa permanecem acessíveis mesmo quando fotos ocupam o mesmo local."
+        "Os estilos fotográficos aparecem no visor enquanto são ajustados.",
+        "A bandeja da câmera usa Liquid Glass e fecha ao tocar fora dela.",
+        "A borda do mapa aparece junto com sua imagem no carimbo.",
+        "O calendário ficou à direita de Selecionar, com a mesma altura.",
+        "As miniaturas do mapa permanecem acessíveis quando fotos ocupam o mesmo local."
     ]
 
     static func items(for version: String) -> [String] {

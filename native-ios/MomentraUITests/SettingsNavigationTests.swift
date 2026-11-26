@@ -7,6 +7,7 @@ final class SettingsNavigationTests: XCTestCase {
         app.launch()
         let strip = app.scrollViews["gallery.map.photos"]
         XCTAssertTrue(strip.waitForExistence(timeout: 15))
+        XCTAssertLessThan(strip.frame.height, 100)
         let first = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000008"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         first.tap()
@@ -143,5 +144,22 @@ final class SettingsNavigationTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Mapa"].waitForExistence(timeout: 10))
         app.buttons["Fechar"].firstMatch.tap()
         XCTAssertTrue(options.waitForExistence(timeout: 5))
+        options.tap()
+        XCTAssertTrue(app.buttons["camera.options.grid"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["camera.options.grid"].exists)
+        options.tap()
+        app.buttons["camera.options.styles"].tap()
+        XCTAssertTrue(app.buttons["camera.styles.shutter"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["camera.styles.customize"].exists)
+        options.tap()
+        app.buttons["camera.options.map"].tap()
+        XCTAssertTrue(app.navigationBars["Mapa"].waitForExistence(timeout: 10))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Mapa"].exists)
     }
 }

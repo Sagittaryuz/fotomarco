@@ -17,6 +17,11 @@ final class LiveRecognitionEngine: NSObject, ObservableObject, AVCaptureVideoDat
     private var textEnabled = false
     private var lastScan = Date.distantPast
     private var misses = 0
+    private var previewFrame: ((CVPixelBuffer, CGFloat, Bool) -> Void)?
+
+    func setPreviewFrameHandler(_ handler: @escaping (CVPixelBuffer, CGFloat, Bool) -> Void) {
+        queue.async { self.previewFrame = handler }
+    }
 
     func setEnabled(qr: Bool, text: Bool) {
         queue.async {
@@ -36,6 +41,9 @@ final class LiveRecognitionEngine: NSObject, ObservableObject, AVCaptureVideoDat
     func clear() { DispatchQueue.main.async { self.item = nil } }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        if let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            previewFrame?(buffer, connection.videoRotationAngle, connection.isVideoMirrored)
+        }
         guard qrEnabled || textEnabled, Date().timeIntervalSince(lastScan) >= 1,
               let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastScan = Date()

@@ -283,8 +283,15 @@ struct CameraScreen: View {
         .preferredColorScheme(.dark)
         .presentationDetents([.height(260), .medium, .large], selection: $cameraOptionsDetent)
         .presentationDragIndicator(.visible)
-        .presentationBackground(.ultraThinMaterial)
-        .presentationBackgroundInteraction(showingStyleEditor ? .enabled(upThrough: .height(260)) : .disabled)
+        .presentationCornerRadius(30)
+        .presentationBackground {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 30))
+            } else {
+                Rectangle().fill(.ultraThinMaterial)
+            }
+        }
+        .presentationBackgroundInteraction(.enabled)
     }
 
     private var cameraHeader: some View {
@@ -430,6 +437,10 @@ struct CameraScreen: View {
                     .onTapGesture { dismissZoomDial() }
                 CameraPreview(session: camera.session, device: camera.activeDevice,
                               onCaptureRotation: camera.updateCaptureRotation, focus: camera.focus,
+                              styledPreview: camera.styledPreview, style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
+                              styleAdjustments: PhotoStyleAdjustments(tone: styleTone, color: styleColor, palette: stylePalette),
+                              styleEnabled: mode == .photo && scenePhase == .active && !showSettings && !showOriginals && !showMap,
+                              onStyledPreviewDemand: camera.setStyledPreviewEnabled,
                               onTap: dismissZoomDial, onPinch: updatePreviewPinch)
                     .frame(width: previewFrame.width, height: previewFrame.height)
                     .clipped().contentShape(Rectangle())
@@ -794,7 +805,19 @@ struct CameraScreen: View {
                     .background(Color.black)
                     }
                 }.foregroundStyle(.white)
-                    .allowsHitTesting(!showingStyleEditor)
+                    .allowsHitTesting(!showCameraOptions && !showMap)
+                if showCameraOptions || showMap {
+                    Button {
+                        FotomarcoHaptics.play(.buttons)
+                        if showCameraOptions { showCameraOptions = false }
+                        if showMap { showMap = false }
+                    } label: {
+                        Color.clear.contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Fechar painel")
+                    .accessibilityIdentifier("camera.panel.dismiss.outside")
+                }
                 if showingStyleEditor && mode == .photo {
                     let diameter = min(94, geometry.size.width * 0.25)
                     Button {
@@ -1132,6 +1155,8 @@ struct CameraScreen: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { FotomarcoHaptics.play(.buttons); showMap = false } } }
             }
+            .presentationDetents([.medium, .large])
+            .presentationBackgroundInteraction(.enabled)
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
         .sheet(item: $stampEditorSection) { section in

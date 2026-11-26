@@ -12,7 +12,9 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private let movieOutput = AVCaptureMovieFileOutput()
     private let recognitionOutput = AVCaptureVideoDataOutput()
     let recognition = LiveRecognitionEngine()
+    let styledPreview = CameraStylePreviewRenderer()
     private var wantsRecognition = false
+    private var wantsStyledPreview = false
     private var input: AVCaptureDeviceInput?
     private var microphoneInput: AVCaptureDeviceInput?
     private var configured = false
@@ -118,6 +120,9 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         if supportsVideo { session.addOutput(movieOutput) }
         if session.canAddOutput(recognitionOutput) {
             recognitionOutput.alwaysDiscardsLateVideoFrames = true
+            recognition.setPreviewFrameHandler { [weak styledPreview = self.styledPreview] buffer, rotation, mirrored in
+                styledPreview?.submit(buffer, rotation: rotation, mirrored: mirrored)
+            }
             recognitionOutput.setSampleBufferDelegate(recognition, queue: recognition.queue)
             session.addOutput(recognitionOutput)
         } else { recognition.setUnavailable() }
@@ -142,8 +147,17 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     }
 
     private func applyRecognitionDemand() {
-        if let connection = recognitionOutput.connection(with: .video), connection.isEnabled != wantsRecognition {
-            connection.isEnabled = wantsRecognition
+        let needed = wantsRecognition || wantsStyledPreview
+        if let connection = recognitionOutput.connection(with: .video), connection.isEnabled != needed {
+            connection.isEnabled = needed
+        }
+    }
+
+    func setStyledPreviewEnabled(_ enabled: Bool) {
+        queue.async {
+            guard self.wantsStyledPreview != enabled else { return }
+            self.wantsStyledPreview = enabled
+            self.applyRecognitionDemand()
         }
     }
 

@@ -71,6 +71,7 @@ targets:
     sources:
       - MomentraCaptureExtension
       - path: Momentra/CameraPreview.swift
+      - path: Momentra/CameraStylePreviewRenderer.swift
       - path: Momentra/HapticSettings.swift
       - path: Momentra/MomentraCaptureIntent.swift
       - path: Momentra/CloudDeliveryPlan.swift

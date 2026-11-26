@@ -1,4 +1,5 @@
 import AVFoundation
+import Metal
 import SwiftUI
 
 struct CameraPreview: View {
@@ -6,6 +7,11 @@ struct CameraPreview: View {
     let device: AVCaptureDevice?
     let onCaptureRotation: (CGFloat) -> Void
     let focus: (CGPoint, AVCaptureDevice, @escaping (Bool) -> Void) -> Void
+    var styledPreview = CameraStylePreviewRenderer()
+    var style = MomentraPhotoStyle.natural
+    var styleAdjustments = PhotoStyleAdjustments()
+    var styleEnabled = false
+    var onStyledPreviewDemand: (Bool) -> Void = { _ in }
     var onTap: () -> Void = {}
     var onPinch: ((CGFloat?) -> Void)?
     var focusHapticIntensity: Double? = nil
@@ -21,7 +27,9 @@ struct CameraPreview: View {
     }
 
     var body: some View {
-        CameraPreviewLayer(session: session, device: device, onCaptureRotation: onCaptureRotation, bridge: bridge)
+        CameraPreviewLayer(session: session, device: device, onCaptureRotation: onCaptureRotation, bridge: bridge,
+                           styledPreview: styledPreview, style: style, adjustments: styleAdjustments,
+                           styleEnabled: styleEnabled, onStyledPreviewDemand: onStyledPreviewDemand)
             .overlay {
                 Rectangle().fill(.clear)
                     .contentShape(Rectangle())
@@ -87,12 +95,19 @@ private struct CameraPreviewLayer: UIViewRepresentable {
     let device: AVCaptureDevice?
     let onCaptureRotation: (CGFloat) -> Void
     let bridge: CameraPreviewBridge
+    let styledPreview: CameraStylePreviewRenderer
+    let style: MomentraPhotoStyle
+    let adjustments: PhotoStyleAdjustments
+    let styleEnabled: Bool
+    let onStyledPreviewDemand: (Bool) -> Void
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView(frame: .zero)
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
+        view.attach(styledPreview)
         view.update(device: device, onCaptureRotation: onCaptureRotation)
+        onStyledPreviewDemand(styledPreview.configure(style: style, adjustments: adjustments, enabled: styleEnabled))
         bridge.view = view
         return view
     }
@@ -100,6 +115,7 @@ private struct CameraPreviewLayer: UIViewRepresentable {
     func updateUIView(_ view: PreviewView, context: Context) {
         if view.previewLayer.session !== session { view.previewLayer.session = session }
         view.update(device: device, onCaptureRotation: onCaptureRotation)
+        onStyledPreviewDemand(styledPreview.configure(style: style, adjustments: adjustments, enabled: styleEnabled))
     }
 }
 
@@ -112,6 +128,14 @@ final class PreviewView: UIView {
     private var captureObservation: NSKeyValueObservation?
     private var currentPreviewRotation: CGFloat = 0
     private var onCaptureRotation: ((CGFloat) -> Void)?
+    private let styledLayer = CAMetalLayer()
+    private weak var styledPreview: CameraStylePreviewRenderer?
+
+    func attach(_ renderer: CameraStylePreviewRenderer) {
+        styledPreview = renderer
+        previewLayer.addSublayer(styledLayer)
+        renderer.attach(styledLayer)
+    }
     func update(device: AVCaptureDevice?, onCaptureRotation: @escaping (CGFloat) -> Void) {
         self.onCaptureRotation = onCaptureRotation
         guard currentDevice !== device else { applyPreviewRotation(); return }
@@ -133,6 +157,13 @@ final class PreviewView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        styledLayer.frame = bounds
+        let scale = max(1, traitCollection.displayScale)
+        styledLayer.contentsScale = scale
+        styledLayer.drawableSize = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+        CATransaction.commit()
         applyPreviewRotation()
     }
 
@@ -140,6 +171,7 @@ final class PreviewView: UIView {
         guard let connection = previewLayer.connection,
               connection.isVideoRotationAngleSupported(currentPreviewRotation) else { return }
         connection.videoRotationAngle = currentPreviewRotation
+        styledPreview?.setPreviewGeometry(rotation: currentPreviewRotation, mirrored: connection.isVideoMirrored)
     }
 
     func captureDevicePoint(at position: CGPoint) -> CGPoint? {
