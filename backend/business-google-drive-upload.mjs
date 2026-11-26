@@ -38,7 +38,9 @@ export async function sendGoogleDriveChunk({ session, offset, totalBytes, bytes,
     headers: { 'content-length': String(bytes.length), 'content-range': `bytes ${offset}-${offset + bytes.length - 1}/${totalBytes}` }, body: bytes }); }
   catch { throw new Error('upload-status-uncertain'); }
   if (response.status === 308) {
-    const match = /^bytes=0-(\d+)$/.exec(response.headers.get('range') ?? '');
+    const range = response.headers.get('range');
+    const match = range == null ? null : /^bytes=0-(\d+)$/.exec(range);
+    if (range != null && !match) throw new Error('upload-status-uncertain');
     const next = match ? Number(match[1]) + 1 : 0;
     if (!Number.isSafeInteger(next) || next < offset || next > offset + bytes.length || next >= totalBytes) throw new Error('upload-status-uncertain');
     return { complete: false, nextOffset: next };

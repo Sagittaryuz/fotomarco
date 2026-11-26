@@ -29,6 +29,8 @@ test('uses acknowledged offset and leaves uncertain failures for reconciliation'
   const bytes = new Uint8Array(262144);
   const args = { session, offset: 0, totalBytes: 524288, bytes };
   assert.deepEqual(await sendGoogleDriveChunk({ ...args, fetchImpl: async () => ({ status: 308, headers: new Headers({ range: 'bytes=0-131071' }) }) }), { complete: false, nextOffset: 131072 });
+  assert.deepEqual(await sendGoogleDriveChunk({ ...args, fetchImpl: async () => ({ status: 308, headers: new Headers() }) }), { complete: false, nextOffset: 0 });
+  await assert.rejects(sendGoogleDriveChunk({ ...args, fetchImpl: async () => ({ status: 308, headers: new Headers({ range: 'bytes=100-200' }) }) }), /upload-status-uncertain/);
   await assert.rejects(sendGoogleDriveChunk({ ...args, fetchImpl: async () => { throw new Error('network details'); } }), error => error.message === 'upload-status-uncertain');
   await assert.rejects(sendGoogleDriveChunk({ ...args, session: 'https://evil.example/' }), /invalid-upload-session/);
   await assert.rejects(sendGoogleDriveChunk({ ...args, bytes: new Uint8Array(9) }), /invalid-upload-chunk/);
