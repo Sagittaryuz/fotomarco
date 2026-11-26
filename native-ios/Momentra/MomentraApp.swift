@@ -10,6 +10,8 @@ struct MomentraApp: App {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--test-map-overlap") {
                 GalleryMapOverlapFixture()
+            } else if ProcessInfo.processInfo.arguments.contains("--test-style-preview") {
+                CameraStylePreviewFixture()
             } else {
                 applicationContent
             }

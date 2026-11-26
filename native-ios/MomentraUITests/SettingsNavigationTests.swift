@@ -1,6 +1,17 @@
 import XCTest
 
 final class SettingsNavigationTests: XCTestCase {
+    func testLiveStyleRendersSyntheticFrameOnGPU() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--test-style-preview"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Quadro apresentado"].waitForExistence(timeout: 20))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Prévia de estilo em tempo real"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testOverlappingMapPhotosRemainAccessible() {
         let app = XCUIApplication()
         app.launchArguments += ["--test-map-overlap"]
