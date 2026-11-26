@@ -184,6 +184,12 @@ jobs:
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
           xcodebuild -jobs 2 -project Fotomarco.xcodeproj -scheme MomentraSettingsUI -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/momentra-simulator" -resultBundlePath "$RUNNER_TEMP/MomentraSettingsUI.xcresult" CODE_SIGNING_ALLOWED=NO -quiet test
+      - name: Summarize settings interaction tests
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/MomentraSettingsUI.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/MomentraSettingsUI.xcresult"
+          fi
       - name: Run native unit tests
         working-directory: native-ios
         run: |
