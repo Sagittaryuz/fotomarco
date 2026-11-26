@@ -24,6 +24,13 @@ final class StampLocationQRTests: XCTestCase {
         XCTAssertNil(StampLocationQR.url(for: CLLocationCoordinate2D(latitude: 91, longitude: 0)))
     }
 
+    func testCornerMatchesRelativePositionNotOnlyExactCoordinates() {
+        let upperLeft = StampPoint(x: 0, y: 0)
+        XCTAssertTrue(StampPoint(x: 0.15, y: 0.13).sharesCorner(with: upperLeft))
+        XCTAssertFalse(StampPoint(x: 0.85, y: 0.13).sharesCorner(with: upperLeft))
+        XCTAssertFalse(StampPoint(x: 0.15, y: 0.90).sharesCorner(with: upperLeft))
+    }
+
     func testQRIsPresentOnSavedOverlayOnlyWithValidLocation() throws {
         var layout = StampLayout()
         layout.mode = .separate

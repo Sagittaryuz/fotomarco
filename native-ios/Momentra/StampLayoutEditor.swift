@@ -61,7 +61,7 @@ struct StampLayoutEditor: View {
     private func occupants(at corner: StampPoint, excluding element: Element) -> [String] {
         let current = layout.wrappedValue
         func sameCorner(_ position: StampPoint) -> Bool {
-            (position.x < 0.5) == (corner.x < 0.5) && (position.y < 0.5) == (corner.y < 0.5)
+            position.sharesCorner(with: corner)
         }
         var result: [String] = []
         if current.template == .original && current.mode == .separate {
@@ -85,8 +85,7 @@ struct StampLayoutEditor: View {
             HStack(spacing: 10) {
                 ForEach(0..<4, id: \.self) { index in
                     let corner = corners[index]
-                    let selected = (point.wrappedValue.x < 0.5) == (corner.1.x < 0.5)
-                        && (point.wrappedValue.y < 0.5) == (corner.1.y < 0.5)
+                    let selected = point.wrappedValue.sharesCorner(with: corner.1)
                     let existing = occupants(at: corner.1, excluding: element)
                     Button { FotomarcoHaptics.play(.editor); point.wrappedValue = corner.1 } label: {
                         RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.secondary, lineWidth: selected ? 2 : 1)

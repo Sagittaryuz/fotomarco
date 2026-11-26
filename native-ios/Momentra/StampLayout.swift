@@ -9,6 +9,10 @@ struct StampPoint: Codable, Equatable {
         self.x = min(1, max(0, x))
         self.y = min(1, max(0, y))
     }
+
+    func sharesCorner(with other: StampPoint) -> Bool {
+        (x < 0.5) == (other.x < 0.5) && (y < 0.5) == (other.y < 0.5)
+    }
 }
 
 struct StampLayout: Codable, Equatable {
