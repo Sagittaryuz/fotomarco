@@ -1,7 +1,45 @@
 import XCTest
+import CryptoKit
 @testable import Momentra
 
+private final class StorageIdentityURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url, request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token" else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse)); return
+        }
+        let body: String
+        if url.host == "graph.microsoft.com", url.path == "/oidc/userinfo" { body = #"{"sub":"subject"}"# }
+        else if url.host == "graph.microsoft.com", url.path == "/v1.0/me/drive/special/approot" {
+            body = #"{"id":"folder","parentReference":{"driveId":"drive-A"}}"#
+        } else { client?.urlProtocol(self, didFailWithError: URLError(.badURL)); return }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
 final class CloudArchiveOAuthTests: XCTestCase {
+    @MainActor
+    func testPersonalStorageIdentityRequiresMatchingOriginalAccount() async throws {
+        let info: [String: Any] = ["MomentraMicrosoftClientID": "4befebdc-2a06-49a0-b14a-13de07c6ac08",
+            "CFBundleURLTypes": [["CFBundleURLSchemes": ["msauth.br.com.momentra.camera"]]]]
+        let provider = try CloudArchiveOAuth.Configuration(provider: .oneDrive, info: info)
+        let settings = URLSessionConfiguration.ephemeral
+        settings.protocolClasses = [StorageIdentityURLProtocol.self]
+        let oauth = CloudArchiveOAuth(network: URLSession(configuration: settings))
+        let hash = SHA256.hash(data: Data("7:subjectdrive-A".utf8)).map { String(format: "%02x", $0) }.joined()
+        let destination = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: hash))
+        let result = try await oauth.storageFingerprint(accessToken: "test-token", destination: destination, userID: "user-A", configuration: provider)
+        XCTAssertEqual(result, "dec8d46104fcfc5f754c8e94a8afcc5e7d029f413995c47e924270686f8a0234")
+        let other = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: String(repeating: "a", count: 64)))
+        do {
+            _ = try await oauth.storageFingerprint(accessToken: "test-token", destination: other, userID: "user-A", configuration: provider)
+            XCTFail("A different account must be rejected")
+        } catch CloudArchiveOAuth.Failure.wrongAccount { }
+    }
     @MainActor
     func testMicrosoftMailRequestsSendPermissionWithoutStorageAccess() throws {
         let info: [String: Any] = ["MomentraMicrosoftClientID": "4befebdc-2a06-49a0-b14a-13de07c6ac08",

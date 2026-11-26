@@ -154,12 +154,20 @@ final class CloudArchiveOAuth {
         }
     }
 
-    private let network = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
+    private let network: URLSession
+
+    init(network: URLSession? = nil) {
+        self.network = network ?? URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
+    }
 
     /// Verify that a token still names the configured personal destination before
     /// comparing it with a Business destination. A missing drive ID is unknown.
-    func storageFingerprint(accessToken: String, destination: CloudDeliveryPlan.Destination, userID: String) async throws -> String {
-        let configuration = try Configuration(provider: destination.provider)
+    func storageFingerprint(accessToken: String, destination: CloudDeliveryPlan.Destination, userID: String,
+                            configuration suppliedConfiguration: Configuration? = nil) async throws -> String {
+        let configuration = try suppliedConfiguration ?? Configuration(provider: destination.provider)
+        let expectedScope = destination.provider == .oneDrive ? "Files.ReadWrite.AppFolder" : "https://www.googleapis.com/auth/drive.file"
+        guard configuration.provider == destination.provider, configuration.requiredScope == expectedScope,
+              !configuration.businessStorage, !configuration.identityOnly, !configuration.microsoftMail else { throw Failure.invalidResponse }
         let identity: Identity = try await get(configuration.identityURL, token: accessToken)
         guard !identity.sub.isEmpty, identity.sub.utf8.count <= 512 else { throw Failure.invalidResponse }
         let canonicalID: String
