@@ -1154,19 +1154,15 @@ struct CameraScreen: View {
             NavigationStack {
                 Form {
                     Section("Conta") {
-                        NavigationLink { BusinessAccountView() } label: { settingsRowLabel("Minha conta") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        NavigationLink { BusinessPlansView() } label: { settingsRowLabel("Upgrade do plano") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: { settingsRowLabel("Organização e equipe") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                        NavigationLink { BusinessAccountView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Minha conta") }
+                        NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Upgrade do plano") }
+                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles).onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Organização e equipe") }
                     }
                     Section {
                         NavigationLink {
                             Form {
                                 Section("Câmera") {
-                                    NavigationLink { PhotoStylesView(selected: $photoStyle) } label: { settingsRowLabel("Estilos fotográficos") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                                    NavigationLink { PhotoStylesView(selected: $photoStyle).onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Estilos fotográficos") }
                                     Toggle("Grade", isOn: $showGrid)
                                     Toggle("Localização", isOn: $gpsEnabled)
                                     Text("A localização também é usada pelo mapa e pelas informações das capturas.")
@@ -1180,14 +1176,12 @@ struct CameraScreen: View {
                                             .font(.footnote).foregroundStyle(.secondary)
                                     }
                                 }
-                            }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Câmera")
+                            }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Câmera").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRowLabel("Câmera") }
-                        .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         NavigationLink {
                             Form {
                                 Section("Layout e perfis") {
-                                    NavigationLink { StampLayoutEditor(store: stampProfiles) } label: { settingsRowLabel("Escolher e editar perfil") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
+                                    NavigationLink { StampLayoutEditor(store: stampProfiles).onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Escolher e editar perfil") }
                                     if stampProfiles.profiles.count > 1 {
                                         Picker("Perfil ao abrir o app", selection: Binding(
                                             get: { stampProfiles.startupSelection }, set: { stampProfiles.setStartup($0) }
@@ -1200,12 +1194,11 @@ struct CameraScreen: View {
                                     }
                                     Toggle("Carimbo", isOn: $stampEnabled)
                                 }
-                            }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Layout e perfis")
+                            }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Layout e perfis").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRowLabel("Layout e perfis") }
-                        .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                         NavigationLink {
                             Form { archiveSettingsSection }
-                                .toggleStyle(DirectionalSwitchStyle()).navigationTitle("Armazenamento")
+                                .toggleStyle(DirectionalSwitchStyle()).navigationTitle("Armazenamento").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: {
                             VStack(alignment: .leading) {
                                 Text("Armazenamento")
@@ -1217,13 +1210,10 @@ struct CameraScreen: View {
                         }
                         NavigationLink {
                             Form {
-                                NavigationLink { HapticSettingsView { publishCaptureContext() } } label: { settingsRowLabel("Vibrações") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                                NavigationLink { AppIconPicker() } label: { settingsRowLabel("Ícone do aplicativo") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
-                            }.navigationTitle("Preferências")
+                                NavigationLink { HapticSettingsView { publishCaptureContext() }.onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Vibrações") }
+                                NavigationLink { AppIconPicker().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Ícone do aplicativo") }
+                            }.navigationTitle("Preferências").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRowLabel("Preferências") }
-                        .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                     Section {
                         NavigationLink {
@@ -1257,9 +1247,8 @@ struct CameraScreen: View {
                         Text("Desenvolvido por Marcos Rodrigues Pires · 2026")
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
-                            }.navigationTitle("Sobre")
+                            }.navigationTitle("Sobre").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRowLabel("Sobre") }
-                            .simultaneousGesture(TapGesture().onEnded { FotomarcoHaptics.play(.buttons) })
                     }
                 }
                 .toggleStyle(DirectionalSwitchStyle())

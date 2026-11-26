@@ -8,11 +8,11 @@ struct DirectionalSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         if showsLabel {
-            HStack {
-                configuration.label.accessibilityHidden(true)
-                Spacer(minLength: 12)
-                capsule(configuration)
-            }
+            Toggle(configuration)
+                .toggleStyle(.switch)
+                .onChange(of: configuration.isOn) { _, _ in
+                    if isEnabled { FotomarcoHaptics.play(.switches) }
+                }
         } else {
             capsule(configuration)
         }
