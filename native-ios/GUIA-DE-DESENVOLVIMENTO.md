@@ -22,6 +22,8 @@ funções, os gestos e a semântica acessível de cada controle ao reaplicar o e
 
 No macOS, gere o projeto Fotomarco a partir da definição versionada. A mudança de nome não altera o esquema interno Momentra, o produto Momentra.app, o bundle ID, os callbacks ou o contrato de distribuição do instalador privado.
 
+O visor de estilos usa a mesma receita Core Image da foto e apresenta quadros por Metal, com no máximo um quadro em processamento. O reconhecimento de texto usa fila própria. Os testes de imagem sintética e rotação não substituem a validação de cor, orientação, latência e fluidez com câmeras reais. No mapa da galeria, mantenha as coordenadas verdadeiras e a faixa de miniaturas para permitir acesso a fotos sobrepostas.
+
 ```sh
 cd native-ios
 xcodegen generate
