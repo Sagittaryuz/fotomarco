@@ -97,6 +97,15 @@ struct BusinessArchiveJournal {
         return capture
     }
 
+    /// A duplicate personal upload may be skipped only after the matching team
+    /// copy has a verified receipt for the exact files and organization.
+    func confirmsDelivery(id: UUID, organizationID: UUID, userID: String,
+                          stamped: CloudFileFingerprint, original: CloudFileFingerprint?, keepsOriginal: Bool) -> Bool {
+        guard let item = try? read(id), item.organizationID == organizationID, item.userID == userID,
+              item.finished, item.stamped == stamped, item.keepsOriginal == keepsOriginal else { return false }
+        return keepsOriginal ? item.original == original && original != nil : item.original == nil
+    }
+
     func markVerified(_ id: UUID, variant: String) throws {
         Self.lock.lock(); defer { Self.lock.unlock() }
         var capture = try read(id)

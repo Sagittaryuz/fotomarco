@@ -117,6 +117,10 @@ actor CloudArchiveDelivery {
                     guard stillSignedIn else { throw CocoaError(.userCancelled) }
                     switch decision {
                     case .same:
+                        guard BusinessArchiveJournal(root: journal.root).confirmsDelivery(id: item.id,
+                            organizationID: context.organizationID, userID: context.userID,
+                            stamped: stamped, original: item.plan.keepsOriginal ? original : nil,
+                            keepsOriginal: item.plan.keepsOriginal) else { throw CocoaError(.fileReadUnknown) }
                         item.plan.markDuplicate(destination: destination)
                         try journal.write(item)
                         completedBytes += bytesPerDestination
