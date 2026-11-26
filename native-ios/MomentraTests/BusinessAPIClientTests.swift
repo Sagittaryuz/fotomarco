@@ -126,6 +126,32 @@ final class BusinessAPIClientTests: XCTestCase {
         } catch BusinessAPIClient.Failure.microsoftToken { } catch { XCTFail("Unexpected error") }
     }
 
+    func testGoogleBusinessStorageUsesVerifiedSessionAndSelectedFolder() async throws {
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
+            let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String])
+            let data: Data
+            if request.url?.path.hasSuffix("/connect") == true {
+                XCTAssertEqual(payload, ["refreshToken": "credential"])
+                data = Data(#"{"connected":true}"#.utf8)
+            } else {
+                XCTAssertEqual(request.url?.path, "/v1/organizations/org/storage/google-drive/provision-owner")
+                XCTAssertEqual(payload, ["imagesId": "selected-folder"])
+                data = Data(#"{"ready":true}"#.utf8)
+            }
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (data, response)
+        }
+        let connected = try await client.connectGoogleDrive(organizationID: "org", refreshToken: "credential", token: "token")
+        XCTAssertTrue(connected.connected)
+        let folder = try await client.provisionGoogleOwnerFolder(organizationID: "org", imagesID: "selected-folder", token: "token")
+        XCTAssertTrue(folder.ready)
+        do {
+            _ = try await client.provisionGoogleOwnerFolder(organizationID: "org", imagesID: "../unsafe", token: "token")
+            XCTFail("Expected invalid request")
+        } catch BusinessAPIClient.Failure.invalidRequest { } catch { XCTFail("Unexpected error") }
+    }
+
     func testOrganizationSettingsAreSentWithoutChangingAccountCredentials() async throws {
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
             XCTAssertEqual(request.url?.path, "/v1/organizations/org/settings/update")

@@ -86,6 +86,18 @@ struct BusinessAPIClient {
                               values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
     }
 
+    func connectGoogleDrive(organizationID: String, refreshToken: String, token: String) async throws -> StorageConnection {
+        guard !refreshToken.isEmpty, refreshToken.utf8.count <= 16384 else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "google-drive", "connect"],
+                              values: ["refreshToken": refreshToken], token: token, maxBodySize: 20000)
+    }
+
+    func provisionGoogleOwnerFolder(organizationID: String, imagesID: String, token: String) async throws -> FolderProvisioning {
+        guard imagesID.range(of: #"^[A-Za-z0-9_-]{1,256}$"#, options: .regularExpression) != nil else { throw Failure.invalidRequest }
+        return try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "google-drive", "provision-owner"],
+                              values: ["imagesId": imagesID], token: token)
+    }
+
     func provisionOwnerFolder(organizationID: String, token: String) async throws -> FolderProvisioning {
         try await post(path: ["v1", "organizations", try Self.id(organizationID), "storage", "onedrive", "provision-owner"], values: [:], token: token)
     }
