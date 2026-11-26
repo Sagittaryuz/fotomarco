@@ -1154,13 +1154,28 @@ struct CameraScreen: View {
         Text(title).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
     }
 
+    private func settingsRootLabel(_ title: String, symbol: String, color: Color) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 32, height: 32)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
                     Section("Conta") {
-                        NavigationLink { BusinessAccountView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Minha conta") }
-                        NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Upgrade do plano") }
-                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles).onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Organização e equipe") }
+                        NavigationLink { BusinessAccountView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRootLabel("Minha conta", symbol: "person.fill", color: .blue) }
+                        NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRootLabel("Upgrade do plano", symbol: "star.fill", color: .yellow) }
+                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles).onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRootLabel("Organização e equipe", symbol: "person.2.fill", color: .green) }
                     }
                     Section {
                         NavigationLink {
@@ -1181,7 +1196,7 @@ struct CameraScreen: View {
                                     }
                                 }
                             }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Câmera").onAppear { FotomarcoHaptics.play(.buttons) }
-                        } label: { settingsRowLabel("Câmera") }
+                        } label: { settingsRootLabel("Câmera", symbol: "camera.fill", color: .yellow) }
                         NavigationLink {
                             Form {
                                 Section("Layout e perfis") {
@@ -1199,25 +1214,33 @@ struct CameraScreen: View {
                                     Toggle("Carimbo", isOn: $stampEnabled)
                                 }
                             }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Layout e perfis").onAppear { FotomarcoHaptics.play(.buttons) }
-                        } label: { settingsRowLabel("Layout e perfis") }
+                        } label: { settingsRootLabel("Layout e perfis", symbol: "square.grid.2x2.fill", color: .orange) }
                         NavigationLink {
                             Form { archiveSettingsSection }
                                 .toggleStyle(DirectionalSwitchStyle()).navigationTitle("Armazenamento").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: {
-                            VStack(alignment: .leading) {
-                                Text("Armazenamento")
-                                if archiveStatus.pending + businessArchiveStatus.pending > 0 {
-                                    Text("\(archiveStatus.pending + businessArchiveStatus.pending) captura(s) aguardando envio")
-                                        .font(.caption).foregroundStyle(.secondary)
+                            HStack(spacing: 14) {
+                                Image(systemName: "externaldrive.fill")
+                                    .font(.system(size: 17, weight: .semibold)).foregroundStyle(.blue)
+                                    .frame(width: 32, height: 32)
+                                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading) {
+                                    Text("Armazenamento")
+                                    if archiveStatus.pending + businessArchiveStatus.pending > 0 {
+                                        Text("\(archiveStatus.pending + businessArchiveStatus.pending) captura(s) aguardando envio")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
                                 }
-                            }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }.frame(minHeight: 44).contentShape(Rectangle())
                         }
                         NavigationLink {
                             Form {
                                 NavigationLink { HapticSettingsView { publishCaptureContext() }.onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Vibrações") }
                                 NavigationLink { AppIconPicker().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Ícone do aplicativo") }
                             }.navigationTitle("Preferências").onAppear { FotomarcoHaptics.play(.buttons) }
-                        } label: { settingsRowLabel("Preferências") }
+                        } label: { settingsRootLabel("Preferências", symbol: "gearshape.fill", color: .gray) }
                     }
                     Section {
                         NavigationLink {
@@ -1252,11 +1275,12 @@ struct CameraScreen: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                             }.navigationTitle("Sobre").onAppear { FotomarcoHaptics.play(.buttons) }
-                        } label: { settingsRowLabel("Sobre") }
+                        } label: { settingsRootLabel("Sobre", symbol: "info.circle.fill", color: .blue) }
                     }
                 }
                 .toggleStyle(DirectionalSwitchStyle())
                 .navigationTitle("Configurações")
+                .navigationBarTitleDisplayMode(.large)
                 .toolbar { Button("Concluído") { FotomarcoHaptics.play(.buttons); showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
                     get: { archiveConnectionError != nil },

@@ -3,8 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.58"
+    static let version = "0.1.59"
     static let items = [
+        "As opções foram reorganizadas com ícones e grupos no estilo dos Ajustes do iPhone.",
         "O mapa da galeria abre com a vista de satélite selecionada.",
         "O calendário da galeria usa português do Brasil e um botão Liquid Glass.",
         "Os controles flutuantes da câmera seguem o padrão Liquid Glass.",
