@@ -472,6 +472,7 @@ enum StampRenderer {
             map.draw(in: box)
             let marker = box.height * 0.09
             drawLocationMarker(center: CGPoint(x: box.midX, y: box.midY), diameter: marker, context: context)
+            drawMapBorder(box, context: context)
         }
         let cameraBadge = CGRect(x: box.maxX - box.width * 0.24, y: box.minY + box.height * 0.04,
                                  width: box.width * 0.21, height: box.height * 0.42)
@@ -667,6 +668,7 @@ enum StampRenderer {
             map.draw(in: mapRect)
             let marker = mapRect.width * 0.12
             drawLocationMarker(center: CGPoint(x: mapRect.midX, y: mapRect.midY), diameter: marker, context: context)
+            drawMapBorder(mapRect, context: context)
         }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         let column = box.width * 0.64
@@ -1050,6 +1052,15 @@ enum StampRenderer {
         return nil
     }
 
+    static func drawMapBorder(_ rect: CGRect, context: CGContext) {
+        let width = max(1, min(rect.width, rect.height) * 0.012)
+        context.saveGState()
+        context.setStrokeColor(UIColor.white.cgColor)
+        context.setLineWidth(width)
+        context.stroke(rect.insetBy(dx: width / 2, dy: width / 2))
+        context.restoreGState()
+    }
+
     static func drawSeparate(snapshot: StampSnapshot, map: UIImage?, address: String?, size: CGSize, context: CGContext) -> Bool {
         let unit = min(size.width, size.height)
         let margin = unit * 0.025
@@ -1061,6 +1072,7 @@ enum StampRenderer {
             map.draw(in: rect)
             let markerSize = side * 0.12
             drawLocationMarker(center: CGPoint(x: rect.midX, y: rect.midY), diameter: markerSize, context: context)
+            drawMapBorder(rect, context: context)
         }
         if layout.showsInformation {
             guard let (image, rect) = separateInformationImage(snapshot: snapshot, address: address, size: size) else { return false }
@@ -1204,6 +1216,7 @@ enum StampRenderer {
                 map.draw(in: mapRect)
                 let markerSize = mapSide * 0.12
                 StampRenderer.drawLocationMarker(center: CGPoint(x: mapRect.midX, y: mapRect.midY), diameter: markerSize, context: context.cgContext)
+                StampRenderer.drawMapBorder(mapRect, context: context.cgContext)
             }
             let textRect = CGRect(x: box.minX + margin + inlineMapSide + mapGap, y: box.minY + margin, width: textWidth, height: box.height - margin * 2)
             text.draw(in: textRect, withAttributes: attrs)

@@ -25,6 +25,8 @@ final class BusinessIdentity: ObservableObject {
     static let shared = BusinessIdentity()
     @Published private(set) var userID: String?
     @Published private(set) var email: String?
+    @Published private(set) var displayName: String?
+    @Published private(set) var photoURL: URL?
     @Published private(set) var emailVerified = false
     private var listener: AuthStateDidChangeListenerHandle?
 
@@ -46,6 +48,9 @@ final class BusinessIdentity: ObservableObject {
     private func update(_ user: User?) {
         userID = user?.uid
         email = user?.email
+        displayName = user?.displayName ?? user?.providerData.compactMap(\.displayName).first
+        let providerPhoto = user?.providerData.compactMap(\.photoURL).first { $0.scheme?.lowercased() == "https" }
+        photoURL = user?.photoURL?.scheme?.lowercased() == "https" ? user?.photoURL : providerPhoto
         emailVerified = user?.isEmailVerified ?? false
     }
 

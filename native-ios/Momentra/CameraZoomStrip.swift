@@ -44,10 +44,8 @@ struct CameraZoomStrip: View {
             .lineLimit(1).minimumScaleFactor(0.65)
             .frame(width: width, height: 44)
             .contentShape(Rectangle())
-        if selected {
-            label.modifier(GalleryControlSurface(rounded: true, tint: .yellow))
-        } else {
-            label.foregroundStyle(.white)
-        }
+        label
+            .foregroundStyle(selected ? Color.yellow : Color.white)
+            .background(selected ? Color.black.opacity(0.58) : .clear, in: Circle())
     }
 }

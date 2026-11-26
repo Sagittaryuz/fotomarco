@@ -3,16 +3,12 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.62"
+    static let version = "0.1.63"
     static let items = [
-        "O editor avisa quando elementos separados ocupam o mesmo canto da foto.",
-        "Um QR Code opcional no carimbo permite abrir a localização da captura no mapa.",
-        "As opções foram reorganizadas com ícones e grupos no estilo dos Ajustes do iPhone.",
-        "O mapa da galeria abre com a vista de satélite selecionada.",
-        "O calendário da galeria usa português do Brasil e um botão Liquid Glass.",
-        "Os controles flutuantes da câmera seguem o padrão Liquid Glass.",
-        "As áreas de toque dos interruptores das configurações foram ajustadas.",
-        "O compartilhamento mostra o progresso de preparação das fotos durante o download, quando disponível."
+        "As opções mostram o perfil e o acesso ao espaço corporativo no primeiro cartão.",
+        "O espaçamento das opções ficou mais próximo dos Ajustes do iPhone.",
+        "O zoom selecionado voltou a usar um círculo escuro simples.",
+        "O mapa do carimbo ganhou uma moldura branca."
     ]
 
     static func items(for version: String) -> [String] {

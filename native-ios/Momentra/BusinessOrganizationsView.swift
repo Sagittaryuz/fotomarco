@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BusinessOrganizationsView: View {
     @ObservedObject var profiles: StampProfilesStore
+    var initialOrganization: BusinessAPIClient.OrganizationSummary? = nil
     @ObservedObject private var identity = BusinessIdentity.shared
     @State private var organizations: [BusinessAPIClient.OrganizationSummary] = []
     @State private var busy = false
@@ -16,7 +17,9 @@ struct BusinessOrganizationsView: View {
 
     var body: some View {
         Group {
-            if identity.userID == nil {
+            if identity.userID != nil, let initialOrganization {
+                organizationMenu(initialOrganization)
+            } else if identity.userID == nil {
                 BusinessAccountView()
             } else {
                 List {
@@ -48,7 +51,7 @@ struct BusinessOrganizationsView: View {
                 }
             }
         }
-        .navigationTitle("Organização e equipe")
+        .navigationTitle(initialOrganization?.name ?? "Organização e equipe")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(identity.userID ?? "")-\(identity.emailVerified)") { await load() }
         .refreshable { await load() }

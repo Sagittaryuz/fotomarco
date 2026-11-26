@@ -100,6 +100,7 @@ struct CameraScreen: View {
     @StateObject private var directUpdate = DirectUpdateAccess.shared
     @StateObject private var stampProfiles = StampProfilesStore()
     @ObservedObject private var businessIdentity = BusinessIdentity.shared
+    @State private var settingsOrganizations: [BusinessAPIClient.OrganizationSummary]?
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
     @AppStorage("native.camera.grid") private var showGrid = false
     @AppStorage("native.camera.scanQR") private var scanQR = true
@@ -1191,17 +1192,49 @@ struct CameraScreen: View {
             Text(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: 32)
         .contentShape(Rectangle())
     }
 
     private var settingsSheet: some View {
             NavigationStack {
                 Form {
-                    Section("Conta") {
-                        NavigationLink { BusinessAccountView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRootLabel("Minha conta", symbol: "person.fill", color: .blue) }
-                        NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRootLabel("Upgrade do plano", symbol: "star.fill", color: .yellow) }
-                        NavigationLink { BusinessOrganizationsView(profiles: stampProfiles).onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRootLabel("Organização e equipe", symbol: "person.2.fill", color: .green) }
+                    Section {
+                        NavigationLink { BusinessAccountView().onAppear { FotomarcoHaptics.play(.buttons) } } label: {
+                            HStack(spacing: 14) {
+                                AsyncImage(url: businessIdentity.photoURL) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Image(systemName: "person.fill").font(.title2).foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity).background(.quaternary)
+                                }
+                                .frame(width: 56, height: 56).clipShape(Circle()).accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(businessIdentity.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? "Minha conta").font(.headline)
+                                    if let email = businessIdentity.email { Text(email).font(.subheadline).foregroundStyle(.secondary) }
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }.padding(.vertical, 4).contentShape(Rectangle())
+                        }
+                        if let organization = settingsOrganizations?.first {
+                            NavigationLink { BusinessOrganizationsView(profiles: stampProfiles, initialOrganization: organization).onAppear { FotomarcoHaptics.play(.buttons) } } label: {
+                                HStack(spacing: 14) {
+                                    Image(systemName: "building.2.fill").foregroundStyle(.white)
+                                        .frame(width: 32, height: 32).background(.blue.gradient, in: Circle()).accessibilityHidden(true)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Espaço corporativo")
+                                        Text(organization.name).font(.caption).foregroundStyle(.secondary)
+                                    }.frame(maxWidth: .infinity, alignment: .leading)
+                                }.frame(minHeight: 32).contentShape(Rectangle())
+                            }
+                        } else if businessIdentity.userID == nil || settingsOrganizations?.isEmpty == true {
+                            NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: {
+                                settingsRootLabel("Faça o upgrade do seu plano", symbol: "star.fill", color: .yellow)
+                            }
+                        } else {
+                            NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: {
+                                settingsRootLabel("Espaço corporativo", symbol: "building.2.fill", color: .blue)
+                            }
+                        }
                     }
                     Section {
                         NavigationLink {
@@ -1259,7 +1292,7 @@ struct CameraScreen: View {
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            }.frame(minHeight: 44).contentShape(Rectangle())
+                            }.frame(minHeight: 32).contentShape(Rectangle())
                         }
                         NavigationLink {
                             Form {
@@ -1307,6 +1340,18 @@ struct CameraScreen: View {
                 .toggleStyle(DirectionalSwitchStyle())
                 .navigationTitle("Configurações")
                 .navigationBarTitleDisplayMode(.large)
+                .task(id: "\(businessIdentity.userID ?? "")-\(businessIdentity.emailVerified)") {
+                    settingsOrganizations = nil
+                    guard let userID = businessIdentity.userID, businessIdentity.emailVerified,
+                          let client = BusinessAPIClient.configured() else { return }
+                    do {
+                        let organizations = try await client.myOrganizations(token: businessIdentity.verifiedToken()).organizations
+                        guard businessIdentity.userID == userID else { return }
+                        settingsOrganizations = organizations
+                    } catch {
+                        if businessIdentity.userID == userID { settingsOrganizations = nil }
+                    }
+                }
                 .toolbar { Button("Concluído") { FotomarcoHaptics.play(.buttons); showSettings = false } }
                 .alert("Conexão de armazenamento", isPresented: Binding(
                     get: { archiveConnectionError != nil },

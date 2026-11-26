@@ -45,6 +45,7 @@ struct StampMapPreview: View {
                     ProgressView().controlSize(.small)
                 }
             }.frame(width: proxy.size.width, height: proxy.size.height)
+                .overlay { Rectangle().strokeBorder(.white, lineWidth: max(1, min(proxy.size.width, proxy.size.height) * 0.012)) }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

@@ -514,6 +514,7 @@ private struct StampLayoutPreview: View {
                         let side = min(space.width, space.height, size.width * 0.5, size.width * previewMapFraction * layout.mapSize)
                         let box = rect(\.map, in: size, element: CGSize(width: side, height: side))
                         previewMap.frame(width: box.width, height: box.height)
+                            .overlay { Rectangle().strokeBorder(.white, lineWidth: max(1, min(box.width, box.height) * 0.012)) }
                             .overlay { highlight(.map) }
                             .position(x: box.midX, y: box.midY)
                     }
