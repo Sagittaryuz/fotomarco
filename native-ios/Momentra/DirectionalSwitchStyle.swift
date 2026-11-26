@@ -8,8 +8,20 @@ struct DirectionalSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         if showsLabel {
-            Toggle(configuration)
-                .toggleStyle(.switch)
+            HStack(spacing: 8) {
+                Button {
+                    if isEnabled { configuration.isOn.toggle() }
+                } label: {
+                    configuration.label
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Toggle(configuration)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .fixedSize(horizontal: true, vertical: false)
+            }
                 .onChange(of: configuration.isOn) { _, _ in
                     if isEnabled { FotomarcoHaptics.play(.switches) }
                 }

@@ -11,6 +11,14 @@ struct GalleryDateFilter: Equatable {
 }
 
 enum GalleryDateSelection {
+    static let brazilianLocale = Locale(identifier: "pt_BR")
+
+    static func brazilianCalendar(basedOn calendar: Calendar = .current) -> Calendar {
+        var result = calendar
+        result.locale = brazilianLocale
+        return result
+    }
+
     static func limited(_ next: Set<DateComponents>, previous: Set<DateComponents>) -> Set<DateComponents> {
         guard next.count > 2 else { return next }
         return next.subtracting(previous)
@@ -33,7 +41,7 @@ struct GalleryDateFilterView: View {
     init(filter: Binding<GalleryDateFilter?>) {
         self._filter = filter
         let existing = filter.wrappedValue
-        let calendar = Calendar.current
+        let calendar = GalleryDateSelection.brazilianCalendar()
         let days = existing.map { [calendar.dateComponents([.year, .month, .day], from: $0.start),
                                    calendar.dateComponents([.year, .month, .day], from: $0.end)] } ?? []
         self._selection = State(initialValue: Set(days))
@@ -45,8 +53,9 @@ struct GalleryDateFilterView: View {
                 Section("Selecione um dia ou as duas datas do intervalo") {
                     GalleryCalendarGrid(selection: $selection, month: $month)
                     if let selected = GalleryDateSelection.filter(from: selection) {
-                        let start = selected.start.formatted(date: .abbreviated, time: .omitted)
-                        let end = selected.end.formatted(date: .abbreviated, time: .omitted)
+                        let format = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(GalleryDateSelection.brazilianLocale)
+                        let start = selected.start.formatted(format)
+                        let end = selected.end.formatted(format)
                         Text(Calendar.current.isDate(selected.start, inSameDayAs: selected.end) ? start : "\(start) – \(end)")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -69,7 +78,10 @@ struct GalleryDateFilterView: View {
                     }.disabled(selection.isEmpty)
                 }
             }
-        }.preferredColorScheme(.dark)
+        }
+        .environment(\.locale, GalleryDateSelection.brazilianLocale)
+        .environment(\.calendar, GalleryDateSelection.brazilianCalendar())
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -160,7 +172,7 @@ private struct GalleryCalendarGrid: View {
             .background { if endpoint { Circle().fill(.yellow).padding(3) } }
             .foregroundStyle(endpoint ? .black : .primary)
             .contentShape(Rectangle())
-            .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+            .accessibilityLabel(day.formatted(Date.FormatStyle(date: .complete, time: .omitted).locale(locale)))
             .accessibilityAddTraits(endpoint ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction {
                 let existing = GalleryDateSelection.filter(from: selection, calendar: calendar)

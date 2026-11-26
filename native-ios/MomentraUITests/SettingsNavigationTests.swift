@@ -3,7 +3,7 @@ import XCTest
 final class SettingsNavigationTests: XCTestCase {
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.55"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.56"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -26,8 +26,16 @@ final class SettingsNavigationTests: XCTestCase {
                 XCTAssertTrue(grid.waitForExistence(timeout: 5))
                 let before = grid.value as? String
                 grid.tap()
-                XCTAssertNotEqual(grid.value as? String, before, "O interruptor não respondeu")
-                grid.tap()
+                let after = before == "1" ? "0" : "1"
+                let changed = expectation(for: NSPredicate(format: "value == %@", after), evaluatedWith: grid)
+                wait(for: [changed], timeout: 5)
+                let label = app.buttons["Grade"]
+                XCTAssertTrue(label.waitForExistence(timeout: 5))
+                label.tap()
+                if let before {
+                    let restored = expectation(for: NSPredicate(format: "value == %@", before), evaluatedWith: grid)
+                    wait(for: [restored], timeout: 5)
+                }
             }
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }

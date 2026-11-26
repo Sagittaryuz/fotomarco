@@ -280,13 +280,7 @@ struct OriginalsView: View {
                         .accessibilityHidden(latest == nil)
                 }
                 Spacer()
-                Button {
-                    FotomarcoHaptics.play(.gallery)
-                    showDateFilter = true
-                } label: {
-                    Image(systemName: "calendar").frame(width: 42, height: 42)
-                        .modifier(GalleryControlSurface(rounded: true, tint: dateFilter == nil ? .primary : .yellow))
-                }.accessibilityLabel(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data")
+                calendarButton
                 if tab != .trash, tab != .map, total > 0 {
                     Button {
                         FotomarcoHaptics.play(.gallery)
@@ -301,6 +295,31 @@ struct OriginalsView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 13).padding(.top, 8).padding(.bottom, 5)
+    }
+
+    @ViewBuilder private var calendarButton: some View {
+        if #available(iOS 26, *) {
+            calendarButtonContent
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+        } else {
+            calendarButtonContent
+                .buttonStyle(.plain)
+                .background(.regularMaterial, in: Circle())
+        }
+    }
+
+    private var calendarButtonContent: some View {
+        Button {
+            FotomarcoHaptics.play(.gallery)
+            showDateFilter = true
+        } label: {
+            Image(systemName: "calendar")
+                .frame(width: 42, height: 42)
+                .foregroundStyle(dateFilter == nil ? Color.primary : .yellow)
+                .contentShape(Circle())
+        }
+        .accessibilityLabel(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data")
     }
 
     private var originMenu: some View {

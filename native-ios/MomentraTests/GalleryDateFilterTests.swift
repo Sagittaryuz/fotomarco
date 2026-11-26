@@ -2,6 +2,17 @@ import XCTest
 @testable import Momentra
 
 final class GalleryDateFilterTests: XCTestCase {
+    func testCalendarUsesBrazilianPortugueseWithoutChangingTimeZone() throws {
+        var source = Calendar(identifier: .gregorian)
+        source.locale = Locale(identifier: "en_US")
+        source.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
+        let calendar = GalleryDateSelection.brazilianCalendar(basedOn: source)
+        XCTAssertEqual(calendar.locale?.identifier, "pt_BR")
+        XCTAssertEqual(calendar.timeZone.identifier, source.timeZone.identifier)
+        XCTAssertEqual(calendar.weekdaySymbols.first?.lowercased(), "domingo")
+        XCTAssertTrue(calendar.weekdaySymbols.contains { $0.lowercased().contains("segunda") })
+    }
+
     func testOneDayTwoDaysAndStartingANewRange() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
