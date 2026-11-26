@@ -52,6 +52,25 @@ test('Google Drive binding preserves an existing OneDrive credential', { skip: !
   assert.deepEqual(saved.google, googleDrive);
 });
 
+test('Google owner folder provisioning persists its lease and confirmed destination', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const owner = `owner-${randomUUID()}`, org = randomUUID();
+  const identity = { uid: owner, email: 'owner@example.com', emailVerified: true };
+  await transaction(tx => tx.initializeOrganization({ id: org, ownerId: owner, name: 'Equipe', contactEmail: identity.email }, identity.email));
+  const credential = { version: 1, iv: 'iv', ciphertext: 'sealed', providerAccountId: 'google-id', ownerPermissionId: 'permission-id' };
+  await transaction(tx => tx.setGoogleDriveCredential(org, credential));
+  const service = new BusinessService({ transaction, verifyToken: async token => token, newId: randomUUID, clock: () => Date.now(),
+    prepareGoogleOwnerFolder: async ({ pending, storage }) => ({ imagesId: pending.imagesId, parentId: 'parent', folderId: 'folder', ownerCredential: storage }) });
+  assert.deepEqual(await service.provisionGoogleOwnerFolder(identity, org, 'images'), { ready: true });
+  const saved = await transaction(tx => tx.googleOwnerFolderState(org));
+  assert.equal(saved.status, 'ready');
+  assert.equal(saved.imagesId, 'images');
+  assert.equal(saved.folderId, 'folder');
+  assert.equal(saved.leaseId, '');
+  await assert.rejects(service.provisionGoogleOwnerFolder(identity, org, 'other'), /storage-account-change-requires-migration/);
+});
+
 test('verified Google account cannot be bound to two members of an organization', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
   const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });

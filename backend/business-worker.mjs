@@ -16,6 +16,8 @@ import { createUploadSessionVault } from './business-upload-session-vault.mjs';
 import { ensurePrivateMemberFolder } from './business-onedrive-folders.mjs';
 import { verifiedMicrosoftMember } from './business-microsoft-member.mjs';
 import { verifiedGoogleDriveMember } from './business-google-drive-member.mjs';
+import { checkGoogleDriveRootAccess } from './business-google-drive-access.mjs';
+import { prepareGoogleDriveMemberHierarchy } from './business-google-drive-hierarchy.mjs';
 import { grantOneDriveMemberFolder } from './business-onedrive-grant.mjs';
 import { openBusinessPhoto } from './business-onedrive-download.mjs';
 
@@ -52,6 +54,21 @@ export function createBusinessWorker(env, overrides = {}) {
     const sealed = await vault.seal(organizationId, ownerId,
       { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'google-drive');
     return { ...sealed, providerAccountId: verified.providerAccountId, ownerPermissionId: verified.ownerPermissionId };
+  });
+  const prepareGoogleOwnerFolder = overrides.prepareGoogleOwnerFolder ?? (async ({ organizationId, org, storage, pending }) => {
+    const fetchImpl = overrides.fetchImpl ?? fetch;
+    const vault = await createCredentialVault(env.BUSINESS_CREDENTIAL_KEY);
+    const saved = await vault.open(organizationId, org.ownerId, storage, 'google-drive');
+    if (saved.providerAccountId !== storage.providerAccountId) throw new Error('provider-identity-mismatch');
+    const verified = await googleBusinessDriveCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID, fetchImpl })(saved.refreshToken);
+    if (verified.providerAccountId !== storage.providerAccountId || verified.ownerPermissionId !== storage.ownerPermissionId) throw new Error('provider-identity-mismatch');
+    const root = await checkGoogleDriveRootAccess({ accessToken: verified.accessToken, ownerPermissionId: verified.ownerPermissionId, fetchImpl });
+    const result = await prepareGoogleDriveMemberHierarchy({ accessToken: verified.accessToken, rootId: root.folderId,
+      imagesId: pending.imagesId, ownerPermissionId: verified.ownerPermissionId, memberName: pending.memberName,
+      memberEmail: pending.memberEmail, markers: { photomark: pending.photomarkMarker, member: pending.memberMarker }, fetchImpl });
+    const sealed = await vault.seal(organizationId, org.ownerId,
+      { refreshToken: verified.refreshToken, providerAccountId: verified.providerAccountId }, 'google-drive');
+    return { ...result, ownerCredential: { ...sealed, providerAccountId: verified.providerAccountId, ownerPermissionId: verified.ownerPermissionId } };
   });
   const prepareGoogleMail = overrides.prepareGoogleMail ?? (async ({ organizationId, ownerId, refreshToken }) => {
     const exchange = googleBusinessMailCredential({ clientId: env.BUSINESS_GOOGLE_CLIENT_ID,
@@ -272,7 +289,7 @@ export function createBusinessWorker(env, overrides = {}) {
     return { state: 'uploading', nextOffset, ownerCredential };
   });
   const api = createBusinessApp({ projectId, authenticate, serverAccessToken, preAuthLimit, rateLimit,
-    prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
+    prepareOneDrive, prepareGoogleDrive, prepareGoogleOwnerFolder, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture,
     verifyMicrosoftMember: overrides.verifyMicrosoftMember ?? (token => verifiedMicrosoftMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
     verifyGoogleDriveMember: overrides.verifyGoogleDriveMember ?? (token => verifiedGoogleDriveMember(token, { fetchImpl: overrides.fetchImpl ?? fetch })),
     prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload,

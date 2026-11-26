@@ -74,6 +74,21 @@ test('Google Drive member identity binding accepts no caller-supplied identity o
   assert.equal(calls, 1);
 });
 
+test('Google owner folder accepts only the selected folder after authentication', async () => {
+  let calls = 0;
+  const handler = createBusinessHandler({ preAuthLimit: async () => true,
+    authenticate: async token => token === 'valid.token' ? { uid: 'owner' } : null,
+    rateLimit: async () => true, serviceForIdentity: identity => ({ provisionGoogleOwnerFolder: async (_, org, imagesId) => {
+      calls++; assert.equal(identity.uid, 'owner'); assert.equal(org, 'org'); assert.equal(imagesId, 'images');
+      return { ready: true };
+    } }) });
+  const path = '/v1/organizations/org/storage/google-drive/provision-owner';
+  assert.equal((await handler(request(path, '{"imagesId":"images"}', 'bad'))).status, 401);
+  assert.equal((await handler(request(path, '{"imagesId":"images","role":"owner"}'))).status, 400);
+  assert.equal((await handler(request(path, '{"imagesId":"images"}'))).status, 200);
+  assert.equal(calls, 1);
+});
+
 test('OneDrive connection exposes only allowlisted diagnostics, never provider details', async () => {
   let reason = 'provider-token-unavailable';
   const handler = createBusinessHandler({ preAuthLimit: async () => true,

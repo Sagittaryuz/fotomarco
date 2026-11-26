@@ -9,7 +9,7 @@ import { storageFingerprint } from './business-storage-identity.mjs';
  * increment that same counter atomically in the enclosing transaction.
  */
 export class BusinessService {
-  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleDrive, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, verifyGoogleDriveMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
+  constructor({ verifyToken, transaction, newId, clock, canCreateOrganization, prepareOneDrive, prepareGoogleDrive, prepareGoogleOwnerFolder, prepareOwnerFolder, prepareMemberFolder, grantMemberFolder, openCapture, verifyMicrosoftMember, verifyGoogleDriveMember, prepareGoogleMail, prepareMicrosoftMail, prepareMailDelivery, revokeMemberStorage, prepareUpload, processUploadChunk, verifyUpload, reconcileUpload }) {
     this.verifyToken = verifyToken;
     this.transaction = transaction;
     this.newId = newId;
@@ -17,6 +17,7 @@ export class BusinessService {
     this.canCreateOrganization = canCreateOrganization;
     this.prepareOneDrive = prepareOneDrive;
     this.prepareGoogleDrive = prepareGoogleDrive;
+    this.prepareGoogleOwnerFolder = prepareGoogleOwnerFolder;
     this.prepareOwnerFolder = prepareOwnerFolder;
     this.prepareMemberFolder = prepareMemberFolder;
     this.grantMemberFolder = grantMemberFolder;
@@ -306,6 +307,60 @@ export class BusinessService {
       if (existing && (existing.providerAccountId !== record.providerAccountId || existing.ownerPermissionId !== record.ownerPermissionId)) throw new Error('storage-account-change-requires-migration');
       await tx.setGoogleDriveCredential(organizationId, record);
       return { connected: true };
+    });
+  }
+
+  /** Prepare an owner's selected Google folder without changing active storage. */
+  async provisionGoogleOwnerFolder(token, organizationId, imagesId) {
+    const identity = await this.verifyToken(token);
+    const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
+    const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    if (!identity?.uid || identity.emailVerified !== true || !validId(organizationId) || !validId(imagesId) ||
+        typeof this.prepareGoogleOwnerFolder !== 'function' || typeof this.clock !== 'function' || typeof this.newId !== 'function') throw new Error('invalid-request');
+    const proposed = { photomark: this.newId(), member: this.newId(), leaseId: this.newId() };
+    if (!Object.values(proposed).every(uuid) || new Set(Object.values(proposed).map(x => x.toLowerCase())).size !== 3) throw new Error('invalid-id');
+    const getContext = async tx => {
+      const org = await tx.organization(organizationId);
+      const member = await tx.membership(organizationId, identity.uid);
+      const storage = await tx.googleDriveCredential(organizationId);
+      const state = await tx.googleOwnerFolderState(organizationId);
+      if (!mayManage(identity, org, member) || member.role !== 'owner' || org.ownerId !== identity.uid) throw new Error('forbidden');
+      if (!storage?.providerAccountId || !storage?.ownerPermissionId) throw new Error('storage-unavailable');
+      return { org, member, storage, state };
+    };
+    const context = await this.transaction(async tx => {
+      const current = await getContext(tx);
+      const state = current.state;
+      if (state && (state.imagesId !== imagesId || state.providerAccountId !== current.storage.providerAccountId ||
+          state.ownerPermissionId !== current.storage.ownerPermissionId)) throw new Error('storage-account-change-requires-migration');
+      if (state?.status === 'ready') return { ready: true };
+      if (state && (state.status !== 'provisioning' || !uuid(state.photomarkMarker) || !uuid(state.memberMarker))) throw new Error('invalid-storage-configuration');
+      if (state?.leaseExpiresAt > this.clock()) throw new Error('provisioning-in-progress');
+      const email = state?.memberEmail ?? current.member.email;
+      const name = state?.memberName ?? (typeof current.member.displayName === 'string' && current.member.displayName.trim() ? current.member.displayName : email?.split('@')[0]);
+      if (typeof email !== 'string' || !email || typeof name !== 'string' || !name) throw new Error('invalid-storage-configuration');
+      const pending = { status: 'provisioning', imagesId, providerAccountId: current.storage.providerAccountId,
+        ownerPermissionId: current.storage.ownerPermissionId, memberName: name, memberEmail: email,
+        photomarkMarker: state?.photomarkMarker ?? proposed.photomark, memberMarker: state?.memberMarker ?? proposed.member,
+        leaseId: proposed.leaseId, leaseExpiresAt: this.clock() + 180000 };
+      await tx.setGoogleOwnerFolderState(organizationId, pending);
+      return { ...current, pending };
+    });
+    if (context.ready) return { ready: true };
+    const result = await this.prepareGoogleOwnerFolder({ organizationId, ...context });
+    if (!result || !validId(result.imagesId) || result.imagesId !== imagesId || !validId(result.parentId) || !validId(result.folderId) ||
+        !result.ownerCredential || result.ownerCredential.providerAccountId !== context.storage.providerAccountId ||
+        result.ownerCredential.ownerPermissionId !== context.storage.ownerPermissionId || result.ownerCredential.version !== 1 ||
+        !result.ownerCredential.iv || !result.ownerCredential.ciphertext) throw new Error('invalid-storage-configuration');
+    return this.transaction(async tx => {
+      const current = await getContext(tx);
+      if (current.state?.status !== 'provisioning' || current.state.leaseId !== context.pending.leaseId ||
+          current.state.imagesId !== imagesId || current.storage.providerAccountId !== context.storage.providerAccountId ||
+          current.storage.ownerPermissionId !== context.storage.ownerPermissionId) throw new Error('storage-configuration-changed');
+      if (current.storage.ciphertext === context.storage.ciphertext && current.storage.iv === context.storage.iv) await tx.setGoogleDriveCredential(organizationId, result.ownerCredential);
+      await tx.setGoogleOwnerFolderState(organizationId, { ...current.state, status: 'ready', leaseId: '', leaseExpiresAt: 0,
+        parentId: result.parentId, folderId: result.folderId });
+      return { ready: true };
     });
   }
 
