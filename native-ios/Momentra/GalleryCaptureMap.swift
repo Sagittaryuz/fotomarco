@@ -32,7 +32,7 @@ struct GalleryCaptureMap: View {
     @State private var pendingRecenter = false
     @State private var mapHeading = 0.0
     @State private var longitudeSpan = 180.0
-    @State private var satellite = false
+    @State private var satellite = true
     @State private var selectedCluster: GalleryMapCluster?
     @State private var pendingItem: GalleryItem?
     @Namespace private var mapScope
@@ -124,6 +124,7 @@ struct GalleryCaptureMap: View {
             }
         }
         .onAppear {
+            satellite = true
             centeredOnCurrentLocation = false
             pendingRecenter = false
             currentLocation.setEnabled(true)
