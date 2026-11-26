@@ -3,14 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.52"
+    static let version = "0.1.53"
     static let items = [
-        "A galeria inicia a sincronização em segundo plano e prepara miniaturas para acesso mais rápido.",
-        "As opções de configurações têm áreas de toque maiores.",
-        "A conexão do OneDrive da organização informa melhor quando ocorre uma falha.",
-        "A seleção de fotos da sessão considera capturas concluídas durante a saída do aplicativo.",
-        "Os planos Pro e Business podem ser comparados em Configurações, em Upgrade do plano.",
-        "O armazenamento compartilhado da organização tem uma tela de escolha de provedor."
+        "Ajustes nos interruptores e na navegação das configurações para melhorar a resposta aos toques."
     ]
 
     static func items(for version: String) -> [String] {
