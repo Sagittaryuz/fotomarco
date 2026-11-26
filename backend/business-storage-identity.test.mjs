@@ -5,6 +5,7 @@ import { storageFingerprint, compareStorageFingerprints } from './business-stora
 test('compares stable storage identifiers without exposing them', async () => {
   const first = await storageFingerprint('oneDrive', 'drive-A', 'user-A');
   assert.match(first, /^[0-9a-f]{64}$/);
+  assert.equal(first, 'dec8d46104fcfc5f754c8e94a8afcc5e7d029f413995c47e924270686f8a0234');
   assert.equal(first, await storageFingerprint('oneDrive', 'drive-A', 'user-A'));
   assert.notEqual(first, await storageFingerprint('oneDrive', 'drive-B', 'user-A'));
   assert.notEqual(first, await storageFingerprint('googleDrive', 'drive-A', 'user-A'));
