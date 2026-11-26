@@ -20,6 +20,33 @@ final class CloudArchiveJournalTests: XCTestCase {
         try journal.write(corrupted)
         XCTAssertThrowsError(try journal.read(id))
     }
+
+    func testVerifiedDuplicateSurvivesRestartAndRetainsBothLocalFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let journal = CloudArchiveJournal(root: root)
+        let id = UUID()
+        let destination = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: String(repeating: "a", count: 64)))
+        let context = CloudDeliveryPlan.OrganizationDedup(organizationID: UUID(), userID: "user-A")
+        let plan = try XCTUnwrap(CloudDeliveryPlan(keepLocal: true, destinations: [destination], organizationDedup: context))
+        try journal.enqueue(id: id, date: Date(), originalExtension: "jpg", plan: plan)
+        let initial = try journal.read(id)
+        let original = journal.file(initial, stamped: false), stamped = journal.file(initial, stamped: true)
+        try FileManager.default.createDirectory(at: original.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: stamped.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: original)
+        try Data([4, 5, 6]).write(to: stamped)
+        try journal.markReady(id: id)
+        var ready = try journal.read(id)
+        ready.plan.markDuplicate(destination: destination)
+        ready.finished = true
+        try journal.write(ready)
+        let reopened = try CloudArchiveJournal(root: root).read(id)
+        XCTAssertEqual(reopened.plan.deliveries.first?.phase, .duplicate)
+        XCTAssertTrue(reopened.finished)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stamped.path))
+    }
     func testRenamedArchivePreservesIdentityAndIsIdempotent() throws {
         let id = UUID()
         let date = Date(timeIntervalSince1970: 1234)
