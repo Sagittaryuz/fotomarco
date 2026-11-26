@@ -1675,12 +1675,15 @@ struct CameraScreen: View {
             target = BusinessCaptureTarget(organizationID: stampProfiles.selectedID, userID: userID, keepsOriginal: keepArchiveOriginal)
         } else { target = nil }
         let snapshot = stampEnabled ? makeSnapshot(at: Date()) : nil
+        let archivePlan: CloudDeliveryPlan?
+        if let target { archivePlan = businessPersonalArchivePlan(target: target) }
+        else { archivePlan = currentArchivePlan }
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard,
                        saveToPhotos: effectiveLocalStorage,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
                        styleAdjustments: PhotoStyleAdjustments(tone: styleTone, color: styleColor, palette: stylePalette),
                        profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
-                       archivePlan: isBusiness ? nil : currentArchivePlan, businessTarget: target, sessionID: captureSessionID)
+                       archivePlan: archivePlan, businessTarget: target, sessionID: captureSessionID)
         if camera.isCapturing { sessionStartedCount += 1 }
     }
 
@@ -1692,6 +1695,11 @@ struct CameraScreen: View {
 
     private var currentArchivePlan: CloudDeliveryPlan? {
         CloudDeliveryPlan(keepLocal: effectiveLocalStorage, destinations: archiveDestinations, keepOriginal: keepArchiveOriginal)
+    }
+
+    private func businessPersonalArchivePlan(target: BusinessCaptureTarget) -> CloudDeliveryPlan? {
+        CloudDeliveryPlan(keepLocal: true, destinations: archiveDestinations, keepOriginal: keepArchiveOriginal,
+                          organizationDedup: .init(organizationID: target.organizationID, userID: target.userID))
     }
 
     private func applyArchivePolicy(keepLocal: Bool, destination: CloudDeliveryPlan.Destination? = nil,

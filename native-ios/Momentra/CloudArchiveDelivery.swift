@@ -77,6 +77,7 @@ actor CloudArchiveDelivery {
         let totalBytes = max(1, bytesPerDestination * Double(item.plan.deliveries.count))
         let captureID = item.id
         var completedBytes = 0.0
+        var organizationStorageIdentity: String?
         for delivery in item.plan.deliveries {
             let base = completedBytes
             let originalProgress: @Sendable (Double) -> Void = { value in
@@ -92,9 +93,32 @@ actor CloudArchiveDelivery {
             let stampedName = item.remoteName(stamped: true, destination: destination)
             do {
                 try Task.checkCancellation()
+                if delivery.phase == .duplicate {
+                    guard item.plan.keepLocal, item.plan.organizationDedup?.isValid == true,
+                          delivery.originalID == nil, delivery.stampedID == nil else { throw CocoaError(.fileReadCorruptFile) }
+                    completedBytes += bytesPerDestination
+                    continue
+                }
                 if delivery.phase == .verified, item.plan.keepLocal {
                     completedBytes += bytesPerDestination
                     continue
+                }
+                if let context = item.plan.organizationDedup, delivery.phase == .pending {
+                    if organizationStorageIdentity == nil {
+                        organizationStorageIdentity = try await Self.businessStorageIdentity(for: context)
+                    }
+                    let personalIdentity = try await CloudArchiveAccounts.shared.storageFingerprint(for: destination, userID: context.userID)
+                    let stillSignedIn = await MainActor.run { BusinessIdentity.shared.userID == context.userID && BusinessIdentity.shared.emailVerified }
+                    guard stillSignedIn else { throw CocoaError(.userCancelled) }
+                    switch CloudStorageIdentity.compare(organizationStorageIdentity, personalIdentity) {
+                    case .same:
+                        item.plan.markDuplicate(destination: destination)
+                        try journal.write(item)
+                        completedBytes += bytesPerDestination
+                        continue
+                    case .different: break
+                    case .unknown: throw CocoaError(.fileReadUnknown)
+                    }
                 }
                 let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
                 switch destination.provider {
@@ -176,6 +200,18 @@ actor CloudArchiveDelivery {
 
     private struct DeliveryProblems: Error {
         let messages: [String]
+    }
+
+    private static func businessStorageIdentity(for context: CloudDeliveryPlan.OrganizationDedup) async throws -> String {
+        guard context.isValid, let api = BusinessAPIClient.configured() else { throw CocoaError(.fileReadUnknown) }
+        let token = try await BusinessIdentity.shared.verifiedToken(expectedUserID: context.userID)
+        let organizations = try await api.myOrganizations(token: token).organizations
+        let stillSignedIn = await MainActor.run { BusinessIdentity.shared.userID == context.userID && BusinessIdentity.shared.emailVerified }
+        guard stillSignedIn, let organization = organizations.first(where: { UUID(uuidString: $0.id) == context.organizationID && $0.captureReady == true }),
+              let identity = organization.storageIdentity, CloudStorageIdentity.compare(identity, identity) == .same else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        return identity
     }
 
     private func confirm(_ item: inout CloudArchiveJournal.Capture, destination: CloudDeliveryPlan.Destination,

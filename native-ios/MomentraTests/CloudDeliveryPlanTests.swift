@@ -2,6 +2,23 @@ import XCTest
 @testable import Momentra
 
 final class CloudDeliveryPlanTests: XCTestCase {
+    func testDuplicateBusinessDestinationRequiresLocalRetention() throws {
+        let destination = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: String(repeating: "a", count: 64)))
+        let context = CloudDeliveryPlan.OrganizationDedup(organizationID: UUID(), userID: "user-A")
+        XCTAssertNil(CloudDeliveryPlan(keepLocal: false, destinations: [destination], organizationDedup: context))
+        var plan = try XCTUnwrap(CloudDeliveryPlan(keepLocal: true, destinations: [destination], organizationDedup: context))
+        XCTAssertFalse(plan.destinationsVerified)
+        plan.markDuplicate(destination: destination)
+        XCTAssertTrue(plan.destinationsVerified)
+        XCTAssertEqual(try JSONDecoder().decode(CloudDeliveryPlan.self, from: JSONEncoder().encode(plan)), plan)
+        var personal = try XCTUnwrap(CloudDeliveryPlan(keepLocal: true, destinations: [destination]))
+        personal.markDuplicate(destination: destination)
+        XCTAssertFalse(personal.destinationsVerified)
+        var uncertain = try XCTUnwrap(CloudDeliveryPlan(keepLocal: true, destinations: [destination], organizationDedup: context))
+        uncertain.markUncertain(destination: destination)
+        uncertain.markDuplicate(destination: destination)
+        XCTAssertFalse(uncertain.destinationsVerified, "An uncertain remote upload must never be marked as a duplicate.")
+    }
     private let google = CloudDeliveryPlan.Destination(provider: .googleDrive, accountHash: String(repeating: "a", count: 64))!
     private let microsoft = CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: String(repeating: "b", count: 64))!
 
