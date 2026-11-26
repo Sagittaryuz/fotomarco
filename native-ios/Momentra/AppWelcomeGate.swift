@@ -3,13 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.66"
+    static let version = "0.1.67"
     static let items = [
-        "Os estilos fotográficos aparecem no visor enquanto são ajustados.",
-        "A bandeja da câmera usa Liquid Glass e fecha ao tocar fora dela.",
-        "A borda do mapa aparece junto com sua imagem no carimbo.",
-        "O calendário ficou à direita de Selecionar, com a mesma altura.",
-        "As miniaturas do mapa permanecem acessíveis quando fotos ocupam o mesmo local."
+        "Mensagens mais claras para ajudar a identificar falhas ao conectar o OneDrive da organização."
     ]
 
     static func items(for version: String) -> [String] {

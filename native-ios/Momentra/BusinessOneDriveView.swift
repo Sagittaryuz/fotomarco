@@ -121,6 +121,10 @@ struct BusinessOneDriveView: View {
             message = "Não foi possível confirmar que o OneDrive pertence à conta Microsoft autorizada."
         } catch BusinessAPIClient.Failure.microsoftConfiguration {
             message = "A conexão Microsoft do servidor precisa ser configurada."
+        } catch BusinessAPIClient.Failure.businessDatabase {
+            message = "O servidor não conseguiu acessar os dados da organização. Tente novamente mais tarde."
+        } catch BusinessAPIClient.Failure.businessConfiguration {
+            message = "Não foi possível confirmar a configuração segura do armazenamento no servidor."
         } catch BusinessAPIClient.Failure.unavailable {
             message = "Não foi possível confirmar o OneDrive no servidor. Confira a conexão e tente novamente."
         } catch {

@@ -76,7 +76,7 @@ jobs:
         run: python3 native-ios/scripts/configure-microsoft.py "$RUNNER_TEMP/momentra-device/Build/Products/Release-iphoneos/Momentra.app/Info.plist"
       - name: Configure Business API endpoint
         env:
-          PHOTOMARK_BUSINESS_API: ${{ github.ref_name == 'feat/business-organizations-foundation' && vars.PHOTOMARK_BUSINESS_STAGING_API || vars.PHOTOMARK_BUSINESS_API }}
+          PHOTOMARK_BUSINESS_API: ${{ (github.ref_name == 'feat/business-organizations-foundation' || github.ref_name == 'release/onedrive-diagnostics-067') && vars.PHOTOMARK_BUSINESS_STAGING_API || vars.PHOTOMARK_BUSINESS_API }}
           SIGNING_CANDIDATE: ${{ inputs.signing_candidate }}
         run: |
           python3 -m unittest discover -s native-ios/scripts -p test_configure_business_api.py
@@ -177,7 +177,7 @@ jobs:
         run: python3 native-ios/scripts/configure-business-auth.py "$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app"
       - name: Configure Business API endpoint
         env:
-          PHOTOMARK_BUSINESS_API: ${{ github.ref_name == 'feat/business-organizations-foundation' && vars.PHOTOMARK_BUSINESS_STAGING_API || vars.PHOTOMARK_BUSINESS_API }}
+          PHOTOMARK_BUSINESS_API: ${{ (github.ref_name == 'feat/business-organizations-foundation' || github.ref_name == 'release/onedrive-diagnostics-067') && vars.PHOTOMARK_BUSINESS_STAGING_API || vars.PHOTOMARK_BUSINESS_API }}
         run: python3 native-ios/scripts/configure-business-api.py "$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app/Info.plist"
       - name: Verify settings navigation and switch taps
         id: settings_ui

@@ -12,7 +12,7 @@ struct BusinessAPIClient {
               !raw.contains("$"), let url = URL(string: raw) else { return nil }
         return try? BusinessAPIClient(endpoint: url)
     }
-    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch, mailNotConfigured, microsoftToken, microsoftDrive, microsoftPermission, microsoftIdentity, microsoftConfiguration }
+    enum Failure: Error { case notConfigured, invalidRequest, unauthorized, unavailable, invalidResponse, storageAccountChangeRequiresMigration, mailboxMismatch, mailNotConfigured, microsoftToken, microsoftDrive, microsoftPermission, microsoftIdentity, microsoftConfiguration, businessDatabase, businessConfiguration }
     private struct SafeServerError: Decodable { let error: String }
     struct OrganizationReceipt: Decodable { let organizationId: String }
     struct InvitationReceipt: Decodable { let id: String; let expiresAt: Int64 }
@@ -246,6 +246,8 @@ struct BusinessAPIClient {
             case "provider-permission-missing": throw Failure.microsoftPermission
             case "provider-identity-mismatch": throw Failure.microsoftIdentity
             case "invalid-microsoft-client": throw Failure.microsoftConfiguration
+            case "business-database-unavailable": throw Failure.businessDatabase
+            case "business-configuration-unavailable": throw Failure.businessConfiguration
             default: break
             }
         }
