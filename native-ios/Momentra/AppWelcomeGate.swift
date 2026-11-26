@@ -3,8 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.60"
+    static let version = "0.1.61"
     static let items = [
+        "Um QR Code opcional no carimbo permite abrir a localização da captura no mapa.",
         "As opções foram reorganizadas com ícones e grupos no estilo dos Ajustes do iPhone.",
         "O mapa da galeria abre com a vista de satélite selecionada.",
         "O calendário da galeria usa português do Brasil e um botão Liquid Glass.",

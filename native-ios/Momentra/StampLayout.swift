@@ -67,6 +67,9 @@ struct StampLayout: Codable, Equatable {
     var showsMap = true
     var showsInformation = true
     var showsLogo = true
+    var showsLocationQR = false
+    var locationQRSize: Double = 1
+    var locationQR = StampPoint(x: 0.15, y: 0.90)
     var mapStyle: MapAppearance = .map
     var mapSize: Double = 1
     var informationSize: Double = 1
@@ -129,6 +132,7 @@ struct StampLayout: Codable, Equatable {
         case mode, showsMap, showsInformation, showsLogo, mapStyle, mapSize, informationSize, logoSize, combinedSize
         case fontStyle, dateFormat, textAlignment, position, horizontal, mapScale, mapCorner, logoCorner, compact, showsAddress
         case map, information, logo, showsForecast, template, templateValues
+        case showsLocationQR, locationQRSize, locationQR
     }
 
     init(from decoder: Decoder) throws {
@@ -137,6 +141,8 @@ struct StampLayout: Codable, Equatable {
         showsMap = try values.decodeIfPresent(Bool.self, forKey: .showsMap) ?? true
         showsInformation = try values.decodeIfPresent(Bool.self, forKey: .showsInformation) ?? true
         showsLogo = try values.decodeIfPresent(Bool.self, forKey: .showsLogo) ?? true
+        showsLocationQR = try values.decodeIfPresent(Bool.self, forKey: .showsLocationQR) ?? false
+        locationQR = try values.decodeIfPresent(StampPoint.self, forKey: .locationQR) ?? StampPoint(x: 0.15, y: 0.90)
         mapStyle = try values.decodeIfPresent(MapAppearance.self, forKey: .mapStyle) ?? .map
         func scale(_ key: CodingKeys) throws -> Double {
             let value = try values.decodeIfPresent(Double.self, forKey: key) ?? 1
@@ -146,6 +152,7 @@ struct StampLayout: Codable, Equatable {
         informationSize = try scale(.informationSize)
         logoSize = try scale(.logoSize)
         combinedSize = try scale(.combinedSize)
+        locationQRSize = try scale(.locationQRSize)
         func choice(_ key: CodingKeys, allowed: [String], fallback: String) throws -> String {
             let value = try values.decodeIfPresent(String.self, forKey: key) ?? fallback
             return allowed.contains(value) ? value : fallback

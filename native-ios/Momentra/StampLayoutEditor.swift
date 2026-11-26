@@ -23,7 +23,7 @@ struct StampLayoutEditor: View {
     @State private var draftNote = ""
     @State private var editingElement: Element
     enum Element: String, CaseIterable, Identifiable {
-        case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo"
+        case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo", locationQR = "QR Code"
         var id: Self { self }
     }
 
@@ -199,9 +199,16 @@ struct StampLayoutEditor: View {
                     if template.usesMap { elementButton(.map) }
                     elementButton(.information)
                     if template.usesLogo { elementButton(.logo) }
+                    elementButton(.locationQR)
                 }
                 ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
+                    if editingElement == .locationQR {
+                        Toggle("Mostrar QR Code da localização", isOn: flag(\.showsLocationQR)).toggleStyle(DirectionalSwitchStyle())
+                        Text("O código abre a localização da foto no Google Maps. Sem localização válida, ele não aparece.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        cornerControl(layout.locationQR)
+                    }
                     if template.usesLogo && (editingElement == .combined || editingElement == .logo) {
                         ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
                             Menu(layout.wrappedValue.template == .portrait ? "Escolher retrato" : "Escolher logotipo \(slot + 1)") {
@@ -388,6 +395,9 @@ struct StampLayoutEditor: View {
                     }.disabled(logoLoading)
                     Toggle("Mostrar logotipo", isOn: flag(\.showsLogo)).labelsHidden()
                         .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
+                case .locationQR:
+                    Toggle("Mostrar QR Code da localização", isOn: flag(\.showsLocationQR)).labelsHidden()
+                        .toggleStyle(DirectionalSwitchStyle(showsLabel: false))
                 }
             }
             if layout.wrappedValue.mode == .separate {
@@ -395,14 +405,17 @@ struct StampLayoutEditor: View {
                 case .map: cornerControl(layout.map)
                 case .information: cornerControl(layout.information)
                 case .logo: cornerControl(layout.logo)
+                case .locationQR: cornerControl(layout.locationQR)
                 case .combined: EmptyView()
                 }
             }
+            if editingElement == .locationQR && layout.wrappedValue.mode == .combined { cornerControl(layout.locationQR) }
             switch editingElement {
             case .combined: sizeControl("Tamanho do carimbo", value: layout.combinedSize)
             case .map: sizeControl("Tamanho do mapa", value: layout.mapSize)
             case .information: sizeControl("Tamanho das informações", value: layout.informationSize)
             case .logo: sizeControl("Tamanho do logotipo", value: layout.logoSize)
+            case .locationQR: sizeControl("Tamanho do QR Code", value: layout.locationQRSize)
             }
         }
     }
@@ -491,6 +504,14 @@ private struct StampLayoutPreview: View {
                             .overlay { highlight(.logo) }
                             .position(x: box.midX, y: box.midY)
                     }
+                }
+                if !layout.template.hasFixedRenderer && layout.showsLocationQR,
+                   let image = StampLocationQR.image(for: CLLocationCoordinate2D(latitude: 40.7812, longitude: -73.9665)) {
+                    let box = StampLocationQR.rect(in: size, layout: layout)
+                    Image(uiImage: image).interpolation(.none).resizable()
+                        .frame(width: box.width, height: box.height)
+                        .overlay { highlight(.locationQR) }
+                        .position(x: box.midX, y: box.midY)
                 }
             }.allowsHitTesting(false)
         }

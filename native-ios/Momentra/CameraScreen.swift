@@ -356,6 +356,7 @@ struct CameraScreen: View {
                     .clipped().contentShape(Rectangle())
                     .overlay {
                         StampOrientationContainer(deviceOrientation: stampDeviceOrientation) {
+                        ZStack {
                         if stampEnabled && stampProfiles.selected.layout.template.hasFixedRenderer {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 GeometryReader { geometry in
@@ -397,6 +398,13 @@ struct CameraScreen: View {
                                                 .position(x: mapBox.midX, y: mapBox.minY + mapBox.height * 0.32)
                                                 .accessibilityLabel("Editar mapa")
                                         }
+                                        if snapshot.layout.showsLocationQR && snapshot.location != nil {
+                                            let qrBox = StampLocationQR.rect(in: geometry.size, layout: snapshot.layout)
+                                            Button { openStampEditor(.locationQR) } label: { Color.clear.contentShape(Rectangle()) }
+                                                .frame(width: qrBox.width, height: qrBox.height)
+                                                .position(x: qrBox.midX, y: qrBox.midY)
+                                                .accessibilityLabel("Personalizar QR Code da localização")
+                                        }
                                     }
                                 }
                             }
@@ -413,6 +421,24 @@ struct CameraScreen: View {
                                 Spacer(minLength: 0)
                                 if stampProfiles.selected.layout.position != "top" && !showingZoomDial { liveStamp }
                             }
+                        }
+                        if stampEnabled && stampProfiles.selected.layout.template == .original && stampProfiles.selected.layout.showsLocationQR {
+                            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                                GeometryReader { proxy in
+                                    let snapshot = makeSnapshot(at: timeline.date)
+                                    if let coordinate = snapshot.location?.coordinate,
+                                       let image = StampLocationQR.image(for: coordinate) {
+                                        let box = StampLocationQR.rect(in: proxy.size, layout: snapshot.layout)
+                                        Image(uiImage: image).interpolation(.none).resizable()
+                                            .frame(width: box.width, height: box.height)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture { openStampEditor(.locationQR) }
+                                            .accessibilityLabel("Personalizar QR Code da localização")
+                                            .position(x: box.midX, y: box.midY)
+                                    }
+                                }
+                            }
+                        }
                         }
                         }
                     }

@@ -1222,6 +1222,13 @@ enum StampRenderer {
             }
         }
         drawContents()
+        if fits, snapshot.layout.showsLocationQR, let coordinate = snapshot.location?.coordinate,
+           let qr = StampLocationQR.image(for: coordinate) {
+            context.cgContext.saveGState()
+            context.cgContext.interpolationQuality = .none
+            qr.draw(in: StampLocationQR.rect(in: size, layout: snapshot.layout))
+            context.cgContext.restoreGState()
+        }
         return fits
     }
 
