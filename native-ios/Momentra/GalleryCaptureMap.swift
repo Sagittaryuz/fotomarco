@@ -1,6 +1,9 @@
 import SwiftUI
 import MapKit
 import Photos
+#if DEBUG
+import UIKit
+#endif
 
 struct GalleryMapCoordinate: Codable {
     let latitude: Double
@@ -36,6 +39,7 @@ struct GalleryCaptureMap: View {
     let open: (GalleryItem) -> Void
     @ObservedObject var store: GalleryMapStore
     var bottomInset: CGFloat = 0
+    var locatesUser = true
     @StateObject private var currentLocation = LocationService()
     @State private var position: MapCameraPosition = .automatic
     @State private var centeredOnCurrentLocation = false
@@ -133,6 +137,7 @@ struct GalleryCaptureMap: View {
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.85), lineWidth: 1))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("gallery.map.photo.\(marker.id)")
                             .accessibilityLabel(item.date.map { "Abrir foto de \($0.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(GalleryDateSelection.brazilianLocale)))" } ?? "Abrir foto")
                         }
                     }
@@ -150,7 +155,7 @@ struct GalleryCaptureMap: View {
             satellite = true
             centeredOnCurrentLocation = false
             pendingRecenter = false
-            currentLocation.setEnabled(true)
+            if locatesUser { currentLocation.setEnabled(true) }
         }
         .onDisappear { currentLocation.setEnabled(false) }
         .onChange(of: currentLocation.location?.timestamp) { _, _ in
@@ -178,3 +183,41 @@ struct GalleryCaptureMap: View {
     }
 
 }
+
+#if DEBUG
+/// Synthetic fixture for exercising overlapping points without accessing user photos.
+struct GalleryMapOverlapFixture: View {
+    static let ids = (1...8).map { UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", $0))! }
+    private let items: [GalleryItem]
+    @StateObject private var store: GalleryMapStore
+    @State private var selected = ""
+
+    init() {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let records = Self.ids.map { GalleryMapRecord(id: $0.uuidString, latitude: -17.88, longitude: -51.71) }
+        _store = StateObject(wrappedValue: GalleryMapStore(testRecords: records))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("photomark-map-test", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        items = Self.ids.enumerated().map { index, id in
+            let url = directory.appendingPathComponent(id.uuidString + ".jpg")
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 80)).image { context in
+                UIColor(hue: CGFloat(index) / 8, saturation: 0.55, brightness: 0.8, alpha: 1).setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 80, height: 80))
+            }
+            try? image.jpegData(compressionQuality: 0.8)?.write(to: url, options: .atomic)
+            return GalleryItem(source: .capture(.init(url: url, isVideo: false, isProcessed: true, date: date)), date: date, profile: nil)
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            GalleryCaptureMap(items: items, open: { selected = $0.captureIDForUpload?.uuidString ?? "" },
+                              store: store, bottomInset: 72, locatesUser: false)
+            Text(selected.isEmpty ? "Mapa de teste" : "Selecionada \(selected)")
+                .accessibilityIdentifier("gallery.map.test.selection")
+                .padding().background(.black.opacity(0.8))
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+#endif

@@ -1,6 +1,28 @@
 import XCTest
 
 final class SettingsNavigationTests: XCTestCase {
+    func testOverlappingMapPhotosRemainAccessible() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--test-map-overlap"]
+        app.launch()
+        let strip = app.scrollViews["gallery.map.photos"]
+        XCTAssertTrue(strip.waitForExistence(timeout: 15))
+        let first = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000008"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        first.tap()
+        XCTAssertTrue(app.staticTexts["Selecionada 00000000-0000-4000-8000-000000000008"].waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Fotos sobrepostas no mapa"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let last = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000001"]
+        strip.swipeLeft()
+        XCTAssertTrue(last.waitForExistence(timeout: 5))
+        XCTAssertTrue(last.isHittable)
+        last.tap()
+        XCTAssertTrue(app.staticTexts["Selecionada 00000000-0000-4000-8000-000000000001"].waitForExistence(timeout: 5))
+    }
+
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
         app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65"]
