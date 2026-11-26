@@ -2,6 +2,15 @@ import XCTest
 @testable import Momentra
 
 final class GalleryDateFilterTests: XCTestCase {
+    func testTodayDefaultsToExactlyTheCurrentLocalDay() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 12)))
+        let filter = GalleryDateFilter.today(now: now)
+        XCTAssertTrue(filter.includes(now, calendar: calendar))
+        let nextDay = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: now))
+        XCTAssertFalse(filter.includes(nextDay, calendar: calendar))
+    }
     func testCalendarUsesBrazilianPortugueseWithoutChangingTimeZone() throws {
         var source = Calendar(identifier: .gregorian)
         source.locale = Locale(identifier: "en_US")

@@ -31,10 +31,7 @@ struct GalleryCaptureMap: View {
     @State private var centeredOnCurrentLocation = false
     @State private var pendingRecenter = false
     @State private var mapHeading = 0.0
-    @State private var longitudeSpan = 180.0
     @State private var satellite = true
-    @State private var selectedCluster: GalleryMapCluster?
-    @State private var pendingItem: GalleryItem?
     @Namespace private var mapScope
 
     private var photos: [GalleryItem] {
@@ -49,16 +46,10 @@ struct GalleryCaptureMap: View {
     private var clusters: [GalleryMapCluster] {
         let byID = Dictionary(photos.map { ($0.captureIDForUpload?.uuidString ?? $0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let locations = Dictionary(store.index.records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let zoom = GalleryMapIndex.zoom(for: longitudeSpan)
-        guard store.index.levels.indices.contains(zoom) else { return [] }
-        return store.index.levels[zoom].compactMap { group in
-            let matched = group.itemIDs.compactMap { byID[$0] }
-            guard !matched.isEmpty else { return nil }
-            let points = matched.compactMap { locations[$0.captureIDForUpload?.uuidString ?? $0.id] }
-            let count = Double(points.count)
-            guard count > 0 else { return nil }
-            return GalleryMapCluster(id: group.id, coordinate: .init(latitude: points.reduce(0) { $0 + $1.latitude } / count,
-                longitude: points.reduce(0) { $0 + $1.longitude } / count), items: matched)
+        return photos.compactMap { item in
+            let id = item.captureIDForUpload?.uuidString ?? item.id
+            guard let location = locations[id], let matched = byID[id] else { return nil }
+            return GalleryMapCluster(id: id, coordinate: .init(latitude: location.latitude, longitude: location.longitude), items: [matched])
         }
     }
 
@@ -67,7 +58,7 @@ struct GalleryCaptureMap: View {
             Map(position: $position) {
                 ForEach(clusters) { cluster in
                     Annotation("\(cluster.items.count) fotos", coordinate: cluster.coordinate, anchor: .bottom) {
-                        Button { FotomarcoHaptics.play(.gallery); selectedCluster = cluster } label: {
+                        Button { FotomarcoHaptics.play(.gallery); if let item = cluster.items.first { open(item) } } label: {
                             mapMarker(cluster)
                         }.buttonStyle(.plain)
                     }
@@ -76,7 +67,6 @@ struct GalleryCaptureMap: View {
             }
             .mapStyle(satellite ? .imagery : .standard)
             .mapScope(mapScope)
-            .onMapCameraChange(frequency: .onEnd) { context in longitudeSpan = context.region.span.longitudeDelta }
             .onMapCameraChange(frequency: .continuous) { context in
                 if abs(mapHeading - context.camera.heading) >= 0.5 { mapHeading = context.camera.heading }
             }
@@ -134,29 +124,6 @@ struct GalleryCaptureMap: View {
             guard let location = currentLocation.location else { return }
             guard pendingRecenter || (!centeredOnCurrentLocation && !position.positionedByUser) else { return }
             recenter(on: location)
-        }
-        .sheet(item: $selectedCluster, onDismiss: {
-            if let pendingItem { self.pendingItem = nil; open(pendingItem) }
-        }) { cluster in
-            NavigationStack {
-                ScrollView {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
-                        ForEach(cluster.items) { item in
-                            Button {
-                                FotomarcoHaptics.play(.gallery)
-                                pendingItem = item
-                                selectedCluster = nil
-                            } label: {
-                                item.mapThumbnail().aspectRatio(1, contentMode: .fill).clipped()
-                            }.buttonStyle(.plain)
-                        }
-                    }
-                }
-                .background(.black)
-                .navigationTitle("\(cluster.items.count) fotos")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Concluído") { selectedCluster = nil } } }
-            }.preferredColorScheme(.dark)
         }
     }
 

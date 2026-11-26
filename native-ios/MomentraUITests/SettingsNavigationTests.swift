@@ -68,7 +68,7 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testCameraOptionsTrayAndMap() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65", "-native.camera.grid", "NO"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -82,9 +82,16 @@ final class SettingsNavigationTests: XCTestCase {
         options.tap()
         let grid = app.buttons["camera.options.grid"]
         XCTAssertTrue(grid.waitForExistence(timeout: 5))
-        XCTAssertEqual(grid.value as? String, "Desativada")
+        let original = grid.value as? String
+        XCTAssertTrue(original == "Ativada" || original == "Desativada")
+        if original == "Ativada" {
+            grid.tap()
+            let deactivated = expectation(for: NSPredicate(format: "value == %@", "Desativada"), evaluatedWith: grid)
+            wait(for: [deactivated], timeout: 5)
+        }
         grid.tap()
-        XCTAssertEqual(grid.value as? String, "Ativada")
+        let activated = expectation(for: NSPredicate(format: "value == %@", "Ativada"), evaluatedWith: grid)
+        wait(for: [activated], timeout: 5)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Bandeja da câmera"
         screenshot.lifetime = .keepAlways

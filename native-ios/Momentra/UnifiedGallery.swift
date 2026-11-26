@@ -28,7 +28,7 @@ struct OriginalsView: View {
     @State private var tab: Tab = .captures
     @State private var origin: GalleryOrigin?
     @State private var profile: UUID?
-    @State private var dateFilter: GalleryDateFilter?
+    @State private var dateFilter: GalleryDateFilter? = .today()
     @State private var showDateFilter = false
     @State private var columns = 3
     @State private var selecting = false
@@ -301,11 +301,11 @@ struct OriginalsView: View {
         if #available(iOS 26, *) {
             calendarButtonContent
                 .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
+                .buttonBorderShape(.capsule)
         } else {
             calendarButtonContent
                 .buttonStyle(.plain)
-                .background(.regularMaterial, in: Circle())
+                .background(.regularMaterial, in: Capsule())
         }
     }
 
@@ -314,12 +314,22 @@ struct OriginalsView: View {
             FotomarcoHaptics.play(.gallery)
             showDateFilter = true
         } label: {
-            Image(systemName: "calendar")
-                .frame(width: 42, height: 42)
+            Text(dateFilterLabel)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12).frame(minWidth: 42, minHeight: 42)
                 .foregroundStyle(dateFilter == nil ? Color.primary : .yellow)
-                .contentShape(Circle())
+                .contentShape(Capsule())
         }
         .accessibilityLabel(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data")
+    }
+
+    private var dateFilterLabel: String {
+        guard let filter = dateFilter else { return "Todas as datas" }
+        let calendar = Calendar.current
+        if calendar.isDateInToday(filter.start) && calendar.isDateInToday(filter.end) { return "Hoje" }
+        let format = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(GalleryDateSelection.brazilianLocale)
+        let start = filter.start.formatted(format)
+        return calendar.isDate(filter.start, inSameDayAs: filter.end) ? start : "\(start) – \(filter.end.formatted(format))"
     }
 
     private var originMenu: some View {

@@ -3,6 +3,9 @@ import SwiftUI
 struct GalleryDateFilter: Equatable {
     let start: Date
     let end: Date
+    static func today(now: Date = Date()) -> GalleryDateFilter {
+        GalleryDateFilter(start: now, end: now)
+    }
     func includes(_ date: Date?, calendar: Calendar = .current) -> Bool {
         guard let date else { return false }
         let day = calendar.startOfDay(for: date)
