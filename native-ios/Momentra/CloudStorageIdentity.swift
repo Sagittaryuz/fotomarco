@@ -24,4 +24,13 @@ enum CloudStorageIdentity {
         guard valid(first), valid(second) else { return .unknown }
         return first == second ? .same : .different
     }
+
+    static func verifiedFingerprint(destination: CloudDeliveryPlan.Destination, canonicalID: String,
+                                    userID: String, bindings: [String]) -> String? {
+        let matches = bindings.contains { binding in
+            SHA256.hash(data: Data(binding.utf8)).map { String(format: "%02x", $0) }.joined() == destination.accountHash
+        }
+        guard matches else { return nil }
+        return fingerprint(provider: destination.provider, canonicalID: canonicalID, userID: userID)
+    }
 }

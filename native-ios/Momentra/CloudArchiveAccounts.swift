@@ -127,6 +127,11 @@ final class CloudArchiveAccounts: ObservableObject {
         return try await refresh.value
     }
 
+    func storageFingerprint(for destination: CloudDeliveryPlan.Destination, userID: String) async throws -> String {
+        let token = try await accessToken(for: destination)
+        return try await oauth.storageFingerprint(accessToken: token, destination: destination, userID: userID)
+    }
+
     private func persist(_ next: [Entry]) throws {
         let data = try JSONEncoder().encode(next)
         let query = keychainQuery
