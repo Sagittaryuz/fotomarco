@@ -36,7 +36,7 @@ struct BusinessAPIClient {
         var date: Date { Date(timeIntervalSince1970: Double(createdAt) / 1000) }
     }
     struct TeamPhotoPage: Decodable { let photos: [TeamPhoto]; let nextCursor: String }
-    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool?; let profileReady: Bool? }
+    struct OrganizationSummary: Decodable, Identifiable { let id: String; let name: String; let role: String; let photoAssetId: String; let captureReady: Bool?; let profileReady: Bool?; let storageIdentity: String? }
     struct OrganizationList: Decodable { let organizations: [OrganizationSummary] }
     struct StorageConnection: Decodable { let connected: Bool }
     struct FolderProvisioning: Decodable { let ready: Bool }

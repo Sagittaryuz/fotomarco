@@ -235,6 +235,23 @@ test('organization discovery checks live membership rather than trusting an inde
   assert.deepEqual((await service.myOrganizations({ uid: 'stranger' })).organizations, []);
 });
 
+test('ready members receive only a user-scoped storage pseudonym', async () => {
+  const { service, records } = fixture();
+  service.prepareOneDrive = async () => ({ version: 1, iv: 'iv', ciphertext: 'sealed', driveId: 'drive-A', providerAccountId: 'provider-A' });
+  await service.connectOneDrive({ uid: 'owner' }, 'org', 'token');
+  const active = { organizationId: 'org', role: 'member', active: true, storageStatus: 'granted',
+    oneDriveFolderId: 'folder', oneDriveParentId: 'parent', oneDriveMemberIdentityId: 'member-graph' };
+  records.set('user-A', { ...active, userId: 'user-A' });
+  records.set('user-B', { ...active, userId: 'user-B' });
+  const first = (await service.myOrganizations({ uid: 'user-A' })).organizations[0];
+  const second = (await service.myOrganizations({ uid: 'user-B' })).organizations[0];
+  assert.equal(first.storageIdentity, 'dec8d46104fcfc5f754c8e94a8afcc5e7d029f413995c47e924270686f8a0234');
+  assert.notEqual(first.storageIdentity, second.storageIdentity);
+  assert.ok(!JSON.stringify(first).includes('drive-A'));
+  records.get('user-A').active = false;
+  assert.deepEqual((await service.myOrganizations({ uid: 'user-A' })).organizations, []);
+});
+
 test('only a manager may list active members and their verified email addresses', async () => {
   const { service, records } = fixture();
   records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true, email: 'person@example.com' });
