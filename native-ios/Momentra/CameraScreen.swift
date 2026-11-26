@@ -158,6 +158,7 @@ struct CameraScreen: View {
     @State private var showMap = false
     @State private var showCameraOptions = false
     @State private var openMapAfterOptions = false
+    @State private var cameraOptionsDetent: PresentationDetent = .medium
     @State private var mapAppearance: StampLayout.MapAppearance = .satellite
     @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
@@ -254,6 +255,8 @@ struct CameraScreen: View {
                     .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                     NavigationLink {
                         CameraPhotoStylesView(selected: $photoStyle, tone: $styleTone, color: $styleColor, palette: $stylePalette)
+                            .onAppear { cameraOptionsDetent = .height(260) }
+                            .onDisappear { cameraOptionsDetent = .medium }
                     } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyle != MomentraPhotoStyle.natural.rawValue || styleTone != 0 || styleColor != 0 || stylePalette != 100) }
                     .accessibilityIdentifier("camera.options.styles")
                     Button { FotomarcoHaptics.play(.buttons); showGrid.toggle() } label: {
@@ -276,7 +279,7 @@ struct CameraScreen: View {
             .background(Color.clear)
         }
         .preferredColorScheme(.dark)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(260), .medium, .large], selection: $cameraOptionsDetent)
         .presentationDragIndicator(.visible)
         .presentationBackground(.ultraThinMaterial)
     }

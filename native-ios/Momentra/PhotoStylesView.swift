@@ -7,12 +7,29 @@ struct CameraPhotoStylesView: View {
     @Binding var color: Double
     @Binding var palette: Double
     @State private var customizing = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 6) {
+            HStack {
+                Button {
+                    FotomarcoHaptics.play(.buttons)
+                    if customizing { withAnimation { customizing = false } } else { dismiss() }
+                } label: {
+                    Image(systemName: "chevron.left").frame(width: 40, height: 40)
+                        .modifier(GalleryControlSurface(rounded: true, tint: .white))
+                }.accessibilityLabel("Voltar").accessibilityIdentifier("camera.styles.back")
+                Spacer(minLength: 0)
+                if customizing {
+                    Text("TOM \(Int(tone))   COR \(Int(color))   PALETA \(Int(palette))")
+                        .font(.caption.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                } else {
+                    Text(selected.uppercased()).font(.subheadline.weight(.semibold)).tracking(1)
+                }
+                Spacer(minLength: 0)
+                Color.clear.frame(width: 40, height: 40).accessibilityHidden(true)
+            }.padding(.horizontal, 16)
             if customizing {
-                Text("TOM \(Int(tone))   COR \(Int(color))   PALETA \(Int(palette))")
-                    .font(.caption.weight(.semibold)).monospacedDigit()
                 GeometryReader { geometry in
                     let side = min(geometry.size.width, geometry.size.height)
                     ZStack(alignment: .topLeading) {
@@ -29,7 +46,7 @@ struct CameraPhotoStylesView: View {
                         tone = max(-100, min(100, 100 - Double(value.location.y / side) * 200)).rounded()
                     })
                     .accessibilityLabel("Ajustar tom e cor")
-                }.frame(width: 144, height: 144)
+                }.frame(width: 94, height: 94)
                 HStack {
                     Image(systemName: "minus")
                     Slider(value: $palette, in: 0...200, step: 1).tint(.yellow)
@@ -38,9 +55,7 @@ struct CameraPhotoStylesView: View {
                 }.padding(.horizontal, 32)
                 Button("Redefinir") { tone = 0; color = 0; palette = 100 }
                     .font(.footnote).foregroundStyle(.secondary)
-                Button("Voltar aos estilos") { withAnimation { customizing = false } }
             } else {
-                Text(selected.uppercased()).font(.headline).tracking(1)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(MomentraPhotoStyle.allCases) { style in
@@ -50,7 +65,7 @@ struct CameraPhotoStylesView: View {
                             } label: {
                                 VStack(spacing: 5) {
                                     StylePreview(style: style)
-                                        .frame(width: 74, height: 74)
+                                        .frame(width: 65, height: 65)
                                         .clipShape(RoundedRectangle(cornerRadius: 11))
                                         .overlay(RoundedRectangle(cornerRadius: 11).stroke(selected == style.rawValue ? .yellow : .clear, lineWidth: 2))
                                     Text(style.rawValue).font(.caption2).foregroundStyle(.white)
@@ -62,15 +77,13 @@ struct CameraPhotoStylesView: View {
                 Button("Personalizar") { withAnimation { customizing = true } }
                     .accessibilityIdentifier("camera.styles.customize")
                     .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 18).padding(.vertical, 9)
+                    .padding(.horizontal, 18).padding(.vertical, 6)
                     .background(.black.opacity(0.5), in: Capsule())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(.white)
-        .navigationTitle("Estilos")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .background(Color.clear)
     }
 }
