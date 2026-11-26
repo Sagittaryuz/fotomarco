@@ -1,5 +1,6 @@
 import { mayAcceptInvitation, mayInvite, mayManage, mayReadPublishedProfile, mayAccessPhoto } from './business-policy.mjs';
 import { validBusinessPhotoName } from './business-onedrive-upload.mjs';
+import { storageFingerprint } from './business-storage-identity.mjs';
 
 /**
  * Transactional service. The adapter must verify Firebase ID tokens and load records
@@ -105,7 +106,10 @@ export class BusinessService {
           const captureReady = member.storageStatus === 'granted' && typeof member.oneDriveFolderId === 'string' && !!member.oneDriveFolderId &&
             typeof member.oneDriveParentId === 'string' && !!member.oneDriveParentId &&
             typeof member.oneDriveMemberIdentityId === 'string' && !!member.oneDriveMemberIdentityId;
-          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '', captureReady, profileReady: !!latest });
+          const storage = captureReady ? await tx.oneDriveCredential(id) : null;
+          const storageIdentity = storage?.driveId ? await storageFingerprint('oneDrive', storage.driveId, identity.uid) : null;
+          organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '', captureReady, profileReady: !!latest,
+            ...(storageIdentity ? { storageIdentity } : {}) });
         }
       }
       return { organizations };
