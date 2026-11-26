@@ -29,3 +29,7 @@ The development branch contains a user-scoped storage identity comparison and mi
 ## Device build and simulator (26 Nov 2026)
 
 Commit `edee098c590ef96efb1513ef31111a0222a1637a` passed iPhone compilation, simulator navigation and native tests in GitHub Actions run `45900671751`. These are synthetic tests: they do not prove a real OneDrive connection, team permissions, cross-account transfer, or installation on an iPhone. The Google Drive Business provider is not yet wired through folder provisioning and delivery. This revision is not deployed to the Worker or published to devices.
+
+## Active Worker route check (26 Nov 2026)
+
+An unauthenticated POST to the existing staging Worker returned 401 for the OneDrive connect route and 404 for the Google Drive connect and owner-provision routes. This shows that the active Worker does not contain those newer Google routes; it does not diagnose the previously reported authenticated OneDrive error. No credentials, user data, or provider account were used in this check. The newer backend remains undeployed; don't infer that it can safely replace the live Worker without verifying its bindings, authorization, migration compatibility and the real provider flow.
