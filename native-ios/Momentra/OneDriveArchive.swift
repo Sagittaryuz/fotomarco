@@ -220,7 +220,7 @@ struct OneDriveArchive {
     }
 
     /// The caller owns the temporary file and must remove it after use.
-    func download(id: String, accessToken: String) async throws -> URL {
+    func download(id: String, accessToken: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         guard Self.validID(id) else { throw Failure.invalidResponse }
         let folder = try await folderID(accessToken: accessToken)
         let data = try await get(Self.query(itemURL(id), items: [Self.fields]), accessToken: accessToken)
@@ -229,7 +229,7 @@ struct OneDriveArchive {
               let size = item.size, size > 0, size <= 200 * 1024 * 1024 else {
             throw Failure.invalidResponse
         }
-        return try await content(id: id, byteCount: size, accessToken: accessToken)
+        return try await content(id: id, byteCount: size, accessToken: accessToken, progress: progress)
     }
 
     private func folderID(accessToken: String) async throws -> String {
@@ -294,9 +294,11 @@ struct OneDriveArchive {
         guard try CloudFileFingerprint.read(downloaded) == fingerprint else { throw Failure.integrity }
     }
 
-    private func content(id: String, byteCount: Int64, accessToken: String) async throws -> URL {
+    private func content(id: String, byteCount: Int64, accessToken: String,
+                         progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         let request = try authorizedRequest(itemURL(id).appendingPathComponent("content"), accessToken: accessToken)
-        let (temporary, response) = try await Self.session.download(for: request)
+        let observer = progress.map { ShareDownloadProgress(report: $0) }
+        let (temporary, response) = try await Self.session.download(for: request, delegate: observer)
         let status = try Self.status(response)
         if status == 200 { return try Self.checkedFile(temporary, byteCount: byteCount) }
         try? FileManager.default.removeItem(at: temporary)
@@ -305,7 +307,7 @@ struct OneDriveArchive {
               let url = URL(string: location), Self.secureURL(url) else { throw Failure.http(status) }
 
         // Graph supplies a short-lived, preauthenticated URL. Never forward the access token.
-        let (download, downloadResponse) = try await Self.session.download(from: url)
+        let (download, downloadResponse) = try await Self.session.download(from: url, delegate: observer)
         guard let http = downloadResponse as? HTTPURLResponse, http.statusCode == 200 else {
             try? FileManager.default.removeItem(at: download)
             throw Failure.invalidResponse

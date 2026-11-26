@@ -155,7 +155,9 @@ struct MomentraGalleryDetail: View {
         case .grid:
             GalleryDetailGrid(items: items, choose: { selection = $0.id }) { $0.thumbnail() }
         case .share:
-            GalleryShareComposer(items: items, current: item, copy: { try await $0.copy(to: $1) }, onSuccess: { panel = nil }) { $0.thumbnail() }
+            GalleryShareComposer(items: items, current: item, copyWithProgress: { item, directory, progress in
+                try await item.copy(to: directory, progress: progress)
+            }, onSuccess: { panel = nil }) { $0.thumbnail() }
         case .information:
             NavigationStack {
                 GalleryItemInformation(item: item)

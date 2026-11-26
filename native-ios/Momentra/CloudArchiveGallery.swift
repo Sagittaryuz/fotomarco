@@ -156,9 +156,9 @@ struct GalleryCloudItem: Identifiable {
     }
 
     @MainActor
-    func copy(to directory: URL) async throws -> URL {
+    func copy(to directory: URL, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-        return try await images.copy(photo, to: directory, accessToken: token)
+        return try await images.copy(photo, to: directory, accessToken: token, progress: progress)
     }
 
     @MainActor
@@ -571,15 +571,15 @@ fileprivate final class ArchiveGalleryImages: ObservableObject {
         revision = UUID()
     }
 
-    func download(_ photo: ArchiveGalleryPhoto, accessToken: String) async throws -> URL {
+    func download(_ photo: ArchiveGalleryPhoto, accessToken: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         switch destination.provider {
-        case .googleDrive: try await drive.downloadFile(id: photo.id, accessToken: accessToken)
-        case .oneDrive: try await OneDriveArchive().download(id: photo.id, accessToken: accessToken)
+        case .googleDrive: try await drive.downloadFile(id: photo.id, accessToken: accessToken, progress: progress)
+        case .oneDrive: try await OneDriveArchive().download(id: photo.id, accessToken: accessToken, progress: progress)
         }
     }
 
-    func copy(_ photo: ArchiveGalleryPhoto, to directory: URL, accessToken: String) async throws -> URL {
-        let downloaded = try await download(photo, accessToken: accessToken)
+    func copy(_ photo: ArchiveGalleryPhoto, to directory: URL, accessToken: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
+        let downloaded = try await download(photo, accessToken: accessToken, progress: progress)
         defer { try? FileManager.default.removeItem(at: downloaded) }
         let target = directory.appendingPathComponent(photo.name)
         try FileManager.default.moveItem(at: downloaded, to: target)
@@ -965,9 +965,9 @@ private struct ArchiveGalleryPager: View {
                 panel = nil
             }) { ArchiveGalleryImage(photo: $0, images: images) }
         case .share:
-            GalleryShareComposer(items: items, current: current, copy: { photo, directory in
+            GalleryShareComposer(items: items, current: current, copyWithProgress: { photo, directory, progress in
                 let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
-                return try await images.copy(photo, to: directory, accessToken: token)
+                return try await images.copy(photo, to: directory, accessToken: token, progress: progress)
             }, onSuccess: { panel = nil }) { ArchiveGalleryImage(photo: $0, images: images) }
         case .information:
             NavigationStack {

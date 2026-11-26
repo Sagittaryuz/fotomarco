@@ -47,4 +47,21 @@ final class GalleryActivitySheetTests: XCTestCase {
             XCTFail("Expected preparation failure")
         } catch { XCTAssertEqual(completed, [0, 1]) }
     }
+
+    @MainActor
+    func testTransferProgressIsReportedBeforeTheFileIsComplete() async throws {
+        var reported: [GalleryShareProgress] = []
+        let batch = try await GalleryShareBatch.prepareWithTransferProgress([1], progress: { reported.append($0) }) {
+            _, directory, progress in
+            progress(0.5)
+            try await Task.sleep(nanoseconds: 20_000_000)
+            let output = directory.appendingPathComponent("photo.jpg")
+            try Data([1]).write(to: output)
+            return output
+        }
+        withExtendedLifetime(batch) {
+            XCTAssertTrue(reported.contains { $0.fraction == 0.5 && $0.completed == 0 })
+            XCTAssertEqual(reported.last?.fraction, 1)
+        }
+    }
 }

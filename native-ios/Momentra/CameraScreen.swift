@@ -1023,9 +1023,11 @@ struct CameraScreen: View {
         cameraShareTask = Task {
             defer { cameraShareTask = nil; cameraShareProgress = nil }
             do {
-                let batch = try await GalleryShareBatch.prepare(files, progress: { completed, total in
-                    cameraShareProgress = GalleryShareProgress(completed: completed, total: total)
-                }, copy: copyCameraThumbnail)
+                let batch = try await GalleryShareBatch.prepareWithTransferProgress(files, progress: { value in
+                    cameraShareProgress = value
+                }) { file, directory, progress in
+                    try await copyCameraThumbnail(file, to: directory, progress: progress)
+                }
                 cameraShareProgress = nil
                 try Task.checkCancellation()
                 cameraShare = batch
@@ -1035,7 +1037,7 @@ struct CameraScreen: View {
         }
     }
 
-    private func copyCameraThumbnail(_ file: URL, to directory: URL) async throws -> URL {
+    private func copyCameraThumbnail(_ file: URL, to directory: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let root = file.deletingLastPathComponent().deletingLastPathComponent()
         let journal = CloudArchiveJournal(root: root)
         let localFile = root.appendingPathComponent("Processed", isDirectory: true)
@@ -1069,7 +1071,7 @@ struct CameraScreen: View {
             let entry = CloudGalleryCatalog.Entry(id: remoteID, name: receipt.remoteName(stamped: true, destination: delivery.destination),
                                                   date: receipt.createdAt, revision: nil)
             guard let item = GalleryCloudItem.cachedPage([entry], for: account).items.first else { continue }
-            do { return try await item.copy(to: directory) }
+            do { return try await item.copy(to: directory, progress: progress) }
             catch { lastError = error }
         }
         throw lastError

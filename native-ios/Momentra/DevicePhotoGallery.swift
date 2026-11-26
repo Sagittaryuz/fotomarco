@@ -194,7 +194,7 @@ enum DevicePhotoFile {
         return PhotoEditorInput(url: try await copy(asset, to: temporary), temporary: true)
     }
 
-    static func copy(_ asset: PHAsset, to target: URL) async throws -> URL {
+    static func copy(_ asset: PHAsset, to target: URL, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         let resources = PHAssetResource.assetResources(for: asset)
         let video = asset.mediaType == .video
         let full: PHAssetResourceType = video ? .fullSizeVideo : .fullSizePhoto
@@ -204,6 +204,7 @@ enum DevicePhotoFile {
         let file = target.appendingPathExtension(UTType(resource.uniformTypeIdentifier)?.preferredFilenameExtension ?? "jpg")
         let options = PHAssetResourceRequestOptions()
         options.isNetworkAccessAllowed = true
+        options.progressHandler = progress
         do {
             try await PHAssetResourceManager.default().writeData(for: resource, toFile: file, options: options)
             return file
@@ -328,8 +329,8 @@ private struct DevicePhotoPager: View {
                 panel = nil
             }) { DeviceThumbnail(asset: $0.asset) }
         case .share:
-            GalleryShareComposer(items: items, current: current, copy: { item, directory in
-                try await DevicePhotoFile.copy(item.asset, to: directory.appendingPathComponent("Foto"))
+            GalleryShareComposer(items: items, current: current, copyWithProgress: { item, directory, progress in
+                try await DevicePhotoFile.copy(item.asset, to: directory.appendingPathComponent("Foto"), progress: progress)
             }, onSuccess: { panel = nil }) { DeviceThumbnail(asset: $0.asset) }
         case .information:
             NavigationStack {

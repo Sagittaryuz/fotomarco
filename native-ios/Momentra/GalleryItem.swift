@@ -270,7 +270,7 @@ struct GalleryItem: Identifiable {
         }
     }
 
-    @MainActor func copy(to directory: URL) async throws -> URL {
+    @MainActor func copy(to directory: URL, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         switch source {
         case .capture(let item):
             return try await Task.detached(priority: .utility) {
@@ -279,9 +279,9 @@ struct GalleryItem: Identifiable {
                 return url
             }.value
         case .device(let asset):
-            return try await DevicePhotoFile.copy(asset, to: directory.appendingPathComponent("Foto"))
+            return try await DevicePhotoFile.copy(asset, to: directory.appendingPathComponent("Foto"), progress: progress)
         case .cloud(let item):
-            return try await item.copy(to: directory)
+            return try await item.copy(to: directory, progress: progress)
         }
     }
 

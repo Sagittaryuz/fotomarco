@@ -311,10 +311,11 @@ final class GoogleDriveArchive {
     }
 
     /// The caller owns the temporary file and must remove it after use.
-    func downloadFile(id: String, accessToken: String) async throws -> URL {
+    func downloadFile(id: String, accessToken: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         guard Self.validID(id) else { throw ArchiveError.invalidRequest }
         let request = try request(path: "/drive/v3/files/\(id)", query: ["alt": "media"], accessToken: accessToken)
-        let (location, response) = try await session.download(for: request)
+        let observer = progress.map { ShareDownloadProgress(report: $0) }
+        let (location, response) = try await session.download(for: request, delegate: observer)
         do {
             try Self.check(response)
             let bytes = try location.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0

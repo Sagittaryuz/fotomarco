@@ -127,6 +127,39 @@ final class GalleryShareBatch: Identifiable {
         }
     }
 
+    @MainActor
+    static func prepareWithTransferProgress<Item>(
+        _ items: [Item], progress: @escaping (GalleryShareProgress) -> Void,
+        copy: (Item, URL, @escaping @Sendable (Double) -> Void) async throws -> URL
+    ) async throws -> GalleryShareBatch {
+        let tracker = GalleryShareProgressTracker(total: items.count, report: progress)
+        progress(GalleryShareProgress(completed: 0, total: items.count))
+        await Task.yield()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            var files: [URL] = []
+            for (index, item) in items.enumerated() {
+                try Task.checkCancellation()
+                tracker.index = index
+                let target = directory.appendingPathComponent(String(index), isDirectory: true)
+                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+                let file = try await copy(item, target) { fraction in
+                    Task { @MainActor in tracker.update(index: index, fraction: fraction) }
+                }
+                files.append(file)
+                try Task.checkCancellation()
+                tracker.index = index + 1
+                progress(GalleryShareProgress(completed: index + 1, total: items.count))
+            }
+            tracker.active = false
+            return GalleryShareBatch(directory: directory, files: files)
+        } catch {
+            tracker.active = false
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+
     func sheet(onSuccess: @escaping @MainActor () -> Void) -> GalleryActivitySheet {
         GalleryActivitySheet(files: files, resource: self, onSuccess: onSuccess)
     }
@@ -135,7 +168,32 @@ final class GalleryShareBatch: Identifiable {
 struct GalleryShareProgress: Equatable {
     let completed: Int
     let total: Int
-    var fraction: Double { total > 0 ? min(1, max(0, Double(completed) / Double(total))) : 0 }
+    var currentFraction: Double = 0
+    var fraction: Double { total > 0 ? min(1, max(0, (Double(completed) + currentFraction) / Double(total))) : 0 }
+}
+
+@MainActor
+private final class GalleryShareProgressTracker {
+    let total: Int
+    let report: (GalleryShareProgress) -> Void
+    var index = 0
+    var active = true
+    private var lastFraction: Double = 0
+    private var lastIndex = 0
+
+    init(total: Int, report: @escaping (GalleryShareProgress) -> Void) {
+        self.total = total
+        self.report = report
+    }
+
+    func update(index: Int, fraction: Double) {
+        guard active, self.index == index, fraction.isFinite else { return }
+        if lastIndex != index { lastIndex = index; lastFraction = 0 }
+        let value = min(0.99, max(0, fraction))
+        guard value > lastFraction else { return }
+        lastFraction = value
+        report(GalleryShareProgress(completed: index, total: total, currentFraction: value))
+    }
 }
 
 struct GalleryShareProgressOverlay: View {
@@ -165,7 +223,7 @@ struct GalleryShareProgressOverlay: View {
 struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
     let items: [Item]
     let current: Item
-    let copy: (Item, URL) async throws -> URL
+    let copy: (Item, URL, @escaping @Sendable (Double) -> Void) async throws -> URL
     let tile: (Item) -> Tile
     let onSuccess: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -180,7 +238,18 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
          onSuccess: @escaping () -> Void, @ViewBuilder tile: @escaping (Item) -> Tile) {
         self.items = items
         self.current = current
-        self.copy = copy
+        self.copy = { item, directory, _ in try await copy(item, directory) }
+        self.tile = tile
+        self.onSuccess = onSuccess
+        _selected = State(initialValue: [current.id])
+    }
+
+    init(items: [Item], current: Item,
+         copyWithProgress: @escaping (Item, URL, @escaping @Sendable (Double) -> Void) async throws -> URL,
+         onSuccess: @escaping () -> Void, @ViewBuilder tile: @escaping (Item) -> Tile) {
+        self.items = items
+        self.current = current
+        self.copy = copyWithProgress
         self.tile = tile
         self.onSuccess = onSuccess
         _selected = State(initialValue: [current.id])
@@ -256,8 +325,8 @@ struct GalleryShareComposer<Item: Identifiable, Tile: View>: View {
         preparation = Task {
             defer { preparation = nil; progress = nil }
             do {
-                let prepared = try await GalleryShareBatch.prepare(chosen, progress: { completed, total in
-                    progress = GalleryShareProgress(completed: completed, total: total)
+                let prepared = try await GalleryShareBatch.prepareWithTransferProgress(chosen, progress: { value in
+                    progress = value
                 }, copy: copy)
                 if !Task.isCancelled { batch = prepared }
             } catch {

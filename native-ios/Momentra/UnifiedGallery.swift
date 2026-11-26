@@ -736,9 +736,11 @@ struct OriginalsView: View {
         Task {
             defer { busy = false; shareProgress = nil }
             do {
-                let batch = try await GalleryShareBatch.prepare(chosen, progress: { completed, total in
-                    shareProgress = GalleryShareProgress(completed: completed, total: total)
-                }) { try await $0.copy(to: $1) }
+                let batch = try await GalleryShareBatch.prepareWithTransferProgress(chosen, progress: { value in
+                    shareProgress = value
+                }) { item, directory, report in
+                    try await item.copy(to: directory, progress: report)
+                }
                 shareProgress = nil
                 shared = batch
             } catch { message = "Não foi possível preparar os itens selecionados." }
