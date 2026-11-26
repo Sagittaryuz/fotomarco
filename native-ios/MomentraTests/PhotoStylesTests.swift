@@ -29,8 +29,11 @@ final class PhotoStylesTests: XCTestCase {
         let mirrored = CameraStylePreviewRenderer.fit(image, to: CGSize(width: 2, height: 1), rotation: 0, mirror: true)
         XCTAssertEqual(mirrored.extent, CGRect(x: 0, y: 0, width: 2, height: 1))
         var bytes = [UInt8](repeating: 0, count: 8)
-        CIContext().render(mirrored, toBitmap: &bytes, rowBytes: 8, bounds: mirrored.extent,
-                           format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+        bytes.withUnsafeMutableBytes { buffer in
+            guard let address = buffer.baseAddress else { return }
+            CIContext().render(mirrored, toBitmap: address, rowBytes: 8, bounds: mirrored.extent,
+                               format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+        }
         XCTAssertGreaterThan(bytes[2], 240)
         XCTAssertGreaterThan(bytes[4], 240)
         let rotated = CameraStylePreviewRenderer.fit(image, to: CGSize(width: 1, height: 2), rotation: 90, mirror: false)
