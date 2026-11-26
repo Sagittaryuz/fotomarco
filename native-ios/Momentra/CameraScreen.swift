@@ -1126,36 +1126,42 @@ struct CameraScreen: View {
         withTransaction(transaction) { showOriginals = true }
     }
 
-    private var archiveSettingsSection: some View {
-        Section("Armazenamento e contas") {
-            Button { FotomarcoHaptics.play(.buttons); connectArchive(.googleDrive) } label: {
-                Label {
-                    Text("Adicionar conta Google Drive")
-                } icon: {
-                    Image("GoogleDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
-                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }.disabled(connectingArchive)
-            Button { FotomarcoHaptics.play(.buttons); connectArchive(.oneDrive) } label: {
-                Label {
-                    Text("Adicionar OneDrive ou Microsoft 365")
-                } icon: {
-                    Image("OneDriveMark").renderingMode(.original).resizable().scaledToFit().frame(width: 24, height: 24)
-                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }.disabled(connectingArchive)
-            if connectingArchive { ProgressView("Confirmando a conta…").font(.footnote) }
-            if let archiveNotice { Text(archiveNotice).font(.footnote) }
+    @ViewBuilder private var archiveSettingsSection: some View {
+        Section("Contas") {
             ForEach(archiveAccounts.accounts, id: \.id) { account in
-                Toggle(isOn: Binding(get: { account.enabled }, set: { enabled in
-                    applyArchivePolicy(keepLocal: keepArchiveLocal, destination: account.id, enabled: enabled)
-                })) {
-                    VStack(alignment: .leading) {
+                NavigationLink {
+                    Form {
+                        Section {
+                            Toggle("Enviar fotos para esta conta", isOn: Binding(
+                                get: { archiveAccounts.accounts.first(where: { $0.id == account.id })?.enabled ?? false },
+                                set: { applyArchivePolicy(keepLocal: keepArchiveLocal, destination: account.id, enabled: $0) }
+                            )).disabled(pendingArchivePolicy != nil)
+                            LabeledContent("Conta", value: account.label)
+                            LabeledContent("Serviço", value: account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
+                        }
+                    }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Conta")
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(account.label)
                         Text(account.id.provider == .googleDrive ? "Google Drive" : "OneDrive")
-                        Text(account.label).font(.caption).foregroundStyle(.secondary)
-                        Text(account.enabled ? "Conectada · envio ativo" : "Conectada · envio desativado")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
-                }.disabled(pendingArchivePolicy != nil)
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }
             }
+            NavigationLink {
+                StorageProviderPicker {
+                    Button { FotomarcoHaptics.play(.buttons); connectArchive(.googleDrive) } label: {
+                        StorageProviderLabel(name: "Google Drive", asset: "GoogleDriveMark")
+                    }.disabled(connectingArchive)
+                    Button { FotomarcoHaptics.play(.buttons); connectArchive(.oneDrive) } label: {
+                        StorageProviderLabel(name: "OneDrive", asset: "OneDriveMark")
+                    }.disabled(connectingArchive)
+                    if connectingArchive { ProgressView("Confirmando a conta…").font(.footnote) }
+                    if let archiveNotice { Text(archiveNotice).font(.footnote) }
+                }
+            } label: { settingsRowLabel("Adicionar Conta") }
+        }
+        Section("Armazenamento") {
             Toggle("Armazenamento local", isOn: Binding(get: { effectiveLocalStorage }, set: {
                 applyArchivePolicy(keepLocal: $0)
             }))
@@ -1174,6 +1180,9 @@ struct CameraScreen: View {
             ForEach(archiveStatus.issues, id: \.self) { issue in
                 Text(issue).font(.footnote).foregroundStyle(.orange)
             }
+        }
+        if let archiveNotice {
+            Section { Text(archiveNotice).font(.footnote).foregroundStyle(.secondary) }
         }
     }
 

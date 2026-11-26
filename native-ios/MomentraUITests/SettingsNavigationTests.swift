@@ -49,6 +49,19 @@ final class SettingsNavigationTests: XCTestCase {
                     wait(for: [restored], timeout: 5)
                 }
             }
+            if title == "Armazenamento" {
+                let addAccount = app.buttons["Adicionar Conta"]
+                XCTAssertTrue(addAccount.waitForExistence(timeout: 5))
+                addAccount.tap()
+                XCTAssertTrue(app.buttons["Google Drive"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.buttons["OneDrive"].exists)
+                let providerScreenshot = XCTAttachment(screenshot: app.screenshot())
+                providerScreenshot.name = "Adicionar conta"
+                providerScreenshot.lifetime = .keepAlways
+                add(providerScreenshot)
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+                XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            }
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
     }

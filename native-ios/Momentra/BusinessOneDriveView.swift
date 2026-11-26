@@ -6,24 +6,21 @@ struct BusinessStorageSelectionView: View {
     let organizationID: String
 
     var body: some View {
-        List {
-            Section {
-                NavigationLink("OneDrive") {
-                    BusinessOneDriveView(api: api, organizationID: organizationID)
-                }
-                NavigationLink("Google Drive") {
-                    ContentUnavailableView("Google Drive", systemImage: "externaldrive.badge.icloud", description:
-                        Text("O armazenamento compartilhado pelo Google Drive está em desenvolvimento."))
-                        .navigationTitle("Google Drive")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-            } header: {
-                Text("Escolha o armazenamento das fotos da organização")
+        StorageProviderPicker {
+            NavigationLink {
+                BusinessOneDriveView(api: api, organizationID: organizationID)
+            } label: {
+                StorageProviderLabel(name: "OneDrive", asset: "OneDriveMark")
+            }
+            NavigationLink {
+                ContentUnavailableView("Google Drive", systemImage: "externaldrive.badge.icloud", description:
+                    Text("O armazenamento compartilhado pelo Google Drive está em desenvolvimento."))
+                    .navigationTitle("Google Drive")
+                    .navigationBarTitleDisplayMode(.inline)
+            } label: {
+                StorageProviderLabel(name: "Google Drive", asset: "GoogleDriveMark")
             }
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Armazenamento")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
