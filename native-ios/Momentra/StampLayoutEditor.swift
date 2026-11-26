@@ -58,7 +58,22 @@ struct StampLayoutEditor: View {
         }
     }
 
-    private func cornerControl(_ point: Binding<StampPoint>) -> some View {
+    private func occupants(at corner: StampPoint, excluding element: Element) -> [String] {
+        let current = layout.wrappedValue
+        func sameCorner(_ position: StampPoint) -> Bool {
+            (position.x < 0.5) == (corner.x < 0.5) && (position.y < 0.5) == (corner.y < 0.5)
+        }
+        var result: [String] = []
+        if current.template == .original && current.mode == .separate {
+            if element != .map && current.showsMap && sameCorner(current.map) { result.append("Mapa") }
+            if element != .information && current.showsInformation && sameCorner(current.information) { result.append("Informações") }
+            if element != .logo && current.showsLogo && previewLogo != nil && sameCorner(current.logo) { result.append("Logotipo") }
+        }
+        if element != .locationQR && current.showsLocationQR && sameCorner(current.locationQR) { result.append("QR Code") }
+        return result
+    }
+
+    private func cornerControl(_ point: Binding<StampPoint>, element: Element) -> some View {
         let corners: [(String, StampPoint, Alignment)] = [
             ("Superior esquerdo", StampPoint(x: 0, y: 0), .topLeading),
             ("Superior direito", StampPoint(x: 1, y: 0), .topTrailing),
@@ -70,7 +85,9 @@ struct StampLayoutEditor: View {
             HStack(spacing: 10) {
                 ForEach(0..<4, id: \.self) { index in
                     let corner = corners[index]
-                    let selected = point.wrappedValue == corner.1
+                    let selected = (point.wrappedValue.x < 0.5) == (corner.1.x < 0.5)
+                        && (point.wrappedValue.y < 0.5) == (corner.1.y < 0.5)
+                    let existing = occupants(at: corner.1, excluding: element)
                     Button { FotomarcoHaptics.play(.editor); point.wrappedValue = corner.1 } label: {
                         RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.secondary, lineWidth: selected ? 2 : 1)
                             .frame(width: 36, height: 42)
@@ -78,13 +95,30 @@ struct StampLayoutEditor: View {
                                 RoundedRectangle(cornerRadius: 2).fill(selected ? Color.yellow : Color.secondary)
                                     .frame(width: 12, height: 9).padding(4)
                             }
+                            .overlay(alignment: .topTrailing) {
+                                if !existing.isEmpty {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.black, .yellow)
+                                        .offset(x: 5, y: -5)
+                                }
+                            }
                             .frame(maxWidth: .infinity).padding(.vertical, 4)
                             .contentShape(Capsule())
                             .modifier(GalleryControlSurface(rounded: true))
                     }
                     .buttonStyle(.plain).accessibilityLabel(corner.0)
+                    .accessibilityValue(existing.isEmpty ? "Disponível" : "Ocupado por \(existing.joined(separator: ", "))")
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
+            }
+            let existing = occupants(at: point.wrappedValue, excluding: element)
+            if !existing.isEmpty {
+                Label("Possível sobreposição: \(existing.joined(separator: ", ")).", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.yellow)
+            } else if element == .locationQR && (layout.wrappedValue.template != .original || layout.wrappedValue.mode == .combined) {
+                Text("Confira a prévia para evitar sobreposição com o carimbo.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -207,7 +241,7 @@ struct StampLayoutEditor: View {
                         Toggle("Mostrar QR Code da localização", isOn: flag(\.showsLocationQR)).toggleStyle(DirectionalSwitchStyle())
                         Text("O código abre a localização da foto no Google Maps. Sem localização válida, ele não aparece.")
                             .font(.caption).foregroundStyle(.secondary)
-                        cornerControl(layout.locationQR)
+                        cornerControl(layout.locationQR, element: .locationQR)
                     }
                     if template.usesLogo && (editingElement == .combined || editingElement == .logo) {
                         ForEach(0..<(layout.wrappedValue.template == .construction ? 3 : 1), id: \.self) { slot in
@@ -402,14 +436,14 @@ struct StampLayoutEditor: View {
             }
             if layout.wrappedValue.mode == .separate {
                 switch editingElement {
-                case .map: cornerControl(layout.map)
-                case .information: cornerControl(layout.information)
-                case .logo: cornerControl(layout.logo)
-                case .locationQR: cornerControl(layout.locationQR)
+                case .map: cornerControl(layout.map, element: .map)
+                case .information: cornerControl(layout.information, element: .information)
+                case .logo: cornerControl(layout.logo, element: .logo)
+                case .locationQR: cornerControl(layout.locationQR, element: .locationQR)
                 case .combined: EmptyView()
                 }
             }
-            if editingElement == .locationQR && layout.wrappedValue.mode == .combined { cornerControl(layout.locationQR) }
+            if editingElement == .locationQR && layout.wrappedValue.mode == .combined { cornerControl(layout.locationQR, element: .locationQR) }
             switch editingElement {
             case .combined: sizeControl("Tamanho do carimbo", value: layout.combinedSize)
             case .map: sizeControl("Tamanho do mapa", value: layout.mapSize)

@@ -3,8 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.61"
+    static let version = "0.1.62"
     static let items = [
+        "O editor avisa quando elementos separados ocupam o mesmo canto da foto.",
         "Um QR Code opcional no carimbo permite abrir a localização da captura no mapa.",
         "As opções foram reorganizadas com ícones e grupos no estilo dos Ajustes do iPhone.",
         "O mapa da galeria abre com a vista de satélite selecionada.",
