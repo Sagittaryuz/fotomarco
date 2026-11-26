@@ -196,6 +196,13 @@ export function createBusinessHandler({ authenticate, preAuthLimit, rateLimit, s
           'provider-permission-missing', 'provider-identity-mismatch', 'invalid-microsoft-client'].includes(error?.message)) {
           return reply(503, { error: error.message });
         }
+        if (connectOneDrive && (/^firestore-http-\d{3}$/.test(error?.message ?? '') ||
+          ['server-token-unavailable', 'invalid-server-token', 'missing-server-credential', 'invalid-transaction', 'invalid-read'].includes(error?.message))) {
+          return reply(503, { error: 'business-database-unavailable' });
+        }
+        if (connectOneDrive && ['invalid-vault-key', 'invalid-vault-data', 'invalid-vault-context', 'invalid-server-credential'].includes(error?.message)) {
+          return reply(503, { error: 'business-configuration-unavailable' });
+        }
         if (error?.message === 'storage-account-change-requires-migration') return reply(409, { error: 'storage-account-change-requires-migration' });
         if (error?.message === 'mailbox-mismatch') return reply(422, { error: 'mailbox-mismatch' });
         if (error?.message === 'mail-not-configured') return reply(412, { error: 'mail-not-configured' });

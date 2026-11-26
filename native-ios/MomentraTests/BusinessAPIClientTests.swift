@@ -126,6 +126,17 @@ final class BusinessAPIClientTests: XCTestCase {
         } catch BusinessAPIClient.Failure.microsoftToken { } catch { XCTFail("Unexpected error") }
     }
 
+    func testOneDriveReportsSafeDatabaseFailure() async throws {
+        let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"error":"business-database-unavailable"}"#.utf8), response)
+        }
+        do {
+            _ = try await client.connectOneDrive(organizationID: "org", refreshToken: "credential", token: "token")
+            XCTFail("Expected database diagnostic")
+        } catch BusinessAPIClient.Failure.businessDatabase { } catch { XCTFail("Unexpected error") }
+    }
+
     func testGoogleBusinessStorageUsesVerifiedSessionAndSelectedFolder() async throws {
         let client = try BusinessAPIClient(endpoint: XCTUnwrap(URL(string: "https://business.example"))) { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
