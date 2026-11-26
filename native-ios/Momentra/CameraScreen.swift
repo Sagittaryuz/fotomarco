@@ -794,7 +794,9 @@ struct CameraScreen: View {
             } else {
                 if phase == .background {
                     didEnterBackground = true
-                    sessionClipboard.close(sessionID: captureSessionID, files: sessionCaptureFiles, expectedCount: sessionStartedCount, workPending: { camera.isCapturing || camera.processingPhotos > 0 }, copy: copyCameraThumbnail)
+                    sessionClipboard.close(sessionID: captureSessionID, files: sessionCaptureFiles, expectedCount: sessionStartedCount, workPending: { camera.isCapturing || camera.processingPhotos > 0 }, copy: { file, directory in
+                        try await copyCameraThumbnail(file, to: directory, progress: { _ in })
+                    })
                     captureSessionID = UUID()
                     sessionStartedCount = 0
                     sessionCaptureCount = 0
