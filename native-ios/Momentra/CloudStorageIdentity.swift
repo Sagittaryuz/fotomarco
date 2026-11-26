@@ -33,4 +33,11 @@ enum CloudStorageIdentity {
         guard matches else { return nil }
         return fingerprint(provider: destination.provider, canonicalID: canonicalID, userID: userID)
     }
+
+    /// Errors remain errors so callers can leave the durable upload pending.
+    static func decide(organization: () async throws -> String?, personal: () async throws -> String?) async throws -> Comparison {
+        let organizationIdentity = try await organization()
+        let personalIdentity = try await personal()
+        return compare(organizationIdentity, personalIdentity)
+    }
 }
