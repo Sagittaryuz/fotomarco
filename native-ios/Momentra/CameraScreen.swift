@@ -929,6 +929,8 @@ struct CameraScreen: View {
             cameraShareTask?.cancel()
             cameraShare = nil
             showMap = false
+            openMapAfterOptions = false
+            showCameraOptions = false
             showSettingsImport = false
             showAspectPanel = false
             selectedRecognizedText = nil
@@ -1774,7 +1776,7 @@ struct CameraScreen: View {
     }
 
     private var cameraSurfaceVisible: Bool {
-        scenePhase == .active && !showSettings && stampEditorSection == nil && !showOriginals && !showMap && !showSupportPanel &&
+        scenePhase == .active && !showSettings && !showCameraOptions && stampEditorSection == nil && !showOriginals && !showMap && !showSupportPanel &&
             !showAspectPanel && !showSettingsImport && selectedRecognizedText == nil && cameraShare == nil
     }
 
