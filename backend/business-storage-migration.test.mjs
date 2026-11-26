@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { createStorageMigration, applyVerifiedMigrationReceipt, canSwitchStorage } from './business-storage-migration.mjs';
 
 const sha256 = 'a'.repeat(64);
-const record = { recordId: 'capture-stamped', remoteItemId: 'old-file', folderId: 'old-folder', state: 'verified', byteCount: 25, sha256 };
-const readiness = { currentSource: 'old-drive', currentDestination: 'new-drive', permissionsVerified: true, writesQuiesced: true };
-const sourceState = { sourceSnapshotComplete: true, pendingUploads: 0 };
+const record = { organizationId: 'org', storageIdentity: 'old-drive', authorId: 'member', recordId: 'capture-stamped', remoteItemId: 'old-file', folderId: 'old-folder', state: 'verified', byteCount: 25, sha256 };
+const readiness = { organizationId: 'org', currentSource: 'old-drive', currentDestination: 'new-drive', permissionsVerified: true, writesQuiesced: true };
+const sourceState = { organizationId: 'org', sourceSnapshotComplete: true, pendingUploads: 0 };
 
 test('switch requires every verified copy, verified access and stopped writes', () => {
   const initial = createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [record], ...sourceState });
@@ -22,8 +22,9 @@ test('refuses incomplete source data, mismatched copies and changed receipts', (
   assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [{ ...record, state: 'uploading' }], ...sourceState }), /source-not-ready/);
   assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [record, record], ...sourceState }), /source-not-ready/);
   assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'old-drive', records: [], ...sourceState }), /invalid-migration/);
-  assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [], sourceSnapshotComplete: false, pendingUploads: 0 }), /invalid-migration/);
-  assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [], sourceSnapshotComplete: true, pendingUploads: 1 }), /invalid-migration/);
+  assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [], ...sourceState, sourceSnapshotComplete: false }), /invalid-migration/);
+  assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [], ...sourceState, pendingUploads: 1 }), /invalid-migration/);
+  assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [{ ...record, organizationId: 'other' }], ...sourceState }), /source-not-ready/);
   const initial = createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [record], ...sourceState });
   assert.throws(() => applyVerifiedMigrationReceipt(initial, null), /invalid-migration-receipt/);
   assert.equal(canSwitchStorage({ ...initial, items: [null] }, readiness), false);
