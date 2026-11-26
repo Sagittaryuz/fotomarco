@@ -4,7 +4,13 @@ import Foundation
 /// must never cause an older capture to be sent to a different account.
 struct CloudDeliveryPlan: Codable, Equatable, Sendable {
     enum Provider: String, Codable, Sendable { case googleDrive, oneDrive }
-    enum Phase: String, Codable, Sendable { case pending, uncertain, verified }
+    enum Phase: String, Codable, Sendable { case pending, uncertain, verified, duplicate }
+
+    struct OrganizationDedup: Codable, Equatable, Sendable {
+        let organizationID: UUID
+        let userID: String
+        var isValid: Bool { !userID.isEmpty && userID.utf8.count <= 512 && !userID.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }
+    }
 
     struct Destination: Codable, Hashable, Sendable {
         let provider: Provider
@@ -38,11 +44,16 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
             self.stampedID = stampedID
             phase = .verified
         }
+
+        mutating func markDuplicate() {
+            guard phase == .pending else { return }
+            phase = .duplicate
+        }
     }
 
     var isValidNewPlan: Bool {
         let destinations = deliveries.map(\.destination)
-        return (keepLocal || !destinations.isEmpty) && Set(destinations).count == destinations.count
+        return (keepLocal || !destinations.isEmpty) && (organizationDedup == nil || (keepLocal && organizationDedup?.isValid == true)) && Set(destinations).count == destinations.count
             && deliveries.allSatisfy {
                 $0.phase == .pending && $0.originalID == nil && $0.stampedID == nil
                     && Destination(provider: $0.destination.provider, accountHash: $0.destination.accountHash) != nil
@@ -51,13 +62,15 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
 
     let keepLocal: Bool
     private let keepOriginal: Bool?
+    let organizationDedup: OrganizationDedup?
     var keepsOriginal: Bool { keepOriginal ?? true }
     private(set) var deliveries: [Delivery]
 
-    init?(keepLocal: Bool, destinations: [Destination], keepOriginal: Bool = true) {
-        guard keepLocal || !destinations.isEmpty, Set(destinations).count == destinations.count else { return nil }
+    init?(keepLocal: Bool, destinations: [Destination], keepOriginal: Bool = true, organizationDedup: OrganizationDedup? = nil) {
+        guard (keepLocal || !destinations.isEmpty), (organizationDedup == nil || (keepLocal && organizationDedup?.isValid == true)), Set(destinations).count == destinations.count else { return nil }
         self.keepLocal = keepLocal
         self.keepOriginal = keepOriginal ? nil : false
+        self.organizationDedup = organizationDedup
         self.deliveries = destinations.map { Delivery(destination: $0) }
     }
 
@@ -72,14 +85,21 @@ struct CloudDeliveryPlan: Codable, Equatable, Sendable {
         deliveries[index].confirm(originalID: originalID, stampedID: stampedID)
     }
 
+    mutating func markDuplicate(destination: Destination) {
+        guard keepLocal, organizationDedup?.isValid == true,
+              let index = deliveries.firstIndex(where: { $0.destination == destination }) else { return }
+        deliveries[index].markDuplicate()
+    }
+
     /// This is only one precondition: file integrity and remote receipts must
     /// also be checked before any caller removes a full-resolution local file.
     var destinationsVerified: Bool {
         !deliveries.isEmpty && Set(deliveries.map(\.destination)).count == deliveries.count &&
         deliveries.allSatisfy { delivery in
-            delivery.phase == .verified && (keepsOriginal ? !(delivery.originalID ?? "").isEmpty : delivery.originalID == nil) &&
-            !(delivery.stampedID ?? "").isEmpty &&
-            Destination(provider: delivery.destination.provider, accountHash: delivery.destination.accountHash) != nil
+            Destination(provider: delivery.destination.provider, accountHash: delivery.destination.accountHash) != nil &&
+            ((delivery.phase == .duplicate && keepLocal && organizationDedup?.isValid == true && delivery.originalID == nil && delivery.stampedID == nil) ||
+            (delivery.phase == .verified && (keepsOriginal ? !(delivery.originalID ?? "").isEmpty : delivery.originalID == nil) &&
+            !(delivery.stampedID ?? "").isEmpty))
         }
     }
 }
