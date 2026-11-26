@@ -180,6 +180,8 @@ jobs:
           PHOTOMARK_BUSINESS_API: ${{ github.ref_name == 'feat/business-organizations-foundation' && vars.PHOTOMARK_BUSINESS_STAGING_API || vars.PHOTOMARK_BUSINESS_API }}
         run: python3 native-ios/scripts/configure-business-api.py "$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app/Info.plist"
       - name: Verify settings navigation and switch taps
+        id: settings_ui
+        continue-on-error: true
         working-directory: native-ios
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if "iPhone" in d["name"]))')
@@ -263,3 +265,6 @@ jobs:
           path: ${{ runner.temp }}/Momentra-simulator-previews/*.png
           if-no-files-found: error
           retention-days: 3
+      - name: Enforce settings interaction result
+        if: ${{ always() && steps.settings_ui.outcome == 'failure' }}
+        run: exit 1
