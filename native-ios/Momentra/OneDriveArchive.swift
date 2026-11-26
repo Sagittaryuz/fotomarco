@@ -300,7 +300,11 @@ struct OneDriveArchive {
         let observer = progress.map { ShareDownloadProgress(report: $0) }
         let (temporary, response) = try await Self.session.download(for: request, delegate: observer)
         let status = try Self.status(response)
-        if status == 200 { return try Self.checkedFile(temporary, byteCount: byteCount) }
+        if status == 200 {
+            let file = try Self.checkedFile(temporary, byteCount: byteCount)
+            progress?(1)
+            return file
+        }
         try? FileManager.default.removeItem(at: temporary)
         guard status == 302, let response = response as? HTTPURLResponse,
               let location = response.value(forHTTPHeaderField: "Location"),
@@ -312,7 +316,9 @@ struct OneDriveArchive {
             try? FileManager.default.removeItem(at: download)
             throw Failure.invalidResponse
         }
-        return try Self.checkedFile(download, byteCount: byteCount)
+        let file = try Self.checkedFile(download, byteCount: byteCount)
+        progress?(1)
+        return file
     }
 
     private static func checkedFile(_ url: URL, byteCount: Int64) throws -> URL {

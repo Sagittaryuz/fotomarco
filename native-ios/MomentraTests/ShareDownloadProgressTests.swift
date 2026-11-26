@@ -18,14 +18,16 @@ private final class ShareDownloadURLProtocol: URLProtocol {
 }
 
 final class ShareDownloadProgressTests: XCTestCase {
-    func testGoogleDriveDownloadWithProgressPreservesFile() async throws {
+    func testGoogleDriveDownloadReportsCompletionAfterFileIsAvailable() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ShareDownloadURLProtocol.self]
         let archive = GoogleDriveArchive(configuration: configuration)
-        let progress = expectation(description: "Download reports bytes")
+        // URLProtocol does not guarantee intermediate URLSessionDownloadDelegate
+        // callbacks. This checks the terminal event, not live network progress.
+        let progress = expectation(description: "Download reports completion")
         progress.assertForOverFulfill = false
         let file = try await archive.downloadFile(id: "file123", accessToken: "test-token") { value in
-            if value > 0 && value <= 1 { progress.fulfill() }
+            if value == 1 { progress.fulfill() }
         }
         defer { try? FileManager.default.removeItem(at: file) }
         XCTAssertEqual(try Data(contentsOf: file), ShareDownloadURLProtocol.body)

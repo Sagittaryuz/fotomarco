@@ -3,7 +3,7 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.59"
+    static let version = "0.1.60"
     static let items = [
         "As opções foram reorganizadas com ícones e grupos no estilo dos Ajustes do iPhone.",
         "O mapa da galeria abre com a vista de satélite selecionada.",

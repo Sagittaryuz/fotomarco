@@ -320,6 +320,7 @@ final class GoogleDriveArchive {
             try Self.check(response)
             let bytes = try location.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
             guard bytes > 0, bytes <= Self.maximumPhotoSize else { throw ArchiveError.invalidResponse }
+            progress?(1)
             return location
         } catch {
             try? FileManager.default.removeItem(at: location)
