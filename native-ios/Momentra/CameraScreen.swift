@@ -159,6 +159,7 @@ struct CameraScreen: View {
     @State private var showCameraOptions = false
     @State private var openMapAfterOptions = false
     @State private var cameraOptionsDetent: PresentationDetent = .medium
+    @State private var showingStyleEditor = false
     @State private var mapAppearance: StampLayout.MapAppearance = .satellite
     @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
@@ -255,10 +256,11 @@ struct CameraScreen: View {
                     .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                     NavigationLink {
                         CameraPhotoStylesView(selected: $photoStyle, tone: $styleTone, color: $styleColor, palette: $stylePalette)
-                            .onAppear { cameraOptionsDetent = .height(260) }
-                            .onDisappear { cameraOptionsDetent = .medium }
+                            .onAppear { showingStyleEditor = true; cameraOptionsDetent = .height(260) }
+                            .onDisappear { showingStyleEditor = false; cameraOptionsDetent = .medium }
                     } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyle != MomentraPhotoStyle.natural.rawValue || styleTone != 0 || styleColor != 0 || stylePalette != 100) }
                     .accessibilityIdentifier("camera.options.styles")
+                    .disabled(mode == .video)
                     Button { FotomarcoHaptics.play(.buttons); showGrid.toggle() } label: {
                         cameraOptionLabel("Grade", symbol: "grid", active: showGrid)
                     }
@@ -282,6 +284,7 @@ struct CameraScreen: View {
         .presentationDetents([.height(260), .medium, .large], selection: $cameraOptionsDetent)
         .presentationDragIndicator(.visible)
         .presentationBackground(.ultraThinMaterial)
+        .presentationBackgroundInteraction(showingStyleEditor ? .enabled(upThrough: .height(260)) : .disabled)
     }
 
     private var cameraHeader: some View {
@@ -791,6 +794,22 @@ struct CameraScreen: View {
                     .background(Color.black)
                     }
                 }.foregroundStyle(.white)
+                    .allowsHitTesting(!showingStyleEditor)
+                if showingStyleEditor && mode == .photo {
+                    let diameter = min(94, geometry.size.width * 0.25)
+                    Button {
+                        if countdown > 0 { cancelCountdown() } else { schedulePhoto() }
+                    } label: {
+                        Circle().fill(.white).frame(width: diameter - 14, height: diameter - 14)
+                            .frame(width: diameter, height: diameter)
+                            .overlay(Circle().stroke(.white, lineWidth: 3))
+                            .contentShape(Circle())
+                    }
+                    .disabled(camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording)
+                    .accessibilityLabel(countdown > 0 ? "Cancelar temporizador" : "Fotografar")
+                    .accessibilityIdentifier("camera.styles.shutter")
+                    .position(x: geometry.size.width / 2, y: max(diameter / 2, geometry.size.height - 325))
+                }
                 if showAspectPanel && !camera.isRecording {
                     Color.clear
                         .contentShape(Rectangle())
@@ -943,6 +962,7 @@ struct CameraScreen: View {
             showMap = false
             openMapAfterOptions = false
             showCameraOptions = false
+            showingStyleEditor = false
             showSettingsImport = false
             showAspectPanel = false
             selectedRecognizedText = nil

@@ -105,6 +105,7 @@ final class SettingsNavigationTests: XCTestCase {
         styles.tap()
         let customize = app.buttons["camera.styles.customize"]
         XCTAssertTrue(customize.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["camera.styles.shutter"].exists)
         customize.tap()
         XCTAssertTrue(app.sliders["Paleta"].waitForExistence(timeout: 5))
         let stylesScreenshot = XCTAttachment(screenshot: app.screenshot())
