@@ -103,6 +103,9 @@ actor CloudArchiveDelivery {
                     completedBytes += bytesPerDestination
                     continue
                 }
+                if item.plan.organizationDedup != nil && delivery.phase == .uncertain {
+                    throw CocoaError(.fileReadUnknown)
+                }
                 if let context = item.plan.organizationDedup, delivery.phase == .pending {
                     if organizationStorageIdentity == nil {
                         organizationStorageIdentity = try await Self.businessStorageIdentity(for: context)
