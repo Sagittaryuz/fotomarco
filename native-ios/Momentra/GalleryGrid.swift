@@ -287,7 +287,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             guard let collection else { return false }
             if let swipe = cameraSwipeRecognizer, gestureRecognizer === swipe {
                 let velocity = swipe.velocity(in: collection)
-                return !parent.selecting && parent.dragToCamera != nil && -velocity.x > abs(velocity.y) * 1.35
+                return !parent.selecting && parent.dragToCamera != nil && velocity.x > abs(velocity.y) * 1.35
             }
             if gestureRecognizer is UIPinchGestureRecognizer { return !parent.selecting }
             guard collection.indexPathForItem(at: gestureRecognizer.location(in: collection)) != nil else { return false }
@@ -299,7 +299,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         }
         @objc func cameraSwipe(_ swipe: UIPanGestureRecognizer) {
             // The collection moves during this gesture. Measure the finger in fixed window coordinates.
-            let distance = -swipe.translation(in: swipe.view?.window).x
+            let distance = swipe.translation(in: swipe.view?.window).x
             switch swipe.state {
             case .began, .changed: parent.dragToCamera?(distance, false)
             case .ended: parent.dragToCamera?(distance, true)

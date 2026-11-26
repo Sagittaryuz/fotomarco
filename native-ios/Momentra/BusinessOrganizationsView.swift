@@ -2,7 +2,6 @@ import SwiftUI
 
 struct BusinessOrganizationsView: View {
     @ObservedObject var profiles: StampProfilesStore
-    var initialOrganization: BusinessAPIClient.OrganizationSummary? = nil
     @ObservedObject private var identity = BusinessIdentity.shared
     @State private var organizations: [BusinessAPIClient.OrganizationSummary] = []
     @State private var busy = false
@@ -17,9 +16,7 @@ struct BusinessOrganizationsView: View {
 
     var body: some View {
         Group {
-            if identity.userID != nil, let initialOrganization {
-                organizationMenu(initialOrganization)
-            } else if identity.userID == nil {
+            if identity.userID == nil {
                 BusinessAccountView()
             } else {
                 List {
@@ -48,10 +45,10 @@ struct BusinessOrganizationsView: View {
                             }.disabled(!identity.emailVerified || busy)
                         }
                     }
-                }
+                }.listStyle(.insetGrouped)
             }
         }
-        .navigationTitle(initialOrganization?.name ?? "Organização e equipe")
+        .navigationTitle("Organização e equipe")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(identity.userID ?? "")-\(identity.emailVerified)") { await load() }
         .refreshable { await load() }
@@ -64,6 +61,11 @@ struct BusinessOrganizationsView: View {
     @ViewBuilder private func organizationMenu(_ org: BusinessAPIClient.OrganizationSummary) -> some View {
         if let client {
             List {
+                if org.role == "owner" {
+                    NavigationLink("Armazenamento em nuvem") {
+                        BusinessStorageSelectionView(api: client, organizationID: org.id)
+                    }
+                }
                 NavigationLink("Fotos da organização") {
                     BusinessTeamPhotosView(api: client, organizationID: org.id)
                 }
@@ -80,9 +82,6 @@ struct BusinessOrganizationsView: View {
                             accessToken: { try await identity.verifiedToken() })
                     }
                     if org.role == "owner" {
-                        NavigationLink("Armazenamento compartilhado") {
-                            BusinessStorageSelectionView(api: client, organizationID: org.id)
-                        }
                         NavigationLink("E-mail de convites") {
                             BusinessOrganizationEmailView(api: client, organizationID: org.id)
                         }
@@ -96,7 +95,7 @@ struct BusinessOrganizationsView: View {
                 Text(org.captureReady == true ? "O carimbo da equipe pode ser selecionado na câmera." :
                      "A pasta da equipe ainda precisa ser configurada para habilitar capturas.")
                     .font(.footnote).foregroundStyle(.secondary)
-            }.navigationTitle(org.name)
+            }.listStyle(.insetGrouped).navigationTitle(org.name)
         }
     }
 

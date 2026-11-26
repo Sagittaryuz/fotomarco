@@ -3,12 +3,12 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.63"
+    static let version = "0.1.64"
     static let items = [
-        "As opções mostram o perfil e o acesso ao espaço corporativo no primeiro cartão.",
-        "O espaçamento das opções ficou mais próximo dos Ajustes do iPhone.",
-        "O zoom selecionado voltou a usar um círculo escuro simples.",
-        "O mapa do carimbo ganhou uma moldura branca."
+        "Os espaçamentos das configurações foram ajustados ao padrão dos menus do iPhone.",
+        "O espaço corporativo abre a lista de organizações disponíveis.",
+        "A seleção de armazenamento em nuvem aparece no início da gestão da organização.",
+        "A galeria fica à direita da câmera e seus gestos acompanham a nova posição."
     ]
 
     static func items(for version: String) -> [String] {

@@ -52,7 +52,7 @@ struct OriginalsView: View {
     @State private var galleryExit: ExitDirection?
     @State private var galleryFooterHeight: CGFloat = 74
 
-    private enum ExitDirection { case left, down }
+    private enum ExitDirection { case right, down }
 
     private enum Tab: String, CaseIterable {
         case captures = "Capturas", favorites = "Favoritos", map = "Mapa", trash = "Lixeira"
@@ -101,7 +101,7 @@ struct OriginalsView: View {
             galleryContent
                 .blur(radius: reduceMotion ? 0 : !galleryVisible || galleryExit != nil ? 16 : min(9, distance / 20))
                 .opacity(reduceMotion ? 1 : !galleryVisible || galleryExit != nil ? 0 : dragOpacity)
-                .offset(x: galleryExit == .left || (!galleryVisible && !reduceMotion) ? -geometry.size.width - 30 : galleryDrag.width,
+                .offset(x: galleryExit == .right || (!galleryVisible && !reduceMotion) ? geometry.size.width + 30 : galleryDrag.width,
                         y: galleryExit == .down ? geometry.size.height + 30 : galleryDrag.height)
                 .allowsHitTesting(galleryExit == nil)
         }
@@ -142,14 +142,14 @@ struct OriginalsView: View {
                 } else if items.isEmpty {
                     emptyState
                         .contentShape(Rectangle())
-                        .simultaneousGesture(gallerySwipe(toward: .left))
+                        .simultaneousGesture(gallerySwipe(toward: .right))
                 } else {
                     GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
                                 contentVersion: projectionVersion, newestScrollRequest: scrollRequest,
                                 bottomInset: galleryFooterHeight,
                                 tile: tile, open: open, longPress: tab == .trash ? nil : { shareItems([$0]) },
                                 reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
-                                dragToCamera: { distance, ended in trackSwipe(distance, toward: .left, ended: ended) },
+                                dragToCamera: { distance, ended in trackSwipe(distance, toward: .right, ended: ended) },
                                 userStartedScrolling: { openedAtNewest = false })
                         .accessibilityIdentifier("momentra-gallery-grid")
                 }
@@ -493,8 +493,8 @@ struct OriginalsView: View {
     }
 
     private func swipeDistance(_ translation: CGSize, toward direction: ExitDirection) -> CGFloat {
-        let primary = direction == .left ? -translation.width : translation.height
-        let cross = direction == .left ? translation.height : translation.width
+        let primary = direction == .right ? translation.width : translation.height
+        let cross = direction == .right ? translation.height : translation.width
         return primary > abs(cross) * 1.35 ? primary : 0
     }
 
@@ -505,7 +505,7 @@ struct OriginalsView: View {
             else { withAnimation(.easeOut(duration: 0.19)) { galleryDrag = .zero } }
         } else if !reduceMotion {
             let movement = min(220, max(0, distance) * 0.76)
-            galleryDrag = direction == .left ? CGSize(width: -movement, height: 0) : CGSize(width: 0, height: movement)
+            galleryDrag = direction == .right ? CGSize(width: movement, height: 0) : CGSize(width: 0, height: movement)
         }
     }
 

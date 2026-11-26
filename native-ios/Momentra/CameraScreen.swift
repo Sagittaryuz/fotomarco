@@ -9,7 +9,7 @@ import CoreMotion
 
 enum CameraGallerySwipe {
     static func qualifies(_ translation: CGSize) -> Bool {
-        translation.width >= 82 && translation.width > abs(translation.height) * 1.35
+        translation.width <= -82 && -translation.width > abs(translation.height) * 1.35
     }
 }
 
@@ -456,8 +456,8 @@ struct CameraScreen: View {
                                       !camera.isRecording, !camera.isFinishingRecording, !camera.isCapturing,
                                       countdown == 0 else { return }
                                 let movement = gesture.translation
-                                guard movement.width > 0, movement.width > abs(movement.height) * 1.35 else { return }
-                                if !reduceMotion { gallerySwipeProgress = min(1, movement.width / 180) }
+                                guard movement.width < 0, -movement.width > abs(movement.height) * 1.35 else { return }
+                                if !reduceMotion { gallerySwipeProgress = min(1, -movement.width / 180) }
                             }
                             .onEnded { gesture in
                                 let shouldOpen = cameraSurfaceVisible && !showingZoomDial && pinchZoom == nil &&
@@ -648,6 +648,15 @@ struct CameraScreen: View {
                         Color.clear.frame(height: 190)
                     } else {
                     HStack(spacing: 10) {
+                        Button { FotomarcoHaptics.play(.cameraFlip); camera.flipCamera() } label: {
+                            Image(systemName: "camera.rotate").font(.title2).frame(width: 52, height: 52)
+                                .background(.white.opacity(0.10), in: Circle())
+                        }
+                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording || countdown > 0)
+                        .accessibilityLabel("Trocar câmera")
+                        Spacer(minLength: 0)
+                        captureModePicker
+                        Spacer(minLength: 0)
                         Button { FotomarcoHaptics.play(.buttons); openGallery() } label: {
                             ZStack {
                                 if sessionCaptureCount > 3 {
@@ -702,15 +711,6 @@ struct CameraScreen: View {
                                 Button(sessionCaptureCount > 0 ? "Compartilhar capturas da sessão" : "Compartilhar foto exibida", action: shareCameraThumbnail)
                             }
                         }
-                        Spacer(minLength: 0)
-                        captureModePicker
-                        Spacer(minLength: 0)
-                        Button { FotomarcoHaptics.play(.cameraFlip); camera.flipCamera() } label: {
-                            Image(systemName: "camera.rotate").font(.title2).frame(width: 52, height: 52)
-                                .background(.white.opacity(0.10), in: Circle())
-                        }
-                        .disabled(!camera.ready || camera.isCapturing || camera.isSwitching || camera.isRecording || camera.isFinishingRecording || countdown > 0)
-                        .accessibilityLabel("Trocar câmera")
                     }
                     .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 12)
                     .background(Color.black)
@@ -1192,8 +1192,9 @@ struct CameraScreen: View {
             Text(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: 32)
+        .frame(minHeight: 50)
         .contentShape(Rectangle())
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
     }
 
     private var settingsSheet: some View {
@@ -1221,16 +1222,14 @@ struct CameraScreen: View {
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.padding(.vertical, 4).contentShape(Rectangle())
                         }
-                        if let organization = settingsOrganizations?.first {
-                            NavigationLink { BusinessOrganizationsView(profiles: stampProfiles, initialOrganization: organization).onAppear { FotomarcoHaptics.play(.buttons) } } label: {
+                        if settingsOrganizations?.isEmpty == false {
+                            NavigationLink { BusinessOrganizationsView(profiles: stampProfiles).onAppear { FotomarcoHaptics.play(.buttons) } } label: {
                                 HStack(spacing: 14) {
                                     Image(systemName: "building.2.fill").foregroundStyle(.white)
                                         .frame(width: 32, height: 32).background(.blue.gradient, in: Circle()).accessibilityHidden(true)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Espaço corporativo")
-                                        Text(organization.name).font(.caption).foregroundStyle(.secondary)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.frame(minHeight: 32).contentShape(Rectangle())
+                                    Text("Espaço corporativo").frame(maxWidth: .infinity, alignment: .leading)
+                                }.frame(minHeight: 50).contentShape(Rectangle())
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                             }
                         } else if businessIdentity.userID == nil || settingsOrganizations?.isEmpty == true {
                             NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: {
@@ -1298,7 +1297,8 @@ struct CameraScreen: View {
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            }.frame(minHeight: 32).contentShape(Rectangle())
+                            }.frame(minHeight: 50).contentShape(Rectangle())
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         }
                         NavigationLink {
                             Form {
@@ -1344,6 +1344,7 @@ struct CameraScreen: View {
                     }
                 }
                 .toggleStyle(DirectionalSwitchStyle())
+                .environment(\.defaultMinListRowHeight, 50)
                 .navigationTitle("Configurações")
                 .navigationBarTitleDisplayMode(.large)
                 .task(id: "\(businessIdentity.userID ?? "")-\(businessIdentity.emailVerified)") {

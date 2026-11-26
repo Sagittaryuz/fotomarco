@@ -22,6 +22,7 @@ struct DirectionalSwitchStyle: ToggleStyle {
                     .labelsHidden()
                     .fixedSize(horizontal: true, vertical: false)
             }
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .onChange(of: configuration.isOn) { _, _ in
                     if isEnabled { FotomarcoHaptics.play(.switches) }
                 }

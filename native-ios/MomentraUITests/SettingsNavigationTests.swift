@@ -3,7 +3,7 @@ import XCTest
 final class SettingsNavigationTests: XCTestCase {
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.63"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.64"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -26,6 +26,10 @@ final class SettingsNavigationTests: XCTestCase {
             XCTAssertTrue(row.waitForExistence(timeout: 5), "Linha ausente: \(title)")
             row.tap()
             XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "Linha não abriu: \(title)")
+            let submenuScreenshot = XCTAttachment(screenshot: app.screenshot())
+            submenuScreenshot.name = "Configurações - \(title)"
+            submenuScreenshot.lifetime = .keepAlways
+            add(submenuScreenshot)
             if title == "Câmera" {
                 let label = app.buttons["Grade"]
                 XCTAssertTrue(label.waitForExistence(timeout: 5))

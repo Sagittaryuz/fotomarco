@@ -21,6 +21,7 @@ struct BusinessStorageSelectionView: View {
                 Text("Escolha o armazenamento das fotos da organização")
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("Armazenamento")
         .navigationBarTitleDisplayMode(.inline)
     }

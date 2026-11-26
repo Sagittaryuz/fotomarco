@@ -51,6 +51,7 @@ struct BusinessMembersView: View {
                 Button("Tentar novamente") { Task { await load() } }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("Membros e acesso")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: organizationID) { await load() }
