@@ -255,6 +255,8 @@ struct CameraScreen: View {
                     Button { FotomarcoHaptics.play(.buttons); showGrid.toggle() } label: {
                         cameraOptionLabel("Grade", symbol: "grid", active: showGrid)
                     }
+                    .accessibilityIdentifier("camera.options.grid")
+                    .accessibilityValue(showGrid ? "Ativada" : "Desativada")
                     Button {
                         FotomarcoHaptics.play(.buttons)
                         mapLocation = makeSnapshot(at: Date()).location
@@ -262,6 +264,7 @@ struct CameraScreen: View {
                         openMapAfterOptions = true
                         showCameraOptions = false
                     } label: { cameraOptionLabel("Mapa", symbol: "map") }
+                    .accessibilityIdentifier("camera.options.map")
                 }.padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 24)
             }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { showCameraOptions = false } } }
@@ -686,6 +689,8 @@ struct CameraScreen: View {
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
                         .accessibilityLabel("Opções da câmera")
+                        .accessibilityIdentifier("camera.options.open")
+                        .accessibilityValue(cameraOptionsActive ? "Ajustes ativos" : "Sem ajustes ativos")
                         .opacity(camera.isRecording ? 0 : 1)
                         .overlay {
                             if camera.isRecording && quickRecording {

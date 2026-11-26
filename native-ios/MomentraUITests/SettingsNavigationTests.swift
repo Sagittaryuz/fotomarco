@@ -3,7 +3,7 @@ import XCTest
 final class SettingsNavigationTests: XCTestCase {
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.64"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -64,5 +64,38 @@ final class SettingsNavigationTests: XCTestCase {
             }
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
+    }
+
+    func testCameraOptionsTrayAndMap() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65", "-native.camera.grid", "NO"]
+        addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
+            for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
+                let button = alert.buttons[title]
+                if button.exists { button.tap(); return true }
+            }
+            return false
+        }
+        app.launch()
+        let options = app.buttons["camera.options.open"]
+        XCTAssertTrue(options.waitForExistence(timeout: 30))
+        options.tap()
+        let grid = app.buttons["camera.options.grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 5))
+        XCTAssertEqual(grid.value as? String, "Desativada")
+        grid.tap()
+        XCTAssertEqual(grid.value as? String, "Ativada")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Bandeja da câmera"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Fechar"].firstMatch.tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertEqual(options.value as? String, "Ajustes ativos")
+        options.tap()
+        app.buttons["camera.options.map"].tap()
+        XCTAssertTrue(app.navigationBars["Mapa"].waitForExistence(timeout: 10))
+        app.buttons["Fechar"].firstMatch.tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
     }
 }
