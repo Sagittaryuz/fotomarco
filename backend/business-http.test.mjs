@@ -58,6 +58,13 @@ test('OneDrive connection exposes only allowlisted diagnostics, never provider d
   const unknown = await handler(request(path, body));
   assert.equal(unknown.status, 503);
   assert.deepEqual(await unknown.json(), { error: 'unavailable' });
+  for (const [failure, expectedCode] of [['firestore-http-403', 'business-database-unavailable'],
+    ['server-token-unavailable', 'business-database-unavailable'], ['invalid-vault-key', 'business-configuration-unavailable']]) {
+    reason = failure;
+    const response = await handler(request(path, body));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: expectedCode });
+  }
 });
 
 test('reconciliation requires an authenticated caller and an empty request', async () => {
