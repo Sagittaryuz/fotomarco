@@ -106,7 +106,7 @@ export class BusinessService {
           const captureReady = member.storageStatus === 'granted' && typeof member.oneDriveFolderId === 'string' && !!member.oneDriveFolderId &&
             typeof member.oneDriveParentId === 'string' && !!member.oneDriveParentId &&
             typeof member.oneDriveMemberIdentityId === 'string' && !!member.oneDriveMemberIdentityId;
-          const storage = captureReady ? await tx.oneDriveCredential(id) : null;
+          const storage = captureReady && identity.emailVerified === true ? await tx.oneDriveCredential(id) : null;
           const storageIdentity = storage?.driveId ? await storageFingerprint('oneDrive', storage.driveId, identity.uid) : null;
           organizations.push({ id, name: org.name, role: member.role, photoAssetId: org.photoAssetId ?? '', captureReady, profileReady: !!latest,
             ...(storageIdentity ? { storageIdentity } : {}) });

@@ -243,8 +243,9 @@ test('ready members receive only a user-scoped storage pseudonym', async () => {
     oneDriveFolderId: 'folder', oneDriveParentId: 'parent', oneDriveMemberIdentityId: 'member-graph' };
   records.set('user-A', { ...active, userId: 'user-A' });
   records.set('user-B', { ...active, userId: 'user-B' });
-  const first = (await service.myOrganizations({ uid: 'user-A' })).organizations[0];
-  const second = (await service.myOrganizations({ uid: 'user-B' })).organizations[0];
+  assert.equal((await service.myOrganizations({ uid: 'user-A', emailVerified: false })).organizations[0].storageIdentity, undefined);
+  const first = (await service.myOrganizations({ uid: 'user-A', emailVerified: true })).organizations[0];
+  const second = (await service.myOrganizations({ uid: 'user-B', emailVerified: true })).organizations[0];
   assert.equal(first.storageIdentity, 'dec8d46104fcfc5f754c8e94a8afcc5e7d029f413995c47e924270686f8a0234');
   assert.notEqual(first.storageIdentity, second.storageIdentity);
   assert.ok(!JSON.stringify(first).includes('drive-A'));
