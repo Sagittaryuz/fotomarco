@@ -120,6 +120,12 @@ targets:
     sources: [MomentraTests]
     dependencies:
       - target: Momentra
+  MomentraUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [MomentraUITests]
+    dependencies:
+      - target: Momentra
 schemes:
   Momentra:
     build:
@@ -128,3 +134,10 @@ schemes:
         MomentraTests: [test]
     test:
       targets: [MomentraTests]
+  MomentraSettingsUI:
+    build:
+      targets:
+        Momentra: all
+        MomentraUITests: [test]
+    test:
+      targets: [MomentraUITests]
