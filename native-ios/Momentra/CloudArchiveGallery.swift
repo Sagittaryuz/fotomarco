@@ -975,7 +975,7 @@ private struct ArchiveGalleryPager: View {
                     LabeledContent("Origem", value: provider)
                     LabeledContent("Versão", value: current.versionLabel)
                     if let date = current.date {
-                        LabeledContent("Data", value: date.formatted(date: .abbreviated, time: .shortened))
+                        LabeledContent("Data", value: date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(GalleryDateSelection.brazilianLocale)))
                     }
                     if let profile = current.profile, !profile.name.isEmpty {
                         LabeledContent("Perfil", value: profile.name)

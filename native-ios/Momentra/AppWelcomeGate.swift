@@ -3,10 +3,11 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.56"
+    static let version = "0.1.57"
     static let items = [
         "O mapa da galeria abre com a vista de satélite selecionada.",
         "O calendário da galeria usa português do Brasil e um botão Liquid Glass.",
+        "As áreas de toque dos interruptores das configurações foram ajustadas.",
         "O compartilhamento mostra o progresso de preparação das fotos durante o download, quando disponível."
     ]
 

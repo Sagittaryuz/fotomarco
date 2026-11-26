@@ -11,6 +11,11 @@ final class GalleryDateFilterTests: XCTestCase {
         XCTAssertEqual(calendar.timeZone.identifier, source.timeZone.identifier)
         XCTAssertEqual(calendar.weekdaySymbols.first?.lowercased(), "domingo")
         XCTAssertTrue(calendar.weekdaySymbols.contains { $0.lowercased().contains("segunda") })
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 12)))
+        var format = Date.FormatStyle().weekday(.wide).locale(GalleryDateSelection.brazilianLocale)
+        format.timeZone = calendar.timeZone
+        let formatted = day.formatted(format)
+        XCTAssertEqual(formatted.lowercased(), "sexta-feira")
     }
 
     func testOneDayTwoDaysAndStartingANewRange() throws {

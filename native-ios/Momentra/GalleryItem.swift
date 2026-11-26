@@ -164,7 +164,7 @@ struct GalleryItem: Identifiable {
             return nil
         }
         return ([isVideo ? "Vídeo" : "Foto", displaySource, profile?.name ?? "",
-                 date?.formatted(date: .long, time: .omitted) ?? ""] + storageBadges.map(\.label) + names)
+                 date?.formatted(Date.FormatStyle(date: .long, time: .omitted).locale(GalleryDateSelection.brazilianLocale)) ?? ""] + storageBadges.map(\.label) + names)
             .joined(separator: " ")
     }
 

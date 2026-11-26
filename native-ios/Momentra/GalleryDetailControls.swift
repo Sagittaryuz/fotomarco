@@ -49,7 +49,7 @@ struct GalleryDetailHeader<Actions: View>: View {
     private func dayLabel(_ date: Date) -> String {
         if Calendar.current.isDateInToday(date) { return "Hoje" }
         if Calendar.current.isDateInYesterday(date) { return "Ontem" }
-        return date.formatted(date: .abbreviated, time: .omitted)
+        return date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(GalleryDateSelection.brazilianLocale))
     }
 }
 

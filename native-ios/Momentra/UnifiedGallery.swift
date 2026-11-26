@@ -275,7 +275,7 @@ struct OriginalsView: View {
                     Text(total == 1 ? "1 item" : "\(total.formatted()) itens")
                         .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Text(latest.map { (Calendar.current.isDateInToday($0) ? "Hoje · " : "") +
-                         $0.formatted(date: .abbreviated, time: .omitted) } ?? " ")
+                         $0.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(GalleryDateSelection.brazilianLocale)) } ?? " ")
                         .font(.caption2).foregroundStyle(.secondary)
                         .accessibilityHidden(latest == nil)
                 }

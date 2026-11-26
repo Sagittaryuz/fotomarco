@@ -263,7 +263,7 @@ private struct GalleryItemInformation: View {
         Form {
             LabeledContent("Origem", value: item.displaySource)
             LabeledContent("Tipo", value: item.isVideo ? "Vídeo" : "Foto")
-            if let date = item.date { LabeledContent("Data", value: date.formatted(date: .abbreviated, time: .shortened)) }
+            if let date = item.date { LabeledContent("Data", value: date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(GalleryDateSelection.brazilianLocale))) }
             if let profile = item.profile { LabeledContent("Perfil", value: profile.name) }
             if let originalDate = details?.originalDate { LabeledContent("Data original", value: originalDate) }
             if let dimensions = details?.dimensions { LabeledContent("Dimensões", value: dimensions) }
