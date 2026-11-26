@@ -143,13 +143,13 @@ struct GalleryCaptureMap: View {
                     }
                     .padding(8)
                 }
+                .accessibilityIdentifier("gallery.map.photos")
+                .accessibilityLabel("Fotos no mapa")
                 .frame(height: 68)
                 .modifier(GalleryControlSurface(rounded: true))
                 .padding(.horizontal, 12)
                 .padding(.bottom, max(8, bottomInset + 8))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .accessibilityIdentifier("gallery.map.photos")
-                .accessibilityLabel("Fotos no mapa")
             }
         }
         .onAppear {

@@ -47,7 +47,12 @@ final class CameraStylePreviewRenderer {
         if changed { settings.generation += 1 }
         let target = layer
         lock.unlock()
-        if changed { target?.opacity = 0 }
+        if changed {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            target?.opacity = 0
+            CATransaction.commit()
+        }
         return active
     }
 
@@ -73,7 +78,9 @@ final class CameraStylePreviewRenderer {
             context.render(image, to: drawable.texture, commandBuffer: command,
                            bounds: CGRect(origin: .zero, size: size), colorSpace: self.colorSpace)
             command.present(drawable)
-            command.addCompletedHandler { [weak self, weak target] buffer in
+            command.addCompletedHandler { [weak self, weak target, pixelBuffer] buffer in
+                // Keep the camera buffer alive until the GPU has finished reading it.
+                _ = pixelBuffer
                 guard let self else { return }
                 self.inFlight.signal()
                 guard buffer.status == .completed else { return }
