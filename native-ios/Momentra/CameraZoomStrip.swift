@@ -22,13 +22,7 @@ struct CameraZoomStrip: View {
                         let selected = index == selectedIndex
                         let label = CameraZoomSelection.label(selected ? zoom : preset)
                         Button { select(preset) } label: {
-                            Text(selected ? label + "×" : label)
-                                .font(.subheadline.weight(.medium)).monospacedDigit()
-                                .foregroundStyle(selected ? Color.yellow : Color.white)
-                                .lineLimit(1).minimumScaleFactor(0.65)
-                                .frame(width: step, height: 44)
-                                .background(selected ? Color.black.opacity(0.58) : .clear, in: Circle())
-                                .contentShape(Rectangle())
+                            zoomLabel(selected ? label + "×" : label, selected: selected, width: step)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Zoom \(preset == 0.5 ? "meio" : CameraZoomSelection.label(preset)) vezes")
@@ -41,6 +35,19 @@ struct CameraZoomStrip: View {
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedIndex)
             }
             .frame(height: 44)
+        }
+    }
+
+    @ViewBuilder private func zoomLabel(_ text: String, selected: Bool, width: CGFloat) -> some View {
+        let label = Text(text)
+            .font(.subheadline.weight(.medium)).monospacedDigit()
+            .lineLimit(1).minimumScaleFactor(0.65)
+            .frame(width: width, height: 44)
+            .contentShape(Rectangle())
+        if selected {
+            label.modifier(GalleryControlSurface(rounded: true, tint: .yellow))
+        } else {
+            label.foregroundStyle(.white)
         }
     }
 }

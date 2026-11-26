@@ -308,7 +308,7 @@ struct CameraScreen: View {
                 } label: {
                     Text(directUpdate.busy ? "Preparando atualização…" : "Atualização \(version) disponível")
                         .font(.caption.bold()).padding(.horizontal, 12).frame(minHeight: 44)
-                        .background(.black.opacity(0.75), in: Capsule())
+                        .modifier(GalleryControlSurface(rounded: true, tint: .white))
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -516,7 +516,7 @@ struct CameraScreen: View {
                             ProfileLayoutIcon()
                                 .frame(width: 29, height: 29)
                                 .frame(width: 54, height: 54)
-                                .background(.black.opacity(0.5), in: Circle())
+                                .modifier(GalleryControlSurface(rounded: true, tint: .white))
                                 .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
                                 .padding(8)
                                 .contentShape(Rectangle())
@@ -591,7 +591,7 @@ struct CameraScreen: View {
                         } label: {
                             Image(systemName: "map").font(.title2)
                                 .frame(width: 54, height: 54)
-                                .background(.black.opacity(0.5), in: Circle())
+                                .modifier(GalleryControlSurface(rounded: true, tint: .white))
                                 .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
