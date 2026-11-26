@@ -125,6 +125,7 @@ struct CloudArchiveJournal {
         let item = try JSONDecoder().decode(Capture.self, from: Data(contentsOf: path(id)))
         let destinations = item.plan.deliveries.map(\.destination)
         guard id == item.id, Self.validExtension(item.originalExtension), !destinations.isEmpty,
+              item.plan.organizationDedup == nil || (item.plan.keepLocal && item.plan.organizationDedup?.isValid == true),
               let originalName = CloudArchiveFilename(item.remoteName(stamped: false)),
               originalName.captureID == id, originalName.isOriginal,
               item.remoteName(stamped: false).hasSuffix("." + item.originalExtension),

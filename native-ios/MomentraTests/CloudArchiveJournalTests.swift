@@ -2,6 +2,24 @@ import XCTest
 @testable import Momentra
 
 final class CloudArchiveJournalTests: XCTestCase {
+    func testBusinessDedupJournalCannotDisableLocalRetention() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let journal = CloudArchiveJournal(root: root)
+        let id = UUID()
+        let destination = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: String(repeating: "a", count: 64)))
+        let context = CloudDeliveryPlan.OrganizationDedup(organizationID: UUID(), userID: "user-A")
+        let plan = try XCTUnwrap(CloudDeliveryPlan(keepLocal: true, destinations: [destination], organizationDedup: context))
+        try journal.enqueue(id: id, date: Date(), originalExtension: "jpg", plan: plan)
+        let encoded = try JSONEncoder().encode(journal.read(id))
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var modifiedPlan = try XCTUnwrap(object["plan"] as? [String: Any])
+        modifiedPlan["keepLocal"] = false
+        object["plan"] = modifiedPlan
+        let corrupted = try JSONDecoder().decode(CloudArchiveJournal.Capture.self, from: JSONSerialization.data(withJSONObject: object))
+        try journal.write(corrupted)
+        XCTAssertThrowsError(try journal.read(id))
+    }
     func testRenamedArchivePreservesIdentityAndIsIdempotent() throws {
         let id = UUID()
         let date = Date(timeIntervalSince1970: 1234)
