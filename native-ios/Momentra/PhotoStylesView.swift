@@ -1,5 +1,80 @@
 import SwiftUI
 
+/// Camera tray editor; changes are stored immediately and frozen for each capture.
+struct CameraPhotoStylesView: View {
+    @Binding var selected: String
+    @Binding var tone: Double
+    @Binding var color: Double
+    @Binding var palette: Double
+    @State private var customizing = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            if customizing {
+                Text("TOM \(Int(tone))   COR \(Int(color))   PALETA \(Int(palette))")
+                    .font(.caption.weight(.semibold)).monospacedDigit()
+                GeometryReader { geometry in
+                    let side = min(geometry.size.width, geometry.size.height)
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(LinearGradient(colors: [.white.opacity(0.4), .blue.opacity(0.35), .black.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        Circle().fill(.white).frame(width: 16, height: 16)
+                            .position(x: side * CGFloat((color + 100) / 200), y: side * CGFloat((100 - tone) / 200))
+                    }
+                    .frame(width: side, height: side)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                        guard side > 0 else { return }
+                        color = max(-100, min(100, Double(value.location.x / side) * 200 - 100)).rounded()
+                        tone = max(-100, min(100, 100 - Double(value.location.y / side) * 200)).rounded()
+                    })
+                    .accessibilityLabel("Ajustar tom e cor")
+                }.frame(width: 144, height: 144)
+                HStack {
+                    Image(systemName: "minus")
+                    Slider(value: $palette, in: 0...200, step: 1).tint(.yellow)
+                        .accessibilityLabel("Paleta")
+                    Image(systemName: "plus")
+                }.padding(.horizontal, 32)
+                Button("Redefinir") { tone = 0; color = 0; palette = 100 }
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Voltar aos estilos") { withAnimation { customizing = false } }
+            } else {
+                Text(selected.uppercased()).font(.headline).tracking(1)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(MomentraPhotoStyle.allCases) { style in
+                            Button {
+                                FotomarcoHaptics.play(.buttons)
+                                selected = style.rawValue
+                            } label: {
+                                VStack(spacing: 5) {
+                                    StylePreview(style: style)
+                                        .frame(width: 74, height: 74)
+                                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(selected == style.rawValue ? .yellow : .clear, lineWidth: 2))
+                                    Text(style.rawValue).font(.caption2).foregroundStyle(.white)
+                                }
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding(.horizontal, 16)
+                }
+                Button("Personalizar") { withAnimation { customizing = true } }
+                    .accessibilityIdentifier("camera.styles.customize")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 18).padding(.vertical, 9)
+                    .background(.black.opacity(0.5), in: Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(.white)
+        .navigationTitle("Estilos")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .background(Color.clear)
+    }
+}
+
 struct PhotoStylesView: View {
     @Binding var selected: String
     @State private var candidate: MomentraPhotoStyle = .natural

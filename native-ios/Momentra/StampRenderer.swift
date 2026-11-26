@@ -6,6 +6,14 @@ import CoreImage
 import CoreText
 import UniformTypeIdentifiers
 
+struct PhotoStyleAdjustments: Equatable {
+    var tone: Double = 0
+    var color: Double = 0
+    var palette: Double = 100
+
+    var isNeutral: Bool { tone == 0 && color == 0 && palette == 100 }
+}
+
 enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     case natural = "Natural", brilliance = "Brilho", vivid = "Vibrante", soft = "Suave", dramatic = "Contraste", mono = "P&B", warm = "Quente"
     var id: String { rawValue }
@@ -33,11 +41,27 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     }
     private static let styleContext = CIContext(options: nil)
 
-    func apply(to image: UIImage) -> UIImage {
-        guard let filterName, let filter = CIFilter(name: filterName), let input = CIImage(image: image) else { return image }
-        filter.setValue(input, forKey: kCIInputImageKey)
-        guard let filtered = filter.outputImage else { return image }
-        let output = self == .vivid ? filtered.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0.9]) : filtered
+    func apply(to image: UIImage, adjustments: PhotoStyleAdjustments = .init()) -> UIImage {
+        guard filterName != nil || !adjustments.isNeutral else { return image }
+        guard let input = CIImage(image: image) else { return image }
+        var output = input
+        if let filterName, let filter = CIFilter(name: filterName) {
+            filter.setValue(input, forKey: kCIInputImageKey)
+            output = filter.outputImage ?? input
+        }
+        let tone = adjustments.tone.isFinite ? max(-100, min(100, adjustments.tone)) : 0
+        let color = adjustments.color.isFinite ? max(-100, min(100, adjustments.color)) : 0
+        let palette = adjustments.palette.isFinite ? max(0, min(200, adjustments.palette)) : 100
+        if color != 0 {
+            output = output.applyingFilter("CITemperatureAndTint", parameters: [
+                "inputNeutral": CIVector(x: 6500, y: 0),
+                "inputTargetNeutral": CIVector(x: CGFloat(6500 + color * 20), y: 0)
+            ])
+        }
+        output = output.applyingFilter("CIColorControls", parameters: [
+            kCIInputBrightnessKey: tone * 0.003,
+            kCIInputSaturationKey: (self == .vivid ? 0.9 : 1.0) * palette / 100
+        ])
         guard let cg = Self.styleContext.createCGImage(output, from: input.extent) else { return image }
         return UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
     }
@@ -1245,9 +1269,9 @@ enum StampRenderer {
         return fits
     }
 
-    static func render(_ data: Data, aspect: PhotoAspect?, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural) -> Data? {
+    static func render(_ data: Data, aspect: PhotoAspect?, snapshot: StampSnapshot?, map: UIImage? = nil, address: String? = nil, style: MomentraPhotoStyle = .natural, adjustments: PhotoStyleAdjustments = .init()) -> Data? {
         guard let sourceImage = UIImage(data: data) else { return nil }
-        let image = style.apply(to: sourceImage)
+        let image = style.apply(to: sourceImage, adjustments: adjustments)
         let sourceSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard sourceSize.width > 0, sourceSize.height > 0,
               sourceSize.width.isFinite, sourceSize.height.isFinite else { return nil }

@@ -18,4 +18,15 @@ final class PhotoStylesTests: XCTestCase {
             XCTAssertNotNil(output.cgImage)
         }
     }
+
+    func testCustomToneAndPaletteAreAppliedToNaturalStyle() throws {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
+        let source = renderer.image { context in
+            UIColor(red: 0.7, green: 0.3, blue: 0.1, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let edited = MomentraPhotoStyle.natural.apply(to: source, adjustments: .init(tone: -60, color: 0, palette: 50))
+        XCTAssertEqual(edited.size, source.size)
+        XCTAssertNotEqual(try XCTUnwrap(edited.pngData()), try XCTUnwrap(source.pngData()))
+    }
 }

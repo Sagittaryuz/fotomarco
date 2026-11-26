@@ -102,6 +102,9 @@ struct CameraScreen: View {
     @ObservedObject private var businessIdentity = BusinessIdentity.shared
     @State private var settingsOrganizations: [BusinessAPIClient.OrganizationSummary]?
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
+    @AppStorage("native.camera.styleTone") private var styleTone = 0.0
+    @AppStorage("native.camera.styleColor") private var styleColor = 0.0
+    @AppStorage("native.camera.stylePalette") private var stylePalette = 100.0
     @AppStorage("native.camera.grid") private var showGrid = false
     @AppStorage("native.camera.scanQR") private var scanQR = true
     @AppStorage("native.camera.scanText") private var scanText = true
@@ -213,7 +216,7 @@ struct CameraScreen: View {
 
     private var cameraOptionsActive: Bool {
         camera.flashMode != .off || timerSeconds > 0 || photoAspect != PhotoAspect.standard.rawValue ||
-        photoStyle != MomentraPhotoStyle.natural.rawValue || showGrid
+        photoStyle != MomentraPhotoStyle.natural.rawValue || styleTone != 0 || styleColor != 0 || stylePalette != 100 || showGrid
     }
 
     private func cameraOptionLabel(_ title: String, symbol: String, active: Bool = false) -> some View {
@@ -250,8 +253,9 @@ struct CameraScreen: View {
                     } label: { cameraOptionLabel("Proporção", symbol: "aspectratio", active: photoAspect != PhotoAspect.standard.rawValue) }
                     .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
                     NavigationLink {
-                        PhotoStylesView(selected: $photoStyle)
-                    } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyle != MomentraPhotoStyle.natural.rawValue) }
+                        CameraPhotoStylesView(selected: $photoStyle, tone: $styleTone, color: $styleColor, palette: $stylePalette)
+                    } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyle != MomentraPhotoStyle.natural.rawValue || styleTone != 0 || styleColor != 0 || stylePalette != 100) }
+                    .accessibilityIdentifier("camera.options.styles")
                     Button { FotomarcoHaptics.play(.buttons); showGrid.toggle() } label: {
                         cameraOptionLabel("Grade", symbol: "grid", active: showGrid)
                     }
@@ -1617,6 +1621,7 @@ struct CameraScreen: View {
         camera.capture(snapshot: snapshot, aspect: PhotoAspect(rawValue: photoAspect) ?? .standard,
                        saveToPhotos: effectiveLocalStorage,
                        style: MomentraPhotoStyle(rawValue: photoStyle) ?? .natural,
+                       styleAdjustments: PhotoStyleAdjustments(tone: styleTone, color: styleColor, palette: stylePalette),
                        profile: CaptureProfileTag(id: stampProfiles.selected.id, name: stampProfiles.selected.name),
                        archivePlan: isBusiness ? nil : currentArchivePlan, businessTarget: target, sessionID: captureSessionID)
         if camera.isCapturing { sessionStartedCount += 1 }

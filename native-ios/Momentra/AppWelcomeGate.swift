@@ -7,7 +7,9 @@ enum ReleaseNews {
     static let items = [
         "A câmera agora reúne seus controles em uma bandeja de opções.",
         "O botão destaca em amarelo quando um ajuste da bandeja está ativo.",
-        "O mapa continua acessível pela bandeja da câmera."
+        "O mapa continua acessível pela bandeja da câmera.",
+        "Os estilos podem ser personalizados com ajustes de tom, cor e paleta.",
+        "A galeria abre nas capturas de hoje e o mapa mostra miniaturas individuais."
     ]
 
     static func items(for version: String) -> [String] {

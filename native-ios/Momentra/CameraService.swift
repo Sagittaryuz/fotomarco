@@ -26,6 +26,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         let snapshot: StampSnapshot?
         let aspect: PhotoAspect
         let style: MomentraPhotoStyle
+        let styleAdjustments: PhotoStyleAdjustments
         let saveToPhotos: Bool
         let profile: CaptureProfileTag?
         let archivePlan: CloudDeliveryPlan?
@@ -171,7 +172,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         return true
     }
 
-    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil, businessTarget: BusinessCaptureTarget? = nil, sessionID: UUID? = nil) {
+    func capture(snapshot: StampSnapshot?, aspect: PhotoAspect, saveToPhotos: Bool, style: MomentraPhotoStyle = .natural, styleAdjustments: PhotoStyleAdjustments = .init(), profile: CaptureProfileTag? = nil, archivePlan: CloudDeliveryPlan? = nil, businessTarget: BusinessCaptureTarget? = nil, sessionID: UUID? = nil) {
         guard canStartPhoto() else { return }
         isCapturing = true
         let selectedFlash = flashMode
@@ -188,7 +189,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             let settings = AVCapturePhotoSettings()
             settings.photoQualityPrioritization = .speed
             self.pendingPhoto = PhotoRequest(settingsID: settings.uniqueID, id: UUID(), capturedAt: capturedAt,
-                                             snapshot: snapshot, aspect: aspect, style: style, saveToPhotos: saveToPhotos,
+                                             snapshot: snapshot, aspect: aspect, style: style, styleAdjustments: styleAdjustments, saveToPhotos: saveToPhotos,
                                              profile: profile, archivePlan: archivePlan, businessTarget: businessTarget, sessionID: sessionID)
             self.applyCaptureRotation(to: connection)
             if self.input?.device.hasFlash == true,
@@ -593,7 +594,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         }
         guard let data = try? Data(contentsOf: staged.original, options: .mappedIfSafe),
               let rendered = StampRenderer.render(data, aspect: request.aspect, snapshot: snapshot,
-                                                   map: map, address: address, style: request.style) else {
+                                                   map: map, address: address, style: request.style, adjustments: request.styleAdjustments) else {
             report("Não foi possível compor a foto. O original está disponível em Capturas.")
             finishPhotoWork()
             return
