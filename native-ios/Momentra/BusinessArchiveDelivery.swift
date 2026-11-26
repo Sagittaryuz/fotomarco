@@ -5,7 +5,9 @@ actor BusinessArchiveDelivery {
     static let shared = BusinessArchiveDelivery()
     struct Summary { var pending = 0; var needsAttention = false }
     private var running = false
-    private let chunkSize = 320 * 1024 * 10
+    // A common multiple of Graph's 320 KiB and Google Drive's 256 KiB units.
+    // It stays within the Business API's existing request-size limit.
+    static let chunkSize = 320 * 1024 * 8
     private let requireUser: (String) async throws -> Void
 
     init(requireUser: @escaping (String) async throws -> Void = { userID in
@@ -105,7 +107,7 @@ actor BusinessArchiveDelivery {
             let offset = status.nextOffset
             guard offset >= 0, offset < fingerprint.byteCount else { throw BusinessAPIClient.Failure.invalidResponse }
             try fileHandle.seek(toOffset: UInt64(offset))
-            let amount = Int(min(Int64(chunkSize), fingerprint.byteCount - offset))
+            let amount = Int(min(Int64(Self.chunkSize), fingerprint.byteCount - offset))
             var data = Data()
             while data.count < amount {
                 let part = try fileHandle.read(upToCount: amount - data.count) ?? Data()

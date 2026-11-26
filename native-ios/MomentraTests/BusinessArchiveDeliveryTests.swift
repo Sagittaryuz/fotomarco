@@ -2,6 +2,12 @@ import XCTest
 @testable import Momentra
 
 final class BusinessArchiveDeliveryTests: XCTestCase {
+    func testUploadChunkSizeIsCompatibleWithBothProviders() {
+        let size = BusinessArchiveDelivery.chunkSize
+        XCTAssertEqual(size % (320 * 1024), 0)
+        XCTAssertEqual(size % (256 * 1024), 0)
+        XCTAssertLessThanOrEqual(size, 320 * 1024 * 10)
+    }
     func testDeliveryWaitsForVerificationAndKeepsLocalCopyOnFailure() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
