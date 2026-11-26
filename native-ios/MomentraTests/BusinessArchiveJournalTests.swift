@@ -2,6 +2,24 @@ import XCTest
 @testable import Momentra
 
 final class BusinessArchiveJournalTests: XCTestCase {
+    func testProcessedOnlyTeamCaptureCanConfirmDuplicateWithoutOriginal() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source.jpg"), stamped = root.appendingPathComponent("stamped.jpg")
+        try Data([1, 2, 3]).write(to: source)
+        try Data([4, 5, 6]).write(to: stamped)
+        let id = UUID(), organization = UUID()
+        let journal = BusinessArchiveJournal(root: root)
+        try journal.enqueue(id: id, date: Date(), originalExtension: "jpg", source: source,
+            target: .init(organizationID: organization, userID: "member-uid", keepsOriginal: false),
+            profile: .init(id: organization, name: "Equipe"))
+        try journal.markReady(id: id, stampedSource: stamped)
+        try journal.markVerified(id, variant: "stamped")
+        XCTAssertTrue(journal.confirmsDelivery(id: id, organizationID: organization, userID: "member-uid",
+            stamped: try CloudFileFingerprint.read(stamped), original: nil, keepsOriginal: false))
+    }
+
     func testTeamCaptureUsesDurableCopiesAndFrozenIdentity() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -24,11 +42,23 @@ final class BusinessArchiveJournalTests: XCTestCase {
         capture = try journal.read(id)
         XCTAssertTrue(capture.ready)
         XCTAssertFalse(capture.finished)
+        let originalFingerprint = try CloudFileFingerprint.read(source)
+        let stampedFingerprint = try CloudFileFingerprint.read(stamped)
+        XCTAssertFalse(journal.confirmsDelivery(id: id, organizationID: organization, userID: "member-uid",
+            stamped: stampedFingerprint, original: originalFingerprint, keepsOriginal: true))
         try journal.markVerified(id, variant: "original")
         XCTAssertFalse(try journal.read(id).finished)
         try journal.markVerified(id, variant: "stamped")
         capture = try BusinessArchiveJournal(root: root).read(id)
         XCTAssertTrue(capture.finished)
+        XCTAssertTrue(journal.confirmsDelivery(id: id, organizationID: organization, userID: "member-uid",
+            stamped: stampedFingerprint, original: originalFingerprint, keepsOriginal: true))
+        XCTAssertFalse(journal.confirmsDelivery(id: id, organizationID: organization, userID: "other",
+            stamped: stampedFingerprint, original: originalFingerprint, keepsOriginal: true))
+        XCTAssertFalse(journal.confirmsDelivery(id: id, organizationID: UUID(), userID: "member-uid",
+            stamped: stampedFingerprint, original: originalFingerprint, keepsOriginal: true))
+        XCTAssertFalse(journal.confirmsDelivery(id: id, organizationID: organization, userID: "member-uid",
+            stamped: originalFingerprint, original: originalFingerprint, keepsOriginal: true))
         XCTAssertTrue(FileManager.default.fileExists(atPath: journal.stampedURL(capture).path))
         XCTAssertThrowsError(try journal.enqueue(id: id, date: date, originalExtension: "heic", source: source,
             target: BusinessCaptureTarget(organizationID: organization, userID: "other", keepsOriginal: true), profile: profile))
