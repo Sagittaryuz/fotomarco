@@ -111,7 +111,11 @@ final class SettingsNavigationTests: XCTestCase {
         stylesScreenshot.name = "Personalização dos estilos"
         stylesScreenshot.lifetime = .keepAlways
         add(stylesScreenshot)
-        app.navigationBars["Estilos"].buttons.element(boundBy: 0).tap()
+        let styleBack = app.buttons["camera.styles.back"]
+        XCTAssertTrue(styleBack.waitForExistence(timeout: 5))
+        styleBack.tap()
+        XCTAssertTrue(customize.waitForExistence(timeout: 5))
+        styleBack.tap()
         app.buttons["camera.options.map"].tap()
         XCTAssertTrue(app.navigationBars["Mapa"].waitForExistence(timeout: 10))
         app.buttons["Fechar"].firstMatch.tap()
