@@ -2,12 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareGoogleDriveMemberHierarchy } from './business-google-drive-hierarchy.mjs';
 
-const markers = { images: '11111111-1111-4111-8111-111111111111', photomark: '22222222-2222-4222-8222-222222222222', member: '33333333-3333-4333-8333-333333333333' };
-const args = { accessToken: 'synthetic', rootId: 'root-id', ownerPermissionId: 'owner', memberName: 'Marcos Pires', memberEmail: 'OWNER@example.com', markers };
+const markers = { photomark: '22222222-2222-4222-8222-222222222222', member: '33333333-3333-4333-8333-333333333333' };
+const args = { accessToken: 'synthetic', rootId: 'root-id', imagesId: 'images-id', ownerPermissionId: 'owner', memberName: 'Marcos Pires', memberEmail: 'OWNER@example.com', markers };
 const mimeType = 'application/vnd.google-apps.folder';
 
 function drive({ publicRoot = false } = {}) {
-  const files = new Map([['root-id', { id: 'root-id', mimeType, trashed: false, capabilities: { canListChildren: true } }]]);
+  const files = new Map([['root-id', { id: 'root-id', mimeType, trashed: false, capabilities: { canListChildren: true } }],
+    ['images-id', { id: 'images-id', name: 'Imagens', parents: ['root-id'], mimeType, trashed: false, capabilities: { canListChildren: true } }]]);
   let creates = 0;
   const fetchImpl = async (raw, options = {}) => {
     const url = new URL(raw);
@@ -38,19 +39,26 @@ function drive({ publicRoot = false } = {}) {
 test('creates the private hierarchy once and resumes it using persisted markers', async () => {
   const mock = drive();
   const result = await prepareGoogleDriveMemberHierarchy({ ...args, fetchImpl: mock.fetchImpl });
-  assert.deepEqual(result, { imagesId: 'folder-1', parentId: 'folder-2', folderId: 'folder-3' });
+  assert.deepEqual(result, { imagesId: 'images-id', parentId: 'folder-1', folderId: 'folder-2' });
   assert.equal(mock.files.get(result.folderId).name, 'Marcos Pires (owner@example.com)');
   assert.equal(mock.files.get(result.folderId).writersCanShare, false);
   assert.deepEqual(await prepareGoogleDriveMemberHierarchy({ ...args, fetchImpl: mock.fetchImpl }), result);
-  assert.equal(mock.count(), 3);
+  assert.equal(mock.count(), 2);
 });
 
 test('does not create folders with unsafe permissions or invalid markers', async () => {
   const mock = drive({ publicRoot: true });
   await assert.rejects(prepareGoogleDriveMemberHierarchy({ ...args, fetchImpl: mock.fetchImpl }), /unsafe-google-folder/);
   assert.equal(mock.count(), 0);
-  await assert.rejects(prepareGoogleDriveMemberHierarchy({ ...args, markers: { ...markers, member: markers.images }, fetchImpl: mock.fetchImpl }), /invalid-storage-configuration/);
+  await assert.rejects(prepareGoogleDriveMemberHierarchy({ ...args, markers: { ...markers, member: markers.photomark }, fetchImpl: mock.fetchImpl }), /invalid-storage-configuration/);
   assert.equal(mock.count(), 0);
   await assert.rejects(prepareGoogleDriveMemberHierarchy({ ...args, memberName: 'a'.repeat(100), memberEmail: `${'b'.repeat(100)}@x.com`, fetchImpl: mock.fetchImpl }), /invalid-member-name/);
+  assert.equal(mock.count(), 0);
+});
+
+test('refuses a selected folder outside the expected root without creating anything', async () => {
+  const mock = drive();
+  mock.files.get('images-id').parents = ['another-parent'];
+  await assert.rejects(prepareGoogleDriveMemberHierarchy({ ...args, fetchImpl: mock.fetchImpl }), /unsafe-google-folder/);
   assert.equal(mock.count(), 0);
 });
