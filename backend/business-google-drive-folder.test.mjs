@@ -60,3 +60,16 @@ test('recovers a prior marked folder without creating another and rejects ambigu
   await assert.rejects(createGoogleDrivePrivateFolder({ ...args, fetchImpl }), /ambiguous-google-folder/);
   assert.equal(created, 0);
 });
+
+test('does not create a duplicate when a visible unmarked folder has the same name', async () => {
+  let created = false;
+  const fetchImpl = async (raw, options) => {
+    if (options.method === 'POST') { created = true; throw new Error('unexpected'); }
+    if (raw.includes('/permissions?')) return { status: 200, json: async () => ({ permissions: [{ id: 'owner', type: 'user', role: 'owner' }] }) };
+    if (raw.includes('/files/parent?')) return { status: 200, json: async () => ({ id: 'parent', parents: ['root'], mimeType: folderMime, trashed: false, capabilities: { canListChildren: true } }) };
+    const query = new URL(raw).searchParams.get('q');
+    return { status: 200, json: async () => ({ files: query.includes('appProperties') ? [] : [{ id: 'existing' }] }) };
+  };
+  await assert.rejects(createGoogleDrivePrivateFolder({ ...args, fetchImpl }), /folder-name-in-use/);
+  assert.equal(created, false);
+});

@@ -29,6 +29,20 @@ export async function createGoogleDrivePrivateFolder({ accessToken, parentId, pa
   if (!listing || !Array.isArray(listing.files) || listing.nextPageToken || listing.files.length > 1) throw new Error('ambiguous-google-folder');
   let folder = listing.files[0];
   if (!folder) {
+    // A visible same-name folder may belong to another app or have been shared
+    // with different people. Never silently create a second one or reuse it.
+    const named = new URL('https://www.googleapis.com/drive/v3/files');
+    const quotedName = name.trim().replace(/'/g, "\\'");
+    named.searchParams.set('q', `'${parentId}' in parents and trashed = false and name = '${quotedName}'`);
+    named.searchParams.set('fields', 'nextPageToken,files(id)');
+    named.searchParams.set('pageSize', '100');
+    let names;
+    try {
+      const response = await fetchImpl(named.toString(), { headers, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+      if (response.status !== 200) throw new Error('upstream');
+      names = await response.json();
+    } catch { throw new Error('storage-unavailable'); }
+    if (!names || !Array.isArray(names.files) || names.nextPageToken || names.files.length) throw new Error('folder-name-in-use');
     let response;
     try { response = await fetchImpl('https://www.googleapis.com/drive/v3/files?fields=id%2Cname%2CmimeType%2Cparents%2CappProperties%2Ctrashed', {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(15000),
