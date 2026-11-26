@@ -47,6 +47,12 @@ enum BusinessProfileSync {
             }
             guard !Task.isCancelled, identity.userID == userID, identity.emailVerified else { return }
             store.replaceOrganizationProfiles(snapshots)
+            let storageIdentities = organizations.reduce(into: [UUID: String]()) { result, organization in
+                if let id = UUID(uuidString: organization.id), let storageIdentity = organization.storageIdentity {
+                    result[id] = storageIdentity
+                }
+            }
+            store.setOrganizationStorageIdentities(storageIdentities, userID: userID)
             let ownerID = ownerOrganizationID.flatMap(UUID.init(uuidString:))
             let ready = ownerID.map { id in snapshots.contains(where: { UUID(uuidString: $0.organizationID) == id }) } ?? false
             BusinessLegacyImportCoordinator.shared.configure(organizationID: ready ? ownerID : nil, userID: ready ? userID : nil)

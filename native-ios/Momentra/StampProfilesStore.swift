@@ -32,6 +32,8 @@ final class StampProfilesStore: ObservableObject {
     @Published private(set) var profiles: [StampProfile] { didSet { persist() } }
     /// Organization profiles are separately held immutable snapshots, never personal drafts.
     @Published private(set) var organizationProfiles: [StampProfile] = []
+    private(set) var organizationStorageIdentities: [UUID: String] = [:]
+    private(set) var organizationIdentityUserID: String?
     @Published private(set) var selectedID: UUID {
         didSet { if !isDraft && profiles.contains(where: { $0.id == selectedID }) { defaults.set(selectedID.uuidString, forKey: selectedKey) } }
     }
@@ -131,10 +133,20 @@ final class StampProfilesStore: ObservableObject {
         }
         let wasOrganization = isOrganizationSelected
         organizationProfiles = result
+        organizationStorageIdentities = [:]
+        organizationIdentityUserID = nil
         if wasOrganization && !result.contains(where: { $0.id == selectedID }) {
             let previous = defaults.string(forKey: selectedKey).flatMap(UUID.init(uuidString:))
             selectedID = profiles.first(where: { $0.id == previous })?.id ?? profiles[0].id
         }
+    }
+
+    /// Only keep identities from the same verified discovery response as the profiles.
+    func setOrganizationStorageIdentities(_ identities: [UUID: String], userID: String) {
+        guard !userID.isEmpty else { organizationStorageIdentities = [:]; organizationIdentityUserID = nil; return }
+        let allowed = Set(organizationProfiles.map(\.id))
+        organizationStorageIdentities = identities.filter { allowed.contains($0.key) && CloudStorageIdentity.compare($0.value, $0.value) == .same }
+        organizationIdentityUserID = userID
     }
 
     func select(_ id: UUID) {

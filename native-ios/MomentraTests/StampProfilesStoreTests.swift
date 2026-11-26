@@ -41,6 +41,19 @@ final class StampProfilesStoreTests: XCTestCase {
         XCTAssertEqual(store.selected.name, "Pessoal editado")
     }
 
+    func testOrganizationStorageIdentityIsBoundToCurrentSnapshotAndUser() {
+        let store = StampProfilesStore(defaults: defaults)
+        let organization = UUID(), other = UUID()
+        let fingerprint = String(repeating: "a", count: 64)
+        store.replaceOrganizationProfiles([(organization.uuidString, StampProfile(name: "Empresa"))])
+        store.setOrganizationStorageIdentities([organization: fingerprint, other: fingerprint], userID: "user-A")
+        XCTAssertEqual(store.organizationStorageIdentities, [organization: fingerprint])
+        XCTAssertEqual(store.organizationIdentityUserID, "user-A")
+        store.replaceOrganizationProfiles([])
+        XCTAssertTrue(store.organizationStorageIdentities.isEmpty)
+        XCTAssertNil(store.organizationIdentityUserID)
+    }
+
     func testDraftChangesPersistOnlyAfterSaving() {
         let original = StampProfilesStore(defaults: defaults)
         let initial = original.selected
