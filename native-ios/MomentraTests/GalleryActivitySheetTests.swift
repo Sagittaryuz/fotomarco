@@ -3,6 +3,10 @@ import XCTest
 @testable import Momentra
 
 final class GalleryActivitySheetTests: XCTestCase {
+    func testPercentDoesNotRoundUpBeforeAllItemsAreReady() {
+        XCTAssertEqual(GalleryShareProgress(completed: 9, total: 10, currentFraction: 0.99).percent, 99)
+        XCTAssertEqual(GalleryShareProgress(completed: 10, total: 10).percent, 100)
+    }
     func testCompletedActivityReturnsToGallery() {
         XCTAssertTrue(GalleryActivitySheet.succeeded(completed: true, error: nil))
     }

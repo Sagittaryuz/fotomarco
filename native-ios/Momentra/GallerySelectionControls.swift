@@ -170,6 +170,7 @@ struct GalleryShareProgress: Equatable {
     let total: Int
     var currentFraction: Double = 0
     var fraction: Double { total > 0 ? min(1, max(0, (Double(completed) + currentFraction) / Double(total))) : 0 }
+    var percent: Int { Int(fraction * 100) }
 }
 
 @MainActor
@@ -206,7 +207,7 @@ struct GalleryShareProgressOverlay: View {
                     .font(.headline).multilineTextAlignment(.center)
                 Text("Aguarde enquanto as fotos são preparadas e, se necessário, baixadas da nuvem.")
                     .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                Text("\(Int((progress.fraction * 100).rounded()))%")
+                Text("\(progress.percent)%")
                     .font(.system(size: 34, weight: .semibold, design: .rounded)).monospacedDigit()
                 ProgressView(value: progress.fraction).tint(.yellow)
                 Text("\(progress.completed) de \(progress.total) itens preparados")
