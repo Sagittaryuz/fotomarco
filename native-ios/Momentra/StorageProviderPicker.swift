@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Shared provider chooser for personal accounts and organization storage.
 struct StorageProviderPicker<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -24,7 +25,7 @@ struct StorageProviderPicker<Content: View>: View {
                             .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                             .padding(5).background(.black, in: Circle()).offset(x: 5, y: 5)
                     }.accessibilityHidden(true)
-                    Text("Adicionar Conta").font(.title.bold()).foregroundStyle(.primary)
+                    Text("Adicionar Conta").font(.title.bold()).foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
                     Text("Escolha seu provedor").font(.subheadline).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 12)
                 }.frame(maxWidth: .infinity).padding(.top, 36)
@@ -34,12 +35,13 @@ struct StorageProviderPicker<Content: View>: View {
 }
 
 struct StorageProviderLabel: View {
+    @Environment(\.colorScheme) private var colorScheme
     let name: String
     let asset: String
 
     var body: some View {
         Label {
-            Text(name).font(.title3).foregroundStyle(.primary)
+            Text(name).font(.title3).foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
         } icon: {
             Image(asset).renderingMode(.original).resizable().scaledToFit().frame(width: 40, height: 40)
         }

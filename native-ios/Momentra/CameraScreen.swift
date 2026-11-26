@@ -1203,7 +1203,6 @@ struct CameraScreen: View {
         }
         .frame(minHeight: 50)
         .contentShape(Rectangle())
-        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
     }
 
     private var settingsSheet: some View {
@@ -1238,16 +1237,18 @@ struct CameraScreen: View {
                                         .frame(width: 32, height: 32).background(.blue.gradient, in: Circle()).accessibilityHidden(true)
                                     Text("Espaço corporativo").frame(maxWidth: .infinity, alignment: .leading)
                                 }.frame(minHeight: 50).contentShape(Rectangle())
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                             }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         } else if businessIdentity.userID == nil || settingsOrganizations?.isEmpty == true {
                             NavigationLink { BusinessPlansView().onAppear { FotomarcoHaptics.play(.buttons) } } label: {
                                 settingsRootLabel("Faça o upgrade do seu plano", symbol: "star.fill", color: .yellow)
                             }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         } else {
                             NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: {
                                 settingsRootLabel("Espaço corporativo", symbol: "building.2.fill", color: .blue)
                             }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         }
                     }
                     Section {
@@ -1270,6 +1271,7 @@ struct CameraScreen: View {
                                 }
                             }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Câmera").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRootLabel("Câmera", symbol: "camera.fill", color: .yellow) }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         NavigationLink {
                             Form {
                                 Section("Layout e perfis") {
@@ -1288,6 +1290,7 @@ struct CameraScreen: View {
                                 }
                             }.toggleStyle(DirectionalSwitchStyle()).navigationTitle("Layout e perfis").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRootLabel("Layout e perfis", symbol: "square.grid.2x2.fill", color: .orange) }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         NavigationLink {
                             Form { archiveSettingsSection }
                                 .toggleStyle(DirectionalSwitchStyle()).navigationTitle("Armazenamento").onAppear { FotomarcoHaptics.play(.buttons) }
@@ -1307,14 +1310,15 @@ struct CameraScreen: View {
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }.frame(minHeight: 50).contentShape(Rectangle())
-                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         NavigationLink {
                             Form {
                                 NavigationLink { HapticSettingsView { publishCaptureContext() }.onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Vibrações") }
                                 NavigationLink { AppIconPicker().onAppear { FotomarcoHaptics.play(.buttons) } } label: { settingsRowLabel("Ícone do aplicativo") }
                             }.navigationTitle("Preferências").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRootLabel("Preferências", symbol: "gearshape.fill", color: .gray) }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                     Section {
                         NavigationLink {
@@ -1350,6 +1354,7 @@ struct CameraScreen: View {
                     }
                             }.navigationTitle("Sobre").onAppear { FotomarcoHaptics.play(.buttons) }
                         } label: { settingsRootLabel("Sobre", symbol: "info.circle.fill", color: .blue) }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                 }
                 .toggleStyle(DirectionalSwitchStyle())
