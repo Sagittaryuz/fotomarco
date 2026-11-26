@@ -2,6 +2,24 @@ import XCTest
 @testable import Momentra
 
 final class GalleryMapTests: XCTestCase {
+    func testPhotosAtIdenticalCoordinatesRemainDistinctAndInOrder() {
+        let first = UUID(), second = UUID(), missing = UUID()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        func photo(_ id: UUID) -> GalleryItem {
+            let file = OriginalFile(url: URL(fileURLWithPath: "/Processed/\(id.uuidString).jpg"),
+                                    isVideo: false, isProcessed: true, date: date)
+            return GalleryItem(source: .capture(file), date: date, profile: nil)
+        }
+        let photos = [photo(first), photo(second), photo(missing)]
+        let records = [GalleryMapRecord(id: first.uuidString, latitude: -17.88, longitude: -51.71),
+                       GalleryMapRecord(id: second.uuidString, latitude: -17.88, longitude: -51.71)]
+        let markers = GalleryMapMarker.project(photos, records: records)
+        XCTAssertEqual(markers.map(\.id), [first.uuidString, second.uuidString])
+        XCTAssertEqual(markers.map(\.item.id), [photos[0].id, photos[1].id])
+        XCTAssertEqual(markers[0].coordinate.latitude, markers[1].coordinate.latitude)
+        XCTAssertEqual(markers[0].coordinate.longitude, markers[1].coordinate.longitude)
+    }
+
     func testIndexPrecomputesZoomLevelsAndKeepsEveryPhoto() throws {
         let records = [GalleryMapRecord(id: "a", latitude: -17.88, longitude: -51.71),
                        GalleryMapRecord(id: "b", latitude: -17.879, longitude: -51.709)]

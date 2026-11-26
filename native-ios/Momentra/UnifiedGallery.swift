@@ -138,7 +138,7 @@ struct OriginalsView: View {
             }
             ZStack(alignment: .bottom) {
                 if tab == .map {
-                    GalleryCaptureMap(items: items, open: open, store: mapStore)
+                    GalleryCaptureMap(items: items, open: open, store: mapStore, bottomInset: galleryFooterHeight)
                 } else if items.isEmpty {
                     emptyState
                         .contentShape(Rectangle())

@@ -8,10 +8,19 @@ struct GalleryMapCoordinate: Codable {
     var coordinate: CLLocationCoordinate2D { .init(latitude: latitude, longitude: longitude) }
 }
 
-private struct GalleryMapCluster: Identifiable {
+struct GalleryMapMarker: Identifiable {
     let id: String
     let coordinate: CLLocationCoordinate2D
-    let items: [GalleryItem]
+    let item: GalleryItem
+
+    static func project(_ photos: [GalleryItem], records: [GalleryMapRecord]) -> [Self] {
+        let locations = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return photos.compactMap { item in
+            let id = item.captureIDForUpload?.uuidString ?? item.id
+            guard let location = locations[id] else { return nil }
+            return Self(id: id, coordinate: .init(latitude: location.latitude, longitude: location.longitude), item: item)
+        }
+    }
 }
 
 enum GalleryMapBinning {
@@ -26,6 +35,7 @@ struct GalleryCaptureMap: View {
     let items: [GalleryItem]
     let open: (GalleryItem) -> Void
     @ObservedObject var store: GalleryMapStore
+    var bottomInset: CGFloat = 0
     @StateObject private var currentLocation = LocationService()
     @State private var position: MapCameraPosition = .automatic
     @State private var centeredOnCurrentLocation = false
@@ -43,22 +53,17 @@ struct GalleryCaptureMap: View {
         }
     }
 
-    private var clusters: [GalleryMapCluster] {
-        let byID = Dictionary(photos.map { ($0.captureIDForUpload?.uuidString ?? $0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let locations = Dictionary(store.index.records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return photos.compactMap { item in
-            let id = item.captureIDForUpload?.uuidString ?? item.id
-            guard let location = locations[id], let matched = byID[id] else { return nil }
-            return GalleryMapCluster(id: id, coordinate: .init(latitude: location.latitude, longitude: location.longitude), items: [matched])
-        }
+    private var clusters: [GalleryMapMarker] {
+        GalleryMapMarker.project(photos, records: store.index.records)
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        let markers = clusters
+        return ZStack(alignment: .topTrailing) {
             Map(position: $position) {
-                ForEach(clusters) { cluster in
-                    Annotation("\(cluster.items.count) fotos", coordinate: cluster.coordinate, anchor: .bottom) {
-                        Button { FotomarcoHaptics.play(.gallery); if let item = cluster.items.first { open(item) } } label: {
+                ForEach(markers) { cluster in
+                    Annotation("Foto", coordinate: cluster.coordinate, anchor: .bottom) {
+                        Button { FotomarcoHaptics.play(.gallery); open(cluster.item) } label: {
                             mapMarker(cluster)
                         }.buttonStyle(.plain)
                     }
@@ -106,11 +111,39 @@ struct GalleryCaptureMap: View {
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(12)
-            } else if !photos.isEmpty && clusters.isEmpty {
+            } else if !photos.isEmpty && markers.isEmpty {
                 Text("Nenhuma captura com localização disponível.")
                     .font(.footnote).padding(12)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+            if markers.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(markers) { marker in
+                            let item = marker.item
+                            Button {
+                                FotomarcoHaptics.play(.gallery)
+                                open(item)
+                            } label: {
+                                item.mapThumbnail()
+                                    .frame(width: 52, height: 52)
+                                    .clipped()
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.85), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(item.date.map { "Abrir foto de \($0.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(GalleryDateSelection.brazilianLocale)))" } ?? "Abrir foto")
+                        }
+                    }
+                    .padding(8)
+                }
+                .modifier(GalleryControlSurface(rounded: true))
+                .padding(.horizontal, 12)
+                .padding(.bottom, max(8, bottomInset + 8))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .accessibilityIdentifier("gallery.map.photos")
+                .accessibilityLabel("Fotos no mapa")
             }
         }
         .onAppear {
@@ -133,21 +166,15 @@ struct GalleryCaptureMap: View {
         position = .camera(MapCamera(centerCoordinate: location.coordinate, distance: 2000, heading: 0, pitch: 0))
     }
 
-    private func mapMarker(_ cluster: GalleryMapCluster) -> some View {
+    private func mapMarker(_ cluster: GalleryMapMarker) -> some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                if let item = cluster.items.first { item.mapThumbnail().frame(width: 72, height: 72).clipped() }
-                if cluster.items.count > 1 {
-                    Text(cluster.items.count.formatted()).font(.caption.bold()).foregroundStyle(.white)
-                        .padding(4).background(.black.opacity(0.55), in: Capsule()).padding(3)
-                }
-            }
+            cluster.item.mapThumbnail().frame(width: 72, height: 72).clipped()
             .frame(width: 72, height: 72)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white, lineWidth: 3))
             Image(systemName: "arrowtriangle.down.fill").font(.system(size: 16)).foregroundStyle(.white).offset(y: -3)
         }
-        .accessibilityLabel(cluster.items.count == 1 ? "Uma foto neste local" : "\(cluster.items.count) fotos neste local")
+        .accessibilityLabel("Uma foto neste local")
     }
 
 }
