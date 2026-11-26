@@ -110,6 +110,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         session.beginConfiguration()
         defer {
             session.commitConfiguration()
+            applyCaptureRotation(to: recognitionOutput.connection(with: .video))
             applyRecognitionDemand()
         }
         session.sessionPreset = .photo
@@ -219,6 +220,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         isSwitching = true
         queue.async {
             defer {
+                self.applyCaptureRotation(to: self.recognitionOutput.connection(with: .video))
                 self.applyRecognitionDemand()
                 DispatchQueue.main.async { self.isSwitching = false }
             }
