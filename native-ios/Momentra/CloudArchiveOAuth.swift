@@ -156,6 +156,30 @@ final class CloudArchiveOAuth {
 
     private let network = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
 
+    /// Verify that a token still names the configured personal destination before
+    /// comparing it with a Business destination. A missing drive ID is unknown.
+    func storageFingerprint(accessToken: String, destination: CloudDeliveryPlan.Destination, userID: String) async throws -> String {
+        let configuration = try Configuration(provider: destination.provider)
+        let identity: Identity = try await get(configuration.identityURL, token: accessToken)
+        guard !identity.sub.isEmpty, identity.sub.utf8.count <= 512 else { throw Failure.invalidResponse }
+        let canonicalID: String
+        let bindings: [String]
+        switch destination.provider {
+        case .googleDrive:
+            canonicalID = identity.sub
+            bindings = [identity.sub]
+        case .oneDrive:
+            let rootURL = URL(string: "https://graph.microsoft.com/v1.0/me/drive/special/approot")!
+            let folder: OneDriveFolder = try await get(rootURL, token: accessToken)
+            guard let driveID = folder.parentReference?.driveId, !driveID.isEmpty else { throw Failure.oneDriveFolderUnavailable }
+            canonicalID = driveID
+            bindings = folder.bindings(for: identity.sub)
+        }
+        guard let result = CloudStorageIdentity.verifiedFingerprint(destination: destination, canonicalID: canonicalID,
+                                                                    userID: userID, bindings: bindings) else { throw Failure.wrongAccount }
+        return result
+    }
+
     func connect(_ configuration: Configuration, presenting: UIWindow,
                  knownDestinations: Set<CloudDeliveryPlan.Destination>) async throws -> AuthorizedAccount {
         let verifier = try Self.randomParameter()
