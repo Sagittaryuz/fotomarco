@@ -25,3 +25,7 @@ The initial organization is named JMD Hamoa, but its initial storage is the owne
 A later change to another OneDrive account requires an explicit, separately verified migration. Preserve the originals and access to the existing drive until every copy and its ownership, metadata, integrity, member access, and gallery references have been checked. Do not switch the active drive or delete original photos merely because a new account has been connected. The current implementation intentionally rejects switching to a different account or drive; a migration workflow has not yet been implemented or validated.
 
 The development branch contains a user-scoped storage identity comparison and migration bookkeeping. These do not by themselves establish a working transfer: the worker, real provider access, persistent copy orchestration, member permissions and rollback still require end-to-end verification. Business-personal delivery must remain pending when an identity cannot be verified, and local copies must be retained.
+
+## Device build and simulator (26 Nov 2026)
+
+Commit `edee098c590ef96efb1513ef31111a0222a1637a` passed iPhone compilation, simulator navigation and native tests in GitHub Actions run `45900671751`. These are synthetic tests: they do not prove a real OneDrive connection, team permissions, cross-account transfer, or installation on an iPhone. The Google Drive Business provider is not yet wired through folder provisioning and delivery. This revision is not deployed to the Worker or published to devices.
