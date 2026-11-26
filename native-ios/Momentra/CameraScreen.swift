@@ -1202,11 +1202,17 @@ struct CameraScreen: View {
                     Section {
                         NavigationLink { BusinessAccountView().onAppear { FotomarcoHaptics.play(.buttons) } } label: {
                             HStack(spacing: 14) {
-                                AsyncImage(url: businessIdentity.photoURL) { image in
-                                    image.resizable().scaledToFill()
-                                } placeholder: {
-                                    Image(systemName: "person.fill").font(.title2).foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity).background(.quaternary)
+                                Group {
+                                    if let photo = businessIdentity.profilePhoto {
+                                        Image(uiImage: photo).resizable().scaledToFill()
+                                    } else {
+                                        AsyncImage(url: businessIdentity.photoURL) { image in
+                                            image.resizable().scaledToFill()
+                                        } placeholder: {
+                                            Image(systemName: "person.fill").font(.title2).foregroundStyle(.secondary)
+                                                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.quaternary)
+                                        }
+                                    }
                                 }
                                 .frame(width: 56, height: 56).clipShape(Circle()).accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 2) {

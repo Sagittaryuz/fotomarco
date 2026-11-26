@@ -3,6 +3,14 @@ import Combine
 import FirebaseCore
 import FirebaseAuth
 import UIKit
+import CryptoKit
+
+private final class MicrosoftPhotoRedirectGuard: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
 
 /// Rejects a token if its capture owner changes while the async operation runs.
 @MainActor enum BusinessTokenBinding {
@@ -27,6 +35,7 @@ final class BusinessIdentity: ObservableObject {
     @Published private(set) var email: String?
     @Published private(set) var displayName: String?
     @Published private(set) var photoURL: URL?
+    @Published private(set) var profilePhoto: UIImage?
     @Published private(set) var emailVerified = false
     private var listener: AuthStateDidChangeListenerHandle?
 
@@ -51,6 +60,7 @@ final class BusinessIdentity: ObservableObject {
         displayName = user?.displayName ?? user?.providerData.compactMap(\.displayName).first
         let providerPhoto = user?.providerData.compactMap(\.photoURL).first { $0.scheme?.lowercased() == "https" }
         photoURL = user?.photoURL?.scheme?.lowercased() == "https" ? user?.photoURL : providerPhoto
+        profilePhoto = user.flatMap { Self.cachedMicrosoftPhoto(userID: $0.uid) }
         emailVerified = user?.isEmailVerified ?? false
     }
 
@@ -81,11 +91,42 @@ final class BusinessIdentity: ObservableObject {
 
     func signInMicrosoft() async throws {
         let provider = OAuthProvider(providerID: "microsoft.com")
+        provider.scopes = ["User.Read"]
         let credential = try await provider.credential(with: nil)
         let service = try auth()
         let result = try await service.signIn(with: credential)
         guard service.currentUser?.uid == result.user.uid else { throw IdentityError.signedOut }
         update(result.user)
+        if let token = (result.credential as? OAuthCredential)?.accessToken {
+            let uid = result.user.uid
+            Task { await self.loadMicrosoftPhoto(accessToken: token, userID: uid) }
+        }
+    }
+
+    private static func photoCacheURL(userID: String) -> URL? {
+        guard let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        let key = SHA256.hash(data: Data(userID.utf8)).map { String(format: "%02x", $0) }.joined()
+        return root.appendingPathComponent("business-profile-\(key).jpg")
+    }
+
+    private static func cachedMicrosoftPhoto(userID: String) -> UIImage? {
+        guard let url = photoCacheURL(userID: userID), let data = try? Data(contentsOf: url), data.count <= 2_000_000 else { return nil }
+        return UIImage(data: data)
+    }
+
+    private func loadMicrosoftPhoto(accessToken: String, userID: String) async {
+        var request = URLRequest(url: URL(string: "https://graph.microsoft.com/v1.0/me/photo/$value")!)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+        let session = URLSession(configuration: .ephemeral, delegate: MicrosoftPhotoRedirectGuard(), delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 2_000_000,
+              let photo = UIImage(data: data), self.userID == userID else { return }
+        profilePhoto = photo
+        if let url = Self.photoCacheURL(userID: userID) {
+            try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
     }
 
     /// Sign in separately without replacing the Google Drive session.
