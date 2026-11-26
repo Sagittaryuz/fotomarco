@@ -25,6 +25,8 @@ test('refuses incomplete source data, mismatched copies and changed receipts', (
   assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [], sourceSnapshotComplete: false, pendingUploads: 0 }), /invalid-migration/);
   assert.throws(() => createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [], sourceSnapshotComplete: true, pendingUploads: 1 }), /invalid-migration/);
   const initial = createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [record], ...sourceState });
+  assert.throws(() => applyVerifiedMigrationReceipt(initial, null), /invalid-migration-receipt/);
+  assert.equal(canSwitchStorage({ ...initial, items: [null] }, readiness), false);
   assert.throws(() => applyVerifiedMigrationReceipt(initial, { recordId: record.recordId, targetItemId: 'new', targetFolderId: 'folder', byteCount: 26, sha256 }), /receipt-mismatch/);
   const copied = applyVerifiedMigrationReceipt(initial, { recordId: record.recordId, targetItemId: 'new', targetFolderId: 'folder', byteCount: 25, sha256 });
   assert.throws(() => applyVerifiedMigrationReceipt(copied, { recordId: record.recordId, targetItemId: 'other', targetFolderId: 'folder', byteCount: 25, sha256 }), /receipt-mismatch/);
