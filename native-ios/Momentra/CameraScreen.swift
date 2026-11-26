@@ -153,6 +153,8 @@ struct CameraScreen: View {
     @State private var showSupportPanel = false
     @State private var showOriginals = false
     @State private var showMap = false
+    @State private var showCameraOptions = false
+    @State private var openMapAfterOptions = false
     @State private var mapAppearance: StampLayout.MapAppearance = .satellite
     @State private var mapLocation: CLLocation?
     @State private var showSettingsImport = false
@@ -208,6 +210,69 @@ struct CameraScreen: View {
     @State private var suppressQuickPhoto = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var didEnterBackground = false
+
+    private var cameraOptionsActive: Bool {
+        camera.flashMode != .off || timerSeconds > 0 || photoAspect != PhotoAspect.standard.rawValue ||
+        photoStyle != MomentraPhotoStyle.natural.rawValue || showGrid
+    }
+
+    private func cameraOptionLabel(_ title: String, symbol: String, active: Bool = false) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 25, weight: .medium))
+                .foregroundStyle(active ? Color.yellow : Color.white)
+                .frame(width: 66, height: 66)
+                .background(.black.opacity(0.5), in: Circle())
+            Text(title.uppercased()).font(.caption.weight(.medium))
+                .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, minHeight: 105)
+        .contentShape(Rectangle())
+    }
+
+    private var cameraOptionsTray: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 20) {
+                    Button { FotomarcoHaptics.play(.buttons); cycleFlash() } label: {
+                        cameraOptionLabel("Flash", symbol: camera.flashMode == .off ? "bolt.slash.fill" : "bolt.fill", active: camera.flashMode != .off)
+                    }.disabled(mode == .video || !camera.hasFlash || camera.isCapturing || camera.isSwitching || countdown > 0)
+                    Menu {
+                        Button("Desligado") { FotomarcoHaptics.play(.buttons); timerSeconds = 0 }
+                        Button("3 segundos") { FotomarcoHaptics.play(.buttons); timerSeconds = 3 }
+                        Button("10 segundos") { FotomarcoHaptics.play(.buttons); timerSeconds = 10 }
+                    } label: { cameraOptionLabel("Timer", symbol: "timer", active: timerSeconds > 0) }
+                    .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
+                    Menu {
+                        ForEach(PhotoAspect.allCases, id: \.rawValue) { aspect in
+                            Button(aspect.rawValue) { FotomarcoHaptics.play(.buttons); photoAspect = aspect.rawValue }
+                        }
+                    } label: { cameraOptionLabel("Proporção", symbol: "aspectratio", active: photoAspect != PhotoAspect.standard.rawValue) }
+                    .disabled(mode == .video || countdown > 0 || camera.isCapturing || camera.isSwitching)
+                    NavigationLink {
+                        PhotoStylesView(selected: $photoStyle)
+                    } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyle != MomentraPhotoStyle.natural.rawValue) }
+                    Button { FotomarcoHaptics.play(.buttons); showGrid.toggle() } label: {
+                        cameraOptionLabel("Grade", symbol: "grid", active: showGrid)
+                    }
+                    Button {
+                        FotomarcoHaptics.play(.buttons)
+                        mapLocation = makeSnapshot(at: Date()).location
+                        mapAppearance = .satellite
+                        openMapAfterOptions = true
+                        showCameraOptions = false
+                    } label: { cameraOptionLabel("Mapa", symbol: "map") }
+                }.padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 24)
+            }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fechar") { showCameraOptions = false } } }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .background(Color.clear)
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.ultraThinMaterial)
+    }
 
     private var cameraHeader: some View {
         Group {
@@ -612,17 +677,15 @@ struct CameraScreen: View {
                         Spacer(minLength: 0)
                         Button {
                             FotomarcoHaptics.play(.buttons)
-                            mapLocation = makeSnapshot(at: Date()).location
-                            mapAppearance = .satellite
-                            showMap = true
+                            showCameraOptions = true
                         } label: {
-                            Image(systemName: "map").font(.title2)
+                            Image(systemName: "circle.grid.3x3.fill").font(.title2)
                                 .frame(width: 54, height: 54)
-                                .modifier(GalleryControlSurface(rounded: true, tint: .white))
-                                .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
+                                .modifier(GalleryControlSurface(rounded: true, tint: cameraOptionsActive ? .yellow : .white))
+                                .overlay(Circle().stroke(cameraOptionsActive ? Color.yellow : Color.white, lineWidth: 2))
                         }
                         .disabled(camera.isRecording || camera.isFinishingRecording || camera.isCapturing || countdown > 0)
-                        .accessibilityLabel("Abrir mapa")
+                        .accessibilityLabel("Opções da câmera")
                         .opacity(camera.isRecording ? 0 : 1)
                         .overlay {
                             if camera.isRecording && quickRecording {
@@ -767,7 +830,7 @@ struct CameraScreen: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && stampEditorSection == nil && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
+        .modifier(CameraHardwareCaptureModifier(enabled: scenePhase == .active && !showSettings && !showCameraOptions && stampEditorSection == nil && selectedRecognizedText == nil && !showOriginals && !showMap && !showSettingsImport && !showSupportPanel && cameraShareTask == nil && cameraShare == nil, action: handleHardwareCapture))
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active {
                 Task { await updates.check() }
@@ -991,6 +1054,9 @@ struct CameraScreen: View {
         } message: {
             Text("Confira se o arquivo ainda está disponível no iPhone ou na conta de armazenamento.")
         }
+        .sheet(isPresented: $showCameraOptions, onDismiss: {
+            if openMapAfterOptions { openMapAfterOptions = false; showMap = true }
+        }) { cameraOptionsTray }
         .sheet(isPresented: $showMap) {
             NavigationStack {
                 Group {
