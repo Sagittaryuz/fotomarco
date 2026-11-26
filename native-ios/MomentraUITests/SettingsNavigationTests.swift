@@ -27,15 +27,18 @@ final class SettingsNavigationTests: XCTestCase {
             row.tap()
             XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "Linha não abriu: \(title)")
             if title == "Câmera" {
-                let grid = app.switches["Grade"]
+                let label = app.buttons["Grade"]
+                XCTAssertTrue(label.waitForExistence(timeout: 5))
+                // The style exposes a named label button and a nested native switch.
+                // Scope to the row so the test cannot toggle a different option.
+                let row = app.cells.containing(.button, identifier: "Grade").firstMatch
+                let grid = row.switches.element(boundBy: 1)
                 XCTAssertTrue(grid.waitForExistence(timeout: 5))
                 let before = grid.value as? String
                 grid.tap()
                 let after = before == "1" ? "0" : "1"
                 let changed = expectation(for: NSPredicate(format: "value == %@", after), evaluatedWith: grid)
                 wait(for: [changed], timeout: 5)
-                let label = app.buttons["Grade"]
-                XCTAssertTrue(label.waitForExistence(timeout: 5))
                 label.tap()
                 if let before {
                     let restored = expectation(for: NSPredicate(format: "value == %@", before), evaluatedWith: grid)
