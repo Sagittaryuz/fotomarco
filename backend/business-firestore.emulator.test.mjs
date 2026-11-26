@@ -7,6 +7,22 @@ import { createBusinessApp } from './business-app.mjs';
 import { createFirebaseVerifier } from './business-firebase-identity.mjs';
 import { generateKeyPair, SignJWT } from 'jose';
 import { createBusinessWorker } from './business-worker.mjs';
+import { storageFingerprint } from './business-storage-identity.mjs';
+
+test('organization discovery returns scoped storage identity using real Firestore transactions', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
+  const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
+  const transaction = firestoreTransactions({ projectId, accessToken: async () => 'owner', emulatorOrigin: origin });
+  const owner = `owner-${randomUUID()}`, org = randomUUID();
+  await transaction(tx => tx.initializeOrganization({ id: org, ownerId: owner, name: 'Equipe', contactEmail: 'owner@example.com' }, 'owner@example.com'));
+  await transaction(async tx => {
+    await tx.setOneDriveCredential(org, { version: 1, iv: 'iv', ciphertext: 'sealed', providerAccountId: 'provider', driveId: 'drive-A' });
+    await tx.setOwnerFolderReady(org, owner, { folderId: 'folder', parentId: 'parent', memberIdentityId: 'provider' });
+  });
+  const service = new BusinessService({ transaction, verifyToken: async token => token });
+  const result = (await service.myOrganizations({ uid: owner, emailVerified: true })).organizations.find(item => item.id === org);
+  assert.equal(result.storageIdentity, await storageFingerprint('oneDrive', 'drive-A', owner));
+  assert.ok(!JSON.stringify(result).includes('drive-A'));
+});
 
 test('owner Microsoft mailbox binding and sender selection commit atomically', { skip: !process.env.FIRESTORE_EMULATOR_HOST }, async () => {
   const origin = `http://${process.env.FIRESTORE_EMULATOR_HOST}`, projectId = 'demo-photomark-business';
