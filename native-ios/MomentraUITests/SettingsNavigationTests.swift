@@ -1,9 +1,43 @@
 import XCTest
 
 final class SettingsNavigationTests: XCTestCase {
+    func testLiveStyleRendersSyntheticFrameOnGPU() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--test-style-preview"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Quadro apresentado"].waitForExistence(timeout: 20))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Prévia de estilo em tempo real"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testOverlappingMapPhotosRemainAccessible() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--test-map-overlap"]
+        app.launch()
+        let strip = app.scrollViews["gallery.map.photos"]
+        XCTAssertTrue(strip.waitForExistence(timeout: 15))
+        XCTAssertLessThan(strip.frame.height, 100)
+        let first = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000008"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        first.tap()
+        XCTAssertTrue(app.staticTexts["Selecionada 00000000-0000-4000-8000-000000000008"].waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Fotos sobrepostas no mapa"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let last = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000001"]
+        strip.swipeLeft()
+        XCTAssertTrue(last.waitForExistence(timeout: 5))
+        XCTAssertTrue(last.isHittable)
+        last.tap()
+        XCTAssertTrue(app.staticTexts["Selecionada 00000000-0000-4000-8000-000000000001"].waitForExistence(timeout: 5))
+    }
+
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.66"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -68,7 +102,7 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testCameraOptionsTrayAndMap() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.65"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.66"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -121,5 +155,22 @@ final class SettingsNavigationTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Mapa"].waitForExistence(timeout: 10))
         app.buttons["Fechar"].firstMatch.tap()
         XCTAssertTrue(options.waitForExistence(timeout: 5))
+        options.tap()
+        XCTAssertTrue(app.buttons["camera.options.grid"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["camera.options.grid"].exists)
+        options.tap()
+        app.buttons["camera.options.styles"].tap()
+        XCTAssertTrue(app.buttons["camera.styles.shutter"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["camera.styles.customize"].exists)
+        options.tap()
+        app.buttons["camera.options.map"].tap()
+        XCTAssertTrue(app.navigationBars["Mapa"].waitForExistence(timeout: 10))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Mapa"].exists)
     }
 }

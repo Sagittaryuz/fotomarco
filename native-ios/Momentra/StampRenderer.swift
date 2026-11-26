@@ -44,6 +44,14 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     func apply(to image: UIImage, adjustments: PhotoStyleAdjustments = .init()) -> UIImage {
         guard filterName != nil || !adjustments.isNeutral else { return image }
         guard let input = CIImage(image: image) else { return image }
+        let output = apply(to: input, adjustments: adjustments)
+        guard let cg = Self.styleContext.createCGImage(output, from: input.extent) else { return image }
+        return UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    /// Shared by the captured photo and the live GPU preview so both use the same recipe.
+    func apply(to input: CIImage, adjustments: PhotoStyleAdjustments = .init()) -> CIImage {
+        guard filterName != nil || !adjustments.isNeutral else { return input }
         var output = input
         if let filterName, let filter = CIFilter(name: filterName) {
             filter.setValue(input, forKey: kCIInputImageKey)
@@ -62,8 +70,7 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
             kCIInputBrightnessKey: tone * 0.003,
             kCIInputSaturationKey: (self == .vivid ? 0.9 : 1.0) * palette / 100
         ])
-        guard let cg = Self.styleContext.createCGImage(output, from: input.extent) else { return image }
-        return UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
+        return output.cropped(to: input.extent)
     }
 }
 

@@ -13,16 +13,25 @@ final class LiveRecognitionEngine: NSObject, ObservableObject, AVCaptureVideoDat
     @Published private(set) var item: LiveRecognizedItem?
     @Published private(set) var available = true
     let queue = DispatchQueue(label: "br.com.momentra.recognition", qos: .utility)
+    private let scanQueue = DispatchQueue(label: "br.com.momentra.recognition.scan", qos: .utility)
     private var qrEnabled = false
     private var textEnabled = false
     private var lastScan = Date.distantPast
     private var misses = 0
+    private var scanInFlight = false
+    private var generation = 0
+    private var previewFrame: ((CVPixelBuffer, CGFloat, Bool) -> Void)?
+
+    func setPreviewFrameHandler(_ handler: @escaping (CVPixelBuffer, CGFloat, Bool) -> Void) {
+        queue.async { self.previewFrame = handler }
+    }
 
     func setEnabled(qr: Bool, text: Bool) {
         queue.async {
             guard self.qrEnabled != qr || self.textEnabled != text else { return }
             self.qrEnabled = qr
             self.textEnabled = text
+            self.generation += 1
             self.lastScan = .distantPast
             self.misses = 0
             DispatchQueue.main.async { if self.item != nil { self.item = nil } }
@@ -36,35 +45,51 @@ final class LiveRecognitionEngine: NSObject, ObservableObject, AVCaptureVideoDat
     func clear() { DispatchQueue.main.async { self.item = nil } }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard qrEnabled || textEnabled, Date().timeIntervalSince(lastScan) >= 1,
+        if let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            previewFrame?(buffer, connection.videoRotationAngle, connection.isVideoMirrored)
+        }
+        guard (qrEnabled || textEnabled), !scanInFlight, Date().timeIntervalSince(lastScan) >= 1,
               let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastScan = Date()
+        scanInFlight = true
+        let qr = qrEnabled, text = textEnabled, requestGeneration = generation
+        scanQueue.async { [weak self] in
+            let result = Self.recognize(pixelBuffer, qr: qr, text: text)
+            self?.queue.async { [weak self] in
+                guard let self else { return }
+                self.scanInFlight = false
+                guard self.generation == requestGeneration, result.completed else { return }
+                if result.item == nil { self.misses += 1 } else { self.misses = 0 }
+                guard result.item != nil || self.misses >= 3 else { return }
+                DispatchQueue.main.async { if self.item != result.item { self.item = result.item } }
+            }
+        }
+    }
+
+    private static func recognize(_ pixelBuffer: CVPixelBuffer, qr: Bool, text: Bool) -> (completed: Bool, item: LiveRecognizedItem?) {
         let barcode = VNDetectBarcodesRequest()
         barcode.symbologies = [.qr]
-        let text = VNRecognizeTextRequest()
-        text.recognitionLevel = .fast
-        text.usesLanguageCorrection = false
-        text.minimumTextHeight = 0.025
+        let textRequest = VNRecognizeTextRequest()
+        textRequest.recognitionLevel = .fast
+        textRequest.usesLanguageCorrection = false
+        textRequest.minimumTextHeight = 0.025
         var requests: [VNRequest] = []
-        if qrEnabled { requests.append(barcode) }
-        if textEnabled { requests.append(text) }
+        if qr { requests.append(barcode) }
+        if text { requests.append(textRequest) }
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
-        do { try handler.perform(requests) } catch { return }
+        do { try handler.perform(requests) } catch { return (false, nil) }
         var result: LiveRecognizedItem?
-        if qrEnabled, let value = barcode.results?.compactMap(\.payloadStringValue).first, !value.isEmpty {
+        if qr, let value = barcode.results?.compactMap(\.payloadStringValue).first, !value.isEmpty {
             result = LiveRecognizedItem(kind: .qr, value: String(value.prefix(2048)))
-        } else if textEnabled {
-            let lines = (text.results ?? []).sorted { $0.boundingBox.midY > $1.boundingBox.midY }
+        } else if text {
+            let lines = (textRequest.results ?? []).sorted { $0.boundingBox.midY > $1.boundingBox.midY }
                 .compactMap { $0.topCandidates(1).first }
                 .filter { $0.confidence >= 0.6 }
                 .map(\.string)
             let value = lines.prefix(8).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
             if value.count >= 3 { result = LiveRecognizedItem(kind: .text, value: String(value.prefix(1500))) }
         }
-        if result == nil { misses += 1 } else { misses = 0 }
-        guard result != nil || misses >= 3 else { return }
-        let recognized = result
-        DispatchQueue.main.async { if self.item != recognized { self.item = recognized } }
+        return (true, result)
     }
 }
 

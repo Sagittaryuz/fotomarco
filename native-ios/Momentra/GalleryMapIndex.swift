@@ -16,6 +16,14 @@ struct GalleryMapRecord: Codable, Equatable {
     private var generation = UUID()
     private var restored = false
 
+    init() {}
+
+    #if DEBUG
+    init(testRecords: [GalleryMapRecord]) {
+        index = GalleryMapIndex.build(testRecords)
+    }
+    #endif
+
     func prepare(items: [GalleryItem]) async {
         let current = UUID(); generation = current
         if !restored {

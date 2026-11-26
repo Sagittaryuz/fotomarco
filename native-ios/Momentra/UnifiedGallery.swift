@@ -138,7 +138,7 @@ struct OriginalsView: View {
             }
             ZStack(alignment: .bottom) {
                 if tab == .map {
-                    GalleryCaptureMap(items: items, open: open, store: mapStore)
+                    GalleryCaptureMap(items: items, open: open, store: mapStore, bottomInset: galleryFooterHeight)
                 } else if items.isEmpty {
                     emptyState
                         .contentShape(Rectangle())
@@ -280,7 +280,6 @@ struct OriginalsView: View {
                         .accessibilityHidden(latest == nil)
                 }
                 Spacer()
-                calendarButton
                 if tab != .trash, tab != .map, total > 0 {
                     Button {
                         FotomarcoHaptics.play(.gallery)
@@ -291,25 +290,14 @@ struct OriginalsView: View {
                             .modifier(GalleryControlSurface(rounded: true))
                     }.disabled(busy)
                 }
+                calendarButton
             }.frame(minHeight: 42)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 13).padding(.top, 8).padding(.bottom, 5)
     }
 
-    @ViewBuilder private var calendarButton: some View {
-        if #available(iOS 26, *) {
-            calendarButtonContent
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-        } else {
-            calendarButtonContent
-                .buttonStyle(.plain)
-                .background(.regularMaterial, in: Capsule())
-        }
-    }
-
-    private var calendarButtonContent: some View {
+    private var calendarButton: some View {
         Button {
             FotomarcoHaptics.play(.gallery)
             showDateFilter = true
@@ -317,9 +305,11 @@ struct OriginalsView: View {
             Text(dateFilterLabel)
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 12).frame(minWidth: 42, minHeight: 42)
-                .foregroundStyle(dateFilter == nil ? Color.primary : .yellow)
+                .modifier(GalleryControlSurface(rounded: true, tint: dateFilter == nil ? .primary : .yellow))
                 .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("gallery.date")
         .accessibilityLabel(dateFilter == nil ? "Filtrar por data" : "Alterar filtro de data")
     }
 

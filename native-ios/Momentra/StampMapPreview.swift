@@ -32,8 +32,8 @@ struct StampMapPreview: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                if let image {
+            if let image {
+                ZStack {
                     if fillsFrame {
                         Image(uiImage: image).resizable().frame(width: proxy.size.width, height: proxy.size.height)
                     } else {
@@ -41,11 +41,10 @@ struct StampMapPreview: View {
                             .frame(width: proxy.size.width, height: proxy.size.height).clipped()
                     }
                     MomentraLocationMarker(size: markerSize)
-                } else {
-                    ProgressView().controlSize(.small)
                 }
-            }.frame(width: proxy.size.width, height: proxy.size.height)
+                .frame(width: proxy.size.width, height: proxy.size.height)
                 .overlay { Rectangle().strokeBorder(.white, lineWidth: max(1, min(proxy.size.width, proxy.size.height) * 0.012)) }
+            }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
