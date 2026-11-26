@@ -191,7 +191,17 @@ jobs:
         run: |
           if [ -d "$RUNNER_TEMP/MomentraSettingsUI.xcresult" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/MomentraSettingsUI.xcresult"
+            xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/MomentraSettingsUI.xcresult" || true
+            mkdir -p "$RUNNER_TEMP/settings-ui-attachments"
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/MomentraSettingsUI.xcresult" --output-path "$RUNNER_TEMP/settings-ui-attachments" || true
           fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: settings-ui-attachments
+          path: ${{ runner.temp }}/settings-ui-attachments/
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Run native unit tests
         working-directory: native-ios
         run: |
