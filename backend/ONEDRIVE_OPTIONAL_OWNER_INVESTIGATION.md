@@ -30,3 +30,9 @@ permissões de uma pasta existente retornou `FORBIDDEN` e `serviceReadOnly`.
 Esse conector usa credenciais distintas das usadas pelo Photomark: o resultado
 não identifica o erro do aplicativo nem comprova que suas permissões são iguais.
 Nenhuma pasta ou permissão foi modificada.
+
+A [documentação das permissões](https://learn.microsoft.com/en-us/graph/api/driveitem-list-permissions?view=graph-rest-1.0)
+informa que o proprietário recebe todas as permissões, mas outros chamadores
+podem receber apenas as próprias. Portanto uma listagem parcial ou negada não
+comprova que a pasta é privada; o serviço deve continuar recusando a operação
+quando não conseguir verificar as permissões efetivas.
