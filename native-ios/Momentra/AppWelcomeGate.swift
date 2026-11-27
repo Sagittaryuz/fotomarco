@@ -3,9 +3,10 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.70"
+    static let version = "0.1.71"
     static let items = [
-        "O ajuste de tom preserva os pretos da imagem no visor e nas fotos."
+        "A opção Desativado remove os estilos e seus ajustes do visor e das fotos.",
+        "A previsão de chuva é atualizada ao começar uma nova hora, usando o cache quando disponível."
     ]
 
     static func items(for version: String) -> [String] {

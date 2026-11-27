@@ -44,6 +44,19 @@ final class ForecastModelTests: XCTestCase {
         XCTAssertNil(ForecastModel.parse(try payload(rain: -1, unit: "mm"), at: now)?.precipitationMM)
     }
 
+    func testRainForecastRequiresRefreshWhenOneHourEnds() throws {
+        let json = #"{"properties":{"meta":{"updated_at":"2026-11-16T19:00:00Z","units":{"air_temperature":"celsius","precipitation_amount":"mm"}},"timeseries":[{"time":"2026-11-16T20:00:00Z","data":{"instant":{"details":{"air_temperature":22}},"next_1_hours":{"details":{"precipitation_amount":1.2}}}},{"time":"2026-11-16T21:00:00Z","data":{"instant":{"details":{"air_temperature":23}},"next_1_hours":{"details":{"precipitation_amount":0.4}}}}]}}"#
+        let data = Data(json.utf8)
+        let first = try XCTUnwrap(ForecastModel.parse(data, at: now))
+        XCTAssertFalse(first.requiresHourlyRefresh(at: now))
+        let nextHour = now.addingTimeInterval(1800)
+        XCTAssertTrue(first.isValid(at: nextHour))
+        XCTAssertTrue(first.requiresHourlyRefresh(at: nextHour))
+        let updated = try XCTUnwrap(ForecastModel.parse(data, at: nextHour))
+        XCTAssertEqual(updated.precipitationMM, 0.4)
+        XCTAssertFalse(updated.requiresHourlyRefresh(at: nextHour))
+    }
+
     func testForecastWithSummaryOnlyStillKeepsTemperature() throws {
         let json = #"{"properties":{"meta":{"updated_at":"2026-11-16T19:00:00Z","units":{"air_temperature":"celsius"}},"timeseries":[{"time":"2026-11-16T20:00:00Z","data":{"instant":{"details":{"air_temperature":22}},"next_1_hours":{"summary":{"symbol_code":"cloudy"}}}}]}}"#
         let result = try XCTUnwrap(ForecastModel.parse(Data(json.utf8), at: now))

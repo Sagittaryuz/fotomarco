@@ -13,6 +13,11 @@ struct Forecast: Codable, Equatable {
     func isValid(at date: Date) -> Bool {
         validAt <= date && updatedAt <= date && date.timeIntervalSince(validAt) <= 7200 && date.timeIntervalSince(updatedAt) <= 86400
     }
+
+    /// A one-hour precipitation interval expires before the general forecast does.
+    func requiresHourlyRefresh(at date: Date) -> Bool {
+        date >= validAt && date.timeIntervalSince(validAt) >= 3600
+    }
 }
 
 enum ForecastModel {

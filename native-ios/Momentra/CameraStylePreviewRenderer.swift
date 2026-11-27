@@ -38,7 +38,7 @@ final class CameraStylePreviewRenderer {
 
     /// Called on the main thread when the selected style or camera mode changes.
     func configure(style: MomentraPhotoStyle, adjustments: PhotoStyleAdjustments, enabled: Bool) -> Bool {
-        let active = enabled && (style.filterName != nil || !adjustments.isNeutral) && device != nil
+        let active = enabled && style.requiresRendering(adjustments: adjustments) && device != nil
         lock.lock()
         let changed = settings.active != active
         settings.style = style

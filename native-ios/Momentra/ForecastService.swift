@@ -43,8 +43,8 @@ final class ForecastService: ObservableObject {
     func refresh(location: CLLocation?) {
         let now = Date()
         guard !isLoading, now >= nextRefresh, let location, location.horizontalAccuracy >= 0,
-              location.timestamp <= now, now.timeIntervalSince(location.timestamp) <= 60,
-              current(location: location, at: now) == nil else { return }
+              location.timestamp <= now, now.timeIntervalSince(location.timestamp) <= 60 else { return }
+        if let existing = current(location: location, at: now), !existing.requiresHourlyRefresh(at: now) { return }
         nextRefresh = now.addingTimeInterval(60)
         consult(location: approximateLocation(location), consent: true)
     }

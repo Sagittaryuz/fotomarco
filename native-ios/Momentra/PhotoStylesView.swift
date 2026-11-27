@@ -70,15 +70,17 @@ struct CameraPhotoStylesView: View {
                                         .overlay(RoundedRectangle(cornerRadius: 11).stroke(selected == style.rawValue ? .yellow : .clear, lineWidth: 2))
                                     Text(style.rawValue).font(.caption2).foregroundStyle(.white)
                                 }
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.plain).accessibilityIdentifier("camera.style.\(style.rawValue)")
                         }
                     }.padding(.horizontal, 16)
                 }
-                Button("Personalizar") { withAnimation { customizing = true } }
-                    .accessibilityIdentifier("camera.styles.customize")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 18).padding(.vertical, 6)
-                    .background(.black.opacity(0.5), in: Capsule())
+                if selected != MomentraPhotoStyle.disabled.rawValue {
+                    Button("Personalizar") { withAnimation { customizing = true } }
+                        .accessibilityIdentifier("camera.styles.customize")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 18).padding(.vertical, 6)
+                        .background(.black.opacity(0.5), in: Capsule())
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

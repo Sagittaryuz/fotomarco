@@ -38,7 +38,7 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.70"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.71"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -103,7 +103,7 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testCameraOptionsTrayAndMap() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.70"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.71"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -150,6 +150,14 @@ final class SettingsNavigationTests: XCTestCase {
         let styleBack = app.buttons["camera.styles.back"]
         XCTAssertTrue(styleBack.waitForExistence(timeout: 5))
         styleBack.tap()
+        XCTAssertTrue(customize.waitForExistence(timeout: 5))
+        let disabledStyle = app.buttons["camera.style.Desativado"]
+        XCTAssertTrue(disabledStyle.waitForExistence(timeout: 5))
+        disabledStyle.tap()
+        XCTAssertFalse(customize.exists)
+        let naturalStyle = app.buttons["camera.style.Natural"]
+        XCTAssertTrue(naturalStyle.waitForExistence(timeout: 5))
+        naturalStyle.tap()
         XCTAssertTrue(customize.waitForExistence(timeout: 5))
         styleBack.tap()
         app.buttons["camera.options.map"].tap()

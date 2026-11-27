@@ -51,6 +51,29 @@ final class ForecastClientTests: XCTestCase {
         XCTAssertEqual(serviceUnavailable.timeIntervalSince(now), 172800, accuracy: 0.001)
     }
 
+    func testCachedForecastSuppliesNextHourRainWithoutAnotherRequest() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ForecastCacheStore(root: root)
+        let now = ISO8601DateFormatter().date(from: "2026-11-16T20:30:00Z")!
+        let coordinate = CLLocationCoordinate2D(latitude: -17.1, longitude: -51.1)
+        func location(_ at: Date) -> CLLocation {
+            CLLocation(coordinate: coordinate, altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: at)
+        }
+        let body = Data(#"{"properties":{"meta":{"updated_at":"2026-11-16T19:00:00Z","units":{"air_temperature":"celsius","precipitation_amount":"mm"}},"timeseries":[{"time":"2026-11-16T20:00:00Z","data":{"instant":{"details":{"air_temperature":22}},"next_1_hours":{"details":{"precipitation_amount":1.2}}}},{"time":"2026-11-16T21:00:00Z","data":{"instant":{"details":{"air_temperature":23}},"next_1_hours":{"details":{"precipitation_amount":0.4}}}}]}}"#.utf8)
+        var calls = 0
+        let transport: ForecastClient.Transport = { request in
+            calls += 1
+            return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        let first = try await ForecastClient.fetch(location: location(now), now: now, consent: true, isForeground: { true }, store: store, transport: transport)
+        XCTAssertEqual(first.precipitationMM, 1.2)
+        let nextHour = now.addingTimeInterval(1800)
+        let second = try await ForecastClient.fetch(location: location(nextHour), now: nextHour, consent: true, isForeground: { true }, store: store, transport: transport)
+        XCTAssertEqual(second.precipitationMM, 0.4)
+        XCTAssertEqual(calls, 1)
+    }
+
     func testCorruptCacheDoesNotPermitRequest() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

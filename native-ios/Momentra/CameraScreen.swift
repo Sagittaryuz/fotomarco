@@ -216,9 +216,14 @@ struct CameraScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var didEnterBackground = false
 
+    private var photoStyleActive: Bool {
+        let style = MomentraPhotoStyle(rawValue: photoStyle) ?? .natural
+        return style.requiresRendering(adjustments: PhotoStyleAdjustments(tone: styleTone, color: styleColor, palette: stylePalette))
+    }
+
     private var cameraOptionsActive: Bool {
         camera.flashMode != .off || timerSeconds > 0 || photoAspect != PhotoAspect.standard.rawValue ||
-        photoStyle != MomentraPhotoStyle.natural.rawValue || styleTone != 0 || styleColor != 0 || stylePalette != 100 || showGrid
+        photoStyleActive || showGrid
     }
 
     private func cameraOptionLabel(_ title: String, symbol: String, active: Bool = false) -> some View {
@@ -258,7 +263,7 @@ struct CameraScreen: View {
                         CameraPhotoStylesView(selected: $photoStyle, tone: $styleTone, color: $styleColor, palette: $stylePalette)
                             .onAppear { showingStyleEditor = true; cameraOptionsDetent = .height(260) }
                             .onDisappear { showingStyleEditor = false; cameraOptionsDetent = .medium }
-                    } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyle != MomentraPhotoStyle.natural.rawValue || styleTone != 0 || styleColor != 0 || stylePalette != 100) }
+                    } label: { cameraOptionLabel("Estilos", symbol: "camera.filters", active: photoStyleActive) }
                     .accessibilityIdentifier("camera.options.styles")
                     .disabled(mode == .video)
                     Button { FotomarcoHaptics.play(.buttons); showGrid.toggle() } label: {

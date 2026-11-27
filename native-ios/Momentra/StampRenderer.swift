@@ -15,11 +15,11 @@ struct PhotoStyleAdjustments: Equatable {
 }
 
 enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
-    case natural = "Natural", brilliance = "Brilho", vivid = "Vibrante", soft = "Suave", dramatic = "Contraste", mono = "P&B", warm = "Quente"
+    case disabled = "Desativado", natural = "Natural", brilliance = "Brilho", vivid = "Vibrante", soft = "Suave", dramatic = "Contraste", mono = "P&B", warm = "Quente"
     var id: String { rawValue }
     var filterName: String? {
         switch self {
-        case .natural: return nil
+        case .disabled, .natural: return nil
         case .brilliance: return "CIPhotoEffectInstant"
         case .vivid: return "CIPhotoEffectChrome"
         case .soft: return "CIPhotoEffectFade"
@@ -30,6 +30,7 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     }
     var detail: String {
         switch self {
+        case .disabled: return "Desativa os estilos e seus ajustes."
         case .natural: return "Mantém as cores originais da imagem."
         case .brilliance: return "Ilumina e aquece suavemente a fotografia."
         case .vivid: return "Realça as cores e o contraste."
@@ -41,8 +42,12 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     }
     private static let styleContext = CIContext(options: nil)
 
+    func requiresRendering(adjustments: PhotoStyleAdjustments) -> Bool {
+        self != .disabled && (filterName != nil || !adjustments.isNeutral)
+    }
+
     func apply(to image: UIImage, adjustments: PhotoStyleAdjustments = .init()) -> UIImage {
-        guard filterName != nil || !adjustments.isNeutral else { return image }
+        guard requiresRendering(adjustments: adjustments) else { return image }
         guard let input = CIImage(image: image) else { return image }
         let output = apply(to: input, adjustments: adjustments)
         guard let cg = Self.styleContext.createCGImage(output, from: input.extent) else { return image }
@@ -51,7 +56,7 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
 
     /// Shared by the captured photo and the live GPU preview so both use the same recipe.
     func apply(to input: CIImage, adjustments: PhotoStyleAdjustments = .init()) -> CIImage {
-        guard filterName != nil || !adjustments.isNeutral else { return input }
+        guard requiresRendering(adjustments: adjustments) else { return input }
         var output = input
         if let filterName, let filter = CIFilter(name: filterName) {
             filter.setValue(input, forKey: kCIInputImageKey)

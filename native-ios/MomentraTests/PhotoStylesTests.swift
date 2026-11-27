@@ -16,6 +16,11 @@ final class PhotoStylesTests: XCTestCase {
         for style in MomentraPhotoStyle.allCases {
             let live = style.apply(to: input, adjustments: adjustments)
             let captured = style.apply(to: source, adjustments: adjustments)
+            if style == .disabled {
+                XCTAssertTrue(live === input)
+                XCTAssertTrue(captured === source)
+                continue
+            }
             let liveImage = try XCTUnwrap(context.createCGImage(live, from: input.extent))
             let liveData = try XCTUnwrap(UIImage(cgImage: liveImage, scale: source.scale, orientation: source.imageOrientation).pngData())
             XCTAssertEqual(liveData, captured.pngData(), "Style \(style.rawValue)")
@@ -44,6 +49,19 @@ final class PhotoStylesTests: XCTestCase {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
         let source = renderer.image { context in UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8)) }
         XCTAssertTrue(MomentraPhotoStyle.natural.apply(to: source) === source)
+    }
+
+    func testDisabledStyleBypassesSavedAdjustmentsForLiveAndCapturedImages() throws {
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.darkGray.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let input = try XCTUnwrap(CIImage(image: source))
+        let adjustments = PhotoStyleAdjustments(tone: 80, color: -30, palette: 40)
+        XCTAssertFalse(MomentraPhotoStyle.disabled.requiresRendering(adjustments: adjustments))
+        XCTAssertTrue(MomentraPhotoStyle.disabled.apply(to: input, adjustments: adjustments) === input)
+        XCTAssertTrue(MomentraPhotoStyle.disabled.apply(to: source, adjustments: adjustments) === source)
+        XCTAssertFalse(CameraStylePreviewRenderer().configure(style: .disabled, adjustments: adjustments, enabled: true))
+        XCTAssertTrue(MomentraPhotoStyle.natural.requiresRendering(adjustments: adjustments))
     }
 
     func testPositiveToneKeepsBlackBlackWhileLighteningMidtones() {
