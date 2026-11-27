@@ -56,7 +56,7 @@ enum GalleryMapFraming {
         let longitudeWidth = max(0, 360 - largestGap)
         let longitudeCenter = (start + longitudeWidth / 2 + 180).truncatingRemainder(dividingBy: 360) - 180
         return MKCoordinateRegion(center: .init(latitude: (minLat + maxLat) / 2, longitude: longitudeCenter),
-            span: .init(latitudeDelta: min(170, max(0.005, (maxLat - minLat) * 1.6)),
+            span: .init(latitudeDelta: min(180, max(0.005, (maxLat - minLat) * 1.6)),
                         longitudeDelta: min(360, max(0.005, longitudeWidth * 1.6))))
     }
 }

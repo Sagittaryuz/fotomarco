@@ -24,6 +24,12 @@ final class GalleryMapTests: XCTestCase {
         XCTAssertEqual(abs(region.center.longitude), 180, accuracy: 0.00001)
         XCTAssertLessThan(region.span.longitudeDelta, 5)
     }
+
+    func testFramingDoesNotExcludePhotosNearBothPoles() throws {
+        let region = try XCTUnwrap(GalleryMapFraming.region(for: [
+            .init(latitude: 88, longitude: 0), .init(latitude: -88, longitude: 0)]))
+        XCTAssertGreaterThanOrEqual(region.span.latitudeDelta, 176)
+    }
     func testPhotosAtIdenticalCoordinatesRemainDistinctAndInOrder() {
         let first = UUID(), second = UUID(), missing = UUID()
         let date = Date(timeIntervalSince1970: 1_700_000_000)
