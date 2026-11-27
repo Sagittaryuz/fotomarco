@@ -66,8 +66,12 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
                 "inputTargetNeutral": CIVector(x: CGFloat(6500 + color * 20), y: 0)
             ])
         }
+        // Additive brightness lifts black pixels to gray across the whole image.
+        // An exposure adjustment changes light without introducing a gray veil.
+        if tone != 0 {
+            output = output.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: tone / 100])
+        }
         output = output.applyingFilter("CIColorControls", parameters: [
-            kCIInputBrightnessKey: tone * 0.003,
             kCIInputSaturationKey: (self == .vivid ? 0.9 : 1.0) * palette / 100
         ])
         return output.cropped(to: input.extent)

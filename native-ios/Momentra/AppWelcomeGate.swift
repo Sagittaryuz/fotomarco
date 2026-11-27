@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.69"
+    static let version = "0.1.70"
     static let items = [
-        "A preparação das miniaturas prioriza as fotos mais recentes e evita downloads desnecessários."
+        "O ajuste de tom preserva os pretos da imagem no visor e nas fotos."
     ]
 
     static func items(for version: String) -> [String] {

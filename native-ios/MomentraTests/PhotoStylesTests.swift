@@ -46,6 +46,29 @@ final class PhotoStylesTests: XCTestCase {
         XCTAssertTrue(MomentraPhotoStyle.natural.apply(to: source) === source)
     }
 
+    func testPositiveToneKeepsBlackBlackWhileLighteningMidtones() {
+        let extent = CGRect(x: 0, y: 0, width: 2, height: 1)
+        let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let mid = CIImage(color: CIColor(red: 0.25, green: 0.25, blue: 0.25)).cropped(to: CGRect(x: 1, y: 0, width: 1, height: 1))
+        let source = mid.composited(over: black)
+        let adjusted = MomentraPhotoStyle.natural.apply(to: source, adjustments: .init(tone: 100, color: 0, palette: 100))
+        let context = CIContext(options: [.cacheIntermediates: false])
+        func pixels(_ image: CIImage) -> [UInt8] {
+            var bytes = [UInt8](repeating: 0, count: 8)
+            bytes.withUnsafeMutableBytes { buffer in
+                guard let address = buffer.baseAddress else { return }
+                context.render(image, toBitmap: address, rowBytes: 8, bounds: extent,
+                               format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+            }
+            return bytes
+        }
+        let baseline = pixels(source), result = pixels(adjusted)
+        XCTAssertLessThanOrEqual(result[0], 1)
+        XCTAssertLessThanOrEqual(result[1], 1)
+        XCTAssertLessThanOrEqual(result[2], 1)
+        XCTAssertGreaterThan(result[4], baseline[4])
+    }
+
     func testStylesProduceImagesAtOriginalDimensions() {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 10))
         let source = renderer.image { context in UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 12, height: 10)) }
