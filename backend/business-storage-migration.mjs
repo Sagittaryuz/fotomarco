@@ -36,7 +36,18 @@ export function applyVerifiedMigrationReceipt(migration, receipt) {
   return { ...migration, items };
 }
 
-export function canSwitchStorage(migration, { organizationId, currentSource, currentDestination, permissionsVerified, writesQuiesced }) {
+// The final snapshot must be obtained by trusted server code after writes have
+// stopped, and switching must occur in the same protected transaction/lease.
+export function canSwitchStorage(migration, { organizationId, currentSource, currentDestination, permissionsVerified, writesQuiesced,
+  finalRecords, finalSnapshotComplete, pendingUploads }) {
+  if (!Array.isArray(finalRecords) || finalSnapshotComplete !== true || pendingUploads !== 0 || !Array.isArray(migration?.items) ||
+      finalRecords.length !== migration.items.length) return false;
+  const finalById = new Map();
+  for (const record of finalRecords) {
+    if (!record || record.organizationId !== organizationId || record.storageIdentity !== currentSource ||
+        record.state !== 'verified' || !safeID(record.recordId) || finalById.has(record.recordId)) return false;
+    finalById.set(record.recordId, record);
+  }
   return migration?.version === 1 && safeID(organizationId) && organizationId === migration.organizationId &&
     safeID(migration.source) && safeID(migration.destination) && migration.source !== migration.destination &&
     migration.sourceSnapshotComplete === true && currentSource === migration.source && currentDestination === migration.destination &&
@@ -44,6 +55,11 @@ export function canSwitchStorage(migration, { organizationId, currentSource, cur
     migration.items.every(item => item && typeof item === 'object') &&
     new Set(migration.items.map(item => item.recordId)).size === migration.items.length &&
     new Set(migration.items.map(item => item.targetItemId)).size === migration.items.length &&
-    migration.items.every(item => safeID(item.recordId) && safeID(item.authorId) && safeID(item.sourceItemId) && safeID(item.sourceFolderId) &&
-      safeID(item.targetItemId) && safeID(item.targetFolderId) && validHash(item.sha256) && Number.isSafeInteger(item.byteCount) && item.byteCount > 0);
+    migration.items.every(item => {
+      const current = finalById.get(item.recordId);
+      return safeID(item.recordId) && safeID(item.authorId) && safeID(item.sourceItemId) && safeID(item.sourceFolderId) &&
+        safeID(item.targetItemId) && safeID(item.targetFolderId) && validHash(item.sha256) && Number.isSafeInteger(item.byteCount) && item.byteCount > 0 &&
+        current?.authorId === item.authorId && current.remoteItemId === item.sourceItemId && current.folderId === item.sourceFolderId &&
+        current.byteCount === item.byteCount && current.sha256 === item.sha256;
+    });
 }

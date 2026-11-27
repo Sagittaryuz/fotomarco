@@ -4,7 +4,8 @@ import { createStorageMigration, applyVerifiedMigrationReceipt, canSwitchStorage
 
 const sha256 = 'a'.repeat(64);
 const record = { organizationId: 'org', storageIdentity: 'old-drive', authorId: 'member', recordId: 'capture-stamped', remoteItemId: 'old-file', folderId: 'old-folder', state: 'verified', byteCount: 25, sha256 };
-const readiness = { organizationId: 'org', currentSource: 'old-drive', currentDestination: 'new-drive', permissionsVerified: true, writesQuiesced: true };
+const readiness = { organizationId: 'org', currentSource: 'old-drive', currentDestination: 'new-drive', permissionsVerified: true, writesQuiesced: true,
+  finalRecords: [record], finalSnapshotComplete: true, pendingUploads: 0 };
 const sourceState = { organizationId: 'org', sourceSnapshotComplete: true, pendingUploads: 0 };
 
 test('switch requires every verified copy, verified access and stopped writes', () => {
@@ -16,6 +17,19 @@ test('switch requires every verified copy, verified access and stopped writes', 
   assert.equal(canSwitchStorage(copied, { ...readiness, writesQuiesced: false }), false);
   assert.equal(canSwitchStorage(copied, { ...readiness, currentSource: 'other' }), false);
   assert.equal(initial.items[0].targetItemId, null);
+});
+
+test('switch refuses captures added, changed or pending after the original snapshot', () => {
+  const initial = createStorageMigration({ source: 'old-drive', destination: 'new-drive', records: [record], ...sourceState });
+  const copied = applyVerifiedMigrationReceipt(initial, { recordId: record.recordId, targetItemId: 'new-file', targetFolderId: 'new-folder', byteCount: 25, sha256 });
+  const added = { ...record, recordId: 'later-capture', remoteItemId: 'later-file' };
+  for (const finalState of [
+    { finalRecords: [record, added] }, { finalRecords: [] }, { finalRecords: [{ ...record, sha256: 'b'.repeat(64) }] },
+    { finalRecords: [{ ...record, authorId: 'another' }] }, { finalRecords: [{ ...record, remoteItemId: 'replacement' }] },
+    { finalRecords: [{ ...record, state: 'uploading' }] }, { finalRecords: [{ ...record, organizationId: 'other' }] },
+    { finalSnapshotComplete: false }, { pendingUploads: 1 }, { finalRecords: undefined },
+  ]) assert.equal(canSwitchStorage(copied, { ...readiness, ...finalState }), false);
+  assert.equal(canSwitchStorage(copied, readiness), true);
 });
 
 test('refuses incomplete source data, mismatched copies and changed receipts', () => {
