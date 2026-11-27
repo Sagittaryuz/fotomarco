@@ -168,6 +168,18 @@ test('failed Microsoft verification preserves the existing OneDrive binding', as
   }
 });
 
+test('OneDrive rejects an incomplete verified credential without replacing an existing binding', async () => {
+  const { service, storedCredential } = fixture();
+  const existing = { version: 1, iv: 'iv', ciphertext: 'existing', driveId: 'drive', providerAccountId: 'account' };
+  service.prepareOneDrive = async () => existing;
+  await service.connectOneDrive({ uid: 'owner' }, 'org', 'first-token');
+  for (const field of ['iv', 'ciphertext', 'driveId', 'providerAccountId']) {
+    service.prepareOneDrive = async () => ({ ...existing, [field]: '' });
+    await assert.rejects(service.connectOneDrive({ uid: 'owner' }, 'org', 'replacement-token'), /invalid-provider-credential/);
+    assert.deepEqual(storedCredential(), existing);
+  }
+});
+
 test('organization discovery checks live membership rather than trusting an index', async () => {
   const { service, records } = fixture();
   records.set('member', { organizationId: 'org', userId: 'member', role: 'member', active: true });

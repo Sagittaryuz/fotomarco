@@ -291,8 +291,10 @@ export class BusinessService {
     };
     await this.transaction(verifyOwner);
     const record = await this.prepareOneDrive({ organizationId, ownerId: identity.uid, refreshToken });
-    if (!record || record.version !== 1 || typeof record.iv !== 'string' || typeof record.ciphertext !== 'string' ||
-        typeof record.driveId !== 'string' || typeof record.providerAccountId !== 'string' ||
+    if (!record || record.version !== 1 || typeof record.iv !== 'string' || !record.iv ||
+        typeof record.ciphertext !== 'string' || !record.ciphertext ||
+        typeof record.driveId !== 'string' || !record.driveId ||
+        typeof record.providerAccountId !== 'string' || !record.providerAccountId ||
         Object.keys(record).sort().join(',') !== 'ciphertext,driveId,iv,providerAccountId,version') throw new Error('invalid-provider-credential');
     return this.transaction(async tx => {
       await verifyOwner(tx);
