@@ -4,13 +4,16 @@ export async function storageFingerprint(provider, canonicalId, userId) {
     throw new Error('invalid-storage-identity');
   }
   // Scope the pseudonym to one app user to avoid a cross-user tracking ID.
-  const bytes = new TextEncoder().encode(JSON.stringify(['photomark-storage-v1', userId, provider, canonicalId]));
+  const encoder = new TextEncoder();
+  const payload = ['photomark-storage-v1', userId, provider, canonicalId]
+    .map(value => `${encoder.encode(value).length}:${value}`).join('');
+  const bytes = encoder.encode(payload);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function validIdentifier(value) {
-  return typeof value === 'string' && value.length > 0 && value.length <= 512 && !/[\x00-\x1f\x7f]/.test(value);
+  return typeof value === 'string' && value.length > 0 && new TextEncoder().encode(value).length <= 512 && !/[\x00-\x1f\x7f]/.test(value);
 }
 
 /** An unknown destination must remain pending, never be assumed distinct. */
