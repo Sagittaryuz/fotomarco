@@ -65,6 +65,10 @@ final class SettingsNavigationTests: XCTestCase {
             submenuScreenshot.name = "Configurações - \(title)"
             submenuScreenshot.lifetime = .keepAlways
             add(submenuScreenshot)
+            if title == "Sobre" {
+                XCTAssertTrue(app.staticTexts["Novidades desta versão"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.staticTexts["1. A tela Sobre mostra as novidades da versão instalada."].exists)
+            }
             if title == "Câmera" {
                 let label = app.buttons["Grade"]
                 XCTAssertTrue(label.waitForExistence(timeout: 5))

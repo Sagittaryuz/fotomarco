@@ -1459,6 +1459,20 @@ struct CameraScreen: View {
                             Form {
                     Section {
                         LabeledContent("Versão instalada", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Indisponível")
+                        let installedVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+                        let installedNews = ReleaseNews.items(for: installedVersion)
+                        if !installedNews.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Novidades desta versão").font(.headline)
+                                ForEach(installedNews, id: \.self) { item in
+                                    Text("\((installedNews.firstIndex(of: item) ?? 0) + 1). \(item)")
+                                        .font(.subheadline)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 6)
+                        }
                         if let version = updates.availableVersion {
                             Text("Nova versão disponível: \(version)").font(.headline)
                             if directUpdate.ready {
