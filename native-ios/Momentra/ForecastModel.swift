@@ -25,7 +25,7 @@ enum ForecastModel {
             struct Entry: Decodable {
                 struct DataValue: Decodable {
                     struct Instant: Decodable { let details: [String: Double] }
-                    struct Period: Decodable { let details: [String: Double] }
+                    struct Period: Decodable { let details: [String: Double]? }
                     let instant: Instant
                     let next_1_hours: Period?
                 }

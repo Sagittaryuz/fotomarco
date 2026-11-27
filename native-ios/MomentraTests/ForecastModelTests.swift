@@ -43,4 +43,11 @@ final class ForecastModelTests: XCTestCase {
         XCTAssertNil(ForecastModel.parse(try payload(rain: 1.2, unit: "cm"), at: now)?.precipitationMM)
         XCTAssertNil(ForecastModel.parse(try payload(rain: -1, unit: "mm"), at: now)?.precipitationMM)
     }
+
+    func testForecastWithSummaryOnlyStillKeepsTemperature() throws {
+        let json = #"{"properties":{"meta":{"updated_at":"2026-11-16T19:00:00Z","units":{"air_temperature":"celsius"}},"timeseries":[{"time":"2026-11-16T20:00:00Z","data":{"instant":{"details":{"air_temperature":22}},"next_1_hours":{"summary":{"symbol_code":"cloudy"}}}}]}}"#
+        let result = try XCTUnwrap(ForecastModel.parse(Data(json.utf8), at: now))
+        XCTAssertEqual(result.temperatureC, 22)
+        XCTAssertNil(result.precipitationMM)
+    }
 }
