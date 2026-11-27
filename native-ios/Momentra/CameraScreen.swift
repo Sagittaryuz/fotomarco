@@ -622,7 +622,7 @@ struct CameraScreen: View {
                                 if !stampProfiles.organizationProfiles.isEmpty {
                                     Section("Organizações") {
                                         ForEach(stampProfiles.organizationProfiles) { item in
-                                            Text(item.name.isEmpty ? "Sem nome" : item.name).tag(item.id)
+                                            Label(item.name.isEmpty ? "Sem nome" : item.name, systemImage: "building.2.fill").tag(item.id)
                                         }
                                     }
                                 }

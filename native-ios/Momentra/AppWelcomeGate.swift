@@ -5,7 +5,9 @@ import AVFoundation
 enum ReleaseNews {
     static let version = "0.1.68"
     static let items = [
-        "O mapa enquadra as fotos do período selecionado e mostra as miniaturas sem legendas ou faixa inferior."
+        "O mapa enquadra as fotos do período selecionado e mostra as miniaturas sem legendas ou faixa inferior.",
+        "Os perfis de organizações são identificados no seletor da câmera.",
+        "A câmera usa processamento equilibrado e suporte automático a pouca luz quando disponível."
     ]
 
     static func items(for version: String) -> [String] {

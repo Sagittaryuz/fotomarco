@@ -117,6 +117,8 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         guard session.canAddInput(candidate), session.canAddOutput(photoOutput) else { throw CameraError.configuration }
         session.addInput(candidate)
         session.addOutput(photoOutput)
+        photoOutput.maxPhotoQualityPrioritization = .balanced
+        configureLowLight(for: device)
         let supportsVideo = session.canAddOutput(movieOutput)
         if supportsVideo { session.addOutput(movieOutput) }
         if session.canAddOutput(recognitionOutput) {
@@ -137,6 +139,12 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     private func publishFlashModes(for device: AVCaptureDevice) {
         let modes = device.hasFlash ? photoOutput.supportedFlashModes : [.off]
         DispatchQueue.main.async { self.availableFlashModes = modes }
+    }
+
+    private func configureLowLight(for device: AVCaptureDevice) {
+        guard device.isLowLightBoostSupported, (try? device.lockForConfiguration()) != nil else { return }
+        defer { device.unlockForConfiguration() }
+        device.automaticallyEnablesLowLightBoostWhenAvailable = true
     }
 
     func setRecognition(qr: Bool, text: Bool) {
@@ -202,7 +210,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 return
             }
             let settings = AVCapturePhotoSettings()
-            settings.photoQualityPrioritization = .speed
+            settings.photoQualityPrioritization = .balanced
             self.pendingPhoto = PhotoRequest(settingsID: settings.uniqueID, id: UUID(), capturedAt: capturedAt,
                                              snapshot: snapshot, aspect: aspect, style: style, styleAdjustments: styleAdjustments, saveToPhotos: saveToPhotos,
                                              profile: profile, archivePlan: archivePlan, businessTarget: businessTarget, sessionID: sessionID)
@@ -236,6 +244,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             if self.session.canAddInput(replacement) {
                 self.session.addInput(replacement)
                 self.input = replacement
+                self.configureLowLight(for: device)
                 self.session.commitConfiguration()
                 DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.activeDevice = device }
                 self.resetZoom(for: device)
