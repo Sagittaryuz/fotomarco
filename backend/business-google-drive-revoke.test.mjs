@@ -27,3 +27,13 @@ test('does not delete permissions when an unexpected person has access', async (
   await assert.rejects(revokeGoogleDriveMember({ ...args, fetchImpl }), /unsafe-google-folder/);
   assert.equal(deletes, 0);
 });
+test('does not report success when the member remains after deletion', async () => {
+  const fetchImpl = async (url, options) => {
+    if (options.method === 'DELETE') return { status: 204 };
+    if (url.includes('/permissions?')) return { status: 200, json: async () => ({ permissions: [
+      { id: 'owner', type: 'user', role: 'owner' }, { id: 'member', type: 'user', role: 'writer' }] }) };
+    return { status: 200, json: async () => ({ id: 'folder', parents: ['parent'], mimeType: 'application/vnd.google-apps.folder',
+      trashed: false, writersCanShare: false, capabilities: { canListChildren: true } }) };
+  };
+  await assert.rejects(revokeGoogleDriveMember({ ...args, fetchImpl }), /unsafe-google-folder/);
+});
