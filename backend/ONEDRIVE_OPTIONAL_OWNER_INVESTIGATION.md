@@ -23,3 +23,10 @@ compatíveis e divergentes; ainda é necessário obter a categoria sanitizada do
 erro real e verificar uma conta pessoal real antes da publicação. Não registrar
 IDs, tokens, e-mails, fotos ou respostas completas do provedor. Não modificar
 permissões existentes nem transferir fotos para testar.
+
+Em uma verificação somente de leitura, o conector Microsoft confirmou a conta
+solicitada e um drive pessoal; a listagem da raiz funcionou. A leitura de
+permissões de uma pasta existente retornou `FORBIDDEN` e `serviceReadOnly`.
+Esse conector usa credenciais distintas das usadas pelo Photomark: o resultado
+não identifica o erro do aplicativo nem comprova que suas permissões são iguais.
+Nenhuma pasta ou permissão foi modificada.
