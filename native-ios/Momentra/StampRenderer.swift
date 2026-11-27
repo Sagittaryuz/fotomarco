@@ -158,6 +158,10 @@ struct StampSnapshot {
         else { weather.append("Pressão indisponível") }
         if let value = forecast?.windMetersPerSecond { weather.append(String(format: "%.1f km/h", value * 3.6)) }
         else { weather.append("Vento indisponível") }
+        if let forecast, capturedAt.timeIntervalSince(forecast.validAt) < 3600, let value = forecast.precipitationMM {
+            weather.append(String(format: "Chuva 1h: %.1f mm", value))
+        }
+        else { weather.append("Chuva indisponível") }
         return SeparateStampInformation(time: time, date: date, address: place, coordinate: coordinate,
                                         weather: weather.isEmpty ? nil : weather.joined(separator: " | "), note: note)
     }

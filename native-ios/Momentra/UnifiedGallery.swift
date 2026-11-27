@@ -787,6 +787,9 @@ struct OriginalsView: View {
                     do {
                         try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(assets as NSArray) }
                         deleted.formUnion(assets.map { "device/" + $0.localIdentifier })
+                        for item in chosen where deleted.contains(item.storageID) {
+                            if let id = item.captureIDForUpload { CloudThumbnailCache.setHidden(true, captureID: id) }
+                        }
                     } catch {
                         if (error as NSError).code != PHPhotosError.Code.userCancelled.rawValue { failed = true }
                     }

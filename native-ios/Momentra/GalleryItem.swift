@@ -294,6 +294,7 @@ struct GalleryItem: Identifiable {
         case .cloud(let item):
             try await item.moveToTrash()
         }
+        if let id = captureIDForUpload { CloudThumbnailCache.setHidden(true, captureID: id) }
     }
 
     @MainActor func restore() async throws {
@@ -305,5 +306,6 @@ struct GalleryItem: Identifiable {
         case .device:
             throw CocoaError(.featureUnsupported)
         }
+        if let id = captureIDForUpload { CloudThumbnailCache.setHidden(false, captureID: id) }
     }
 }

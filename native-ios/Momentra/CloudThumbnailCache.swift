@@ -6,13 +6,37 @@ import UniformTypeIdentifiers
 enum CloudThumbnailCache {
     enum Failure: Error { case missingSource, invalidImage, encoding }
 
+    private static let visibilityLock = NSLock()
+    private static let hiddenKey = "native.camera.deletedThumbnailIDs.v1"
+
+    static func hiddenCaptureIDs(defaults: UserDefaults = .standard) -> Set<String> {
+        visibilityLock.lock(); defer { visibilityLock.unlock() }
+        return Set(defaults.stringArray(forKey: hiddenKey) ?? [])
+    }
+
+    static func setHidden(_ hidden: Bool, captureID: UUID, defaults: UserDefaults = .standard) {
+        visibilityLock.lock(); defer { visibilityLock.unlock() }
+        var ids = Set(defaults.stringArray(forKey: hiddenKey) ?? [])
+        if hidden { ids.insert(captureID.uuidString) } else { ids.remove(captureID.uuidString) }
+        defaults.set(Array(ids), forKey: hiddenKey)
+    }
+
     static func latestCapturePreview(root: URL) -> (image: CGImage, file: URL)? {
         let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
+        var hidden = hiddenCaptureIDs()
+        // Photos deleted by earlier versions are still identifiable in the local trash.
+        let trash = root.appendingPathComponent("CaptureTrash/Processed", isDirectory: true)
+        if let enumerator = FileManager.default.enumerator(at: trash, includingPropertiesForKeys: nil) {
+            for case let file as URL in enumerator {
+                if let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) { hidden.insert(id.uuidString) }
+            }
+        }
         let candidates = ["Processed", "CloudThumbnails"].flatMap { name in
             let directory = root.appendingPathComponent(name, isDirectory: true)
             return (try? FileManager.default.contentsOfDirectory(at: directory,
                 includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])) ?? []
         }.compactMap { url -> (URL, Date)? in
+            if let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent), hidden.contains(id.uuidString) { return nil }
             guard let attributes = try? url.resourceValues(forKeys: keys), attributes.isRegularFile == true,
                   let date = attributes.contentModificationDate else { return nil }
             return (url, date)

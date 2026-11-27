@@ -3,6 +3,41 @@ import XCTest
 @testable import Momentra
 
 final class CloudThumbnailCacheTests: XCTestCase {
+    func testDeletedCapturesAreExcludedFromCameraPreviewEvenWhenCached() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let older = UUID(), deleted = UUID()
+        defer {
+            CloudThumbnailCache.setHidden(false, captureID: deleted)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).jpegData(withCompressionQuality: 0.8) { ctx in
+            UIColor.blue.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        }
+        let oldFile = try ProcessedFileStore.save(photo, captureID: older, root: root)
+        let newFile = try ProcessedFileStore.save(photo, captureID: deleted, root: root)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 100)], ofItemAtPath: oldFile.path)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 200)], ofItemAtPath: newFile.path)
+        try CloudThumbnailCache.ensure(root: root, captureID: deleted, source: newFile)
+        CloudThumbnailCache.setHidden(true, captureID: deleted)
+        XCTAssertEqual(CloudThumbnailCache.latestCapturePreview(root: root)?.file, oldFile)
+        CloudThumbnailCache.setHidden(false, captureID: deleted)
+        XCTAssertNotEqual(CloudThumbnailCache.latestCapturePreview(root: root)?.file, oldFile)
+    }
+
+    func testEarlierLocalDeletionIsExcludedFromCachedPreview() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID()
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).jpegData(withCompressionQuality: 0.8) { ctx in
+            UIColor.blue.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        }
+        let file = try ProcessedFileStore.save(photo, captureID: id, root: root)
+        try CloudThumbnailCache.ensure(root: root, captureID: id, source: file)
+        let trashed = root.appendingPathComponent("CaptureTrash/Processed/entry", isDirectory: true)
+        try FileManager.default.createDirectory(at: trashed, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: file, to: trashed.appendingPathComponent(file.lastPathComponent))
+        XCTAssertNil(CloudThumbnailCache.latestCapturePreview(root: root))
+    }
     func testLatestPreviewSurvivesCloudOnlyCleanupAndSkipsUnreadableFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

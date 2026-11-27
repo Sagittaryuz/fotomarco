@@ -1371,7 +1371,11 @@ struct CameraScreen: View {
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         } else {
                             NavigationLink { BusinessOrganizationsView(profiles: stampProfiles) } label: {
-                                settingsRootLabel("Espaço corporativo", symbol: "building.2.fill", color: .blue)
+                                HStack(spacing: 14) {
+                                    Image(systemName: "building.2.fill").foregroundStyle(.white)
+                                        .frame(width: 32, height: 32).background(.blue.gradient, in: Circle()).accessibilityHidden(true)
+                                    Text("Espaço corporativo").frame(maxWidth: .infinity, alignment: .leading)
+                                }.frame(minHeight: 50).contentShape(Rectangle())
                             }
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         }
@@ -1793,6 +1797,12 @@ struct CameraScreen: View {
     }
 
     private func refreshGalleryThumbnail() {
+        let hidden = CloudThumbnailCache.hiddenCaptureIDs()
+        let previousCount = sessionCaptureFiles.count
+        sessionCaptureFiles.removeAll { hidden.contains($0.deletingPathExtension().lastPathComponent.uppercased()) }
+        sessionCaptures.removeAll { hidden.contains($0.file.deletingPathExtension().lastPathComponent.uppercased()) }
+        sessionStartedCount = max(0, sessionStartedCount - (previousCount - sessionCaptureFiles.count))
+        sessionCaptureCount = sessionCaptureFiles.count
         let revision = UUID()
         galleryThumbnailRevision = revision
         Task {

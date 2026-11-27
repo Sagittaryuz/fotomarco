@@ -7,7 +7,10 @@ enum ReleaseNews {
     static let items = [
         "O mapa enquadra as fotos do período selecionado e mostra as miniaturas sem legendas ou faixa inferior.",
         "Os perfis de organizações são identificados no seletor da câmera.",
-        "A câmera usa processamento equilibrado e suporte automático a pouca luz quando disponível."
+        "A câmera usa processamento equilibrado e suporte automático a pouca luz quando disponível.",
+        "Fotos excluídas deixam de aparecer na miniatura da câmera.",
+        "O carimbo mostra o volume de chuva previsto para uma hora quando disponível.",
+        "O ícone do espaço corporativo mantém a aparência ao abrir as configurações."
     ]
 
     static func items(for version: String) -> [String] {
