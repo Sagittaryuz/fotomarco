@@ -334,7 +334,8 @@ export class BusinessService {
       if (state && (state.imagesId !== imagesId || state.providerAccountId !== current.storage.providerAccountId ||
           state.ownerPermissionId !== current.storage.ownerPermissionId)) throw new Error('storage-account-change-requires-migration');
       if (state?.status === 'ready') return { ready: true };
-      if (state && (state.status !== 'provisioning' || !uuid(state.photomarkMarker) || !uuid(state.memberMarker))) throw new Error('invalid-storage-configuration');
+      if (state && (state.status !== 'provisioning' || !uuid(state.photomarkMarker) || !uuid(state.memberMarker) ||
+          !uuid(state.leaseId) || !Number.isSafeInteger(state.leaseExpiresAt))) throw new Error('invalid-storage-configuration');
       if (state?.leaseExpiresAt > this.clock()) throw new Error('provisioning-in-progress');
       const email = state?.memberEmail ?? current.member.email;
       const name = state?.memberName ?? (typeof current.member.displayName === 'string' && current.member.displayName.trim() ? current.member.displayName : email?.split('@')[0]);
@@ -355,6 +356,9 @@ export class BusinessService {
     return this.transaction(async tx => {
       const current = await getContext(tx);
       if (current.state?.status !== 'provisioning' || current.state.leaseId !== context.pending.leaseId ||
+          !Number.isSafeInteger(current.state.leaseExpiresAt) || current.state.leaseExpiresAt <= this.clock() ||
+          current.state.photomarkMarker !== context.pending.photomarkMarker || current.state.memberMarker !== context.pending.memberMarker ||
+          current.state.memberName !== context.pending.memberName || current.state.memberEmail !== context.pending.memberEmail ||
           current.state.imagesId !== imagesId || current.storage.providerAccountId !== context.storage.providerAccountId ||
           current.storage.ownerPermissionId !== context.storage.ownerPermissionId) throw new Error('storage-configuration-changed');
       if (current.storage.ciphertext === context.storage.ciphertext && current.storage.iv === context.storage.iv) await tx.setGoogleDriveCredential(organizationId, result.ownerCredential);

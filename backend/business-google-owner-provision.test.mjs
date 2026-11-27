@@ -46,3 +46,11 @@ test('does not commit a folder after owner access changes or provider identity m
   assert.equal(f.state().status, 'provisioning');
   assert.equal(f.credential().ciphertext, 'sealed');
 });
+
+test('does not commit after the provisioning lease expires', async () => {
+  const f = fixture();
+  f.service.prepareGoogleOwnerFolder = async args => { f.advance(180001); return f.success(args); };
+  await assert.rejects(f.service.provisionGoogleOwnerFolder(f.user, 'org', 'images'), /storage-configuration-changed/);
+  assert.equal(f.state().status, 'provisioning');
+  assert.equal(f.credential().ciphertext, 'sealed');
+});
