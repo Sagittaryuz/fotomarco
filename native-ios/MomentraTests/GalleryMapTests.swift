@@ -1,7 +1,29 @@
 import XCTest
+import MapKit
 @testable import Momentra
 
 final class GalleryMapTests: XCTestCase {
+    func testFramingCoversPhotosAndUsesAUsefulZoomForOneLocation() throws {
+        let points = [CLLocationCoordinate2D(latitude: -17.9, longitude: -51.8),
+                      CLLocationCoordinate2D(latitude: -17.7, longitude: -51.4)]
+        let region = try XCTUnwrap(GalleryMapFraming.region(for: points))
+        XCTAssertEqual(region.center.latitude, -17.8, accuracy: 0.00001)
+        XCTAssertEqual(region.center.longitude, -51.6, accuracy: 0.00001)
+        XCTAssertGreaterThan(region.span.latitudeDelta, 0.2)
+        XCTAssertGreaterThan(region.span.longitudeDelta, 0.4)
+        let single = try XCTUnwrap(GalleryMapFraming.region(for: [points[0]]))
+        XCTAssertGreaterThan(single.span.latitudeDelta, 0)
+        XCTAssertLessThan(single.span.latitudeDelta, 0.02)
+        XCTAssertNil(GalleryMapFraming.region(for: []))
+    }
+
+    func testFramingUsesShortRouteAcrossDateLineAndRejectsInvalidCoordinates() throws {
+        let region = try XCTUnwrap(GalleryMapFraming.region(for: [
+            .init(latitude: 0, longitude: 179), .init(latitude: 0, longitude: -179),
+            .init(latitude: .nan, longitude: 0)]))
+        XCTAssertEqual(abs(region.center.longitude), 180, accuracy: 0.00001)
+        XCTAssertLessThan(region.span.longitudeDelta, 5)
+    }
     func testPhotosAtIdenticalCoordinatesRemainDistinctAndInOrder() {
         let first = UUID(), second = UUID(), missing = UUID()
         let date = Date(timeIntervalSince1970: 1_700_000_000)

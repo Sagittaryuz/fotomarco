@@ -26,10 +26,38 @@ struct GalleryMapMarker: Identifiable {
     }
 }
 
+private struct GalleryMapCoincidentPhotos: Identifiable {
+    let id: String
+    let markers: [GalleryMapMarker]
+}
+
 enum GalleryMapBinning {
     static func key(latitude: Double, longitude: Double, span: Double) -> String {
         let size = max(0.0001, min(90, span / 5))
         return "\(Int(floor((latitude + 90) / size))):\(Int(floor((longitude + 180) / size)))"
+    }
+}
+
+enum GalleryMapFraming {
+    /// Fit the shortest longitude arc, including captures on either side of the date line.
+    static func region(for coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion? {
+        let valid = coordinates.filter { CLLocationCoordinate2DIsValid($0) && $0.latitude.isFinite && $0.longitude.isFinite }
+        guard let first = valid.first else { return nil }
+        let minLat = valid.map(\.latitude).min() ?? first.latitude
+        let maxLat = valid.map(\.latitude).max() ?? first.latitude
+        let longitudes = valid.map { ($0.longitude + 360).truncatingRemainder(dividingBy: 360) }.sorted()
+        var largestGap = -1.0
+        var start = longitudes[0]
+        for index in longitudes.indices {
+            let next = index + 1 < longitudes.count ? longitudes[index + 1] : longitudes[0] + 360
+            let gap = next - longitudes[index]
+            if gap > largestGap { largestGap = gap; start = next.truncatingRemainder(dividingBy: 360) }
+        }
+        let longitudeWidth = max(0, 360 - largestGap)
+        let longitudeCenter = (start + longitudeWidth / 2 + 180).truncatingRemainder(dividingBy: 360) - 180
+        return MKCoordinateRegion(center: .init(latitude: (minLat + maxLat) / 2, longitude: longitudeCenter),
+            span: .init(latitudeDelta: min(170, max(0.005, (maxLat - minLat) * 1.6)),
+                        longitudeDelta: min(360, max(0.005, longitudeWidth * 1.6))))
     }
 }
 
@@ -46,6 +74,8 @@ struct GalleryCaptureMap: View {
     @State private var pendingRecenter = false
     @State private var mapHeading = 0.0
     @State private var satellite = true
+    @State private var coincidentPhotos: GalleryMapCoincidentPhotos?
+    @State private var pendingPhoto: GalleryItem?
     @Namespace private var mapScope
 
     private var photos: [GalleryItem] {
@@ -67,10 +97,18 @@ struct GalleryCaptureMap: View {
             Map(position: $position) {
                 ForEach(markers) { cluster in
                     Annotation("Foto", coordinate: cluster.coordinate, anchor: .bottom) {
-                        Button { FotomarcoHaptics.play(.gallery); open(cluster.item) } label: {
+                        Button {
+                            FotomarcoHaptics.play(.gallery)
+                            let sameLocation = markers.filter {
+                                $0.coordinate.latitude == cluster.coordinate.latitude && $0.coordinate.longitude == cluster.coordinate.longitude
+                            }
+                            if sameLocation.count == 1 { open(cluster.item) }
+                            else { coincidentPhotos = .init(id: cluster.id, markers: sameLocation) }
+                        } label: {
                             mapMarker(cluster)
                         }.buttonStyle(.plain)
-                    }
+                            .accessibilityIdentifier("gallery.map.marker.\(cluster.id)")
+                    }.annotationTitles(.hidden)
                 }
                 UserAnnotation()
             }
@@ -121,49 +159,56 @@ struct GalleryCaptureMap: View {
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-            if markers.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(markers) { marker in
-                            let item = marker.item
-                            Button {
-                                FotomarcoHaptics.play(.gallery)
-                                open(item)
-                            } label: {
-                                item.mapThumbnail()
-                                    .frame(width: 52, height: 52)
-                                    .clipped()
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.85), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("gallery.map.photo.\(marker.id)")
-                            .accessibilityLabel(item.date.map { "Abrir foto de \($0.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(GalleryDateSelection.brazilianLocale)))" } ?? "Abrir foto")
-                        }
-                    }
-                    .padding(8)
-                }
-                .accessibilityIdentifier("gallery.map.photos")
-                .accessibilityLabel("Fotos no mapa")
-                .frame(height: 68)
-                .modifier(GalleryControlSurface(rounded: true))
-                .padding(.horizontal, 12)
-                .padding(.bottom, max(8, bottomInset + 8))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            }
         }
         .onAppear {
             satellite = true
             centeredOnCurrentLocation = false
             pendingRecenter = false
+            fit(markers)
             if locatesUser { currentLocation.setEnabled(true) }
         }
+        .onChange(of: items.map(\.id)) { _, _ in fit(clusters) }
+        .onChange(of: markers.map { "\($0.id):\($0.coordinate.latitude):\($0.coordinate.longitude)" }) { _, _ in
+            if !position.positionedByUser { fit(clusters) }
+        }
         .onDisappear { currentLocation.setEnabled(false) }
+        .sheet(item: $coincidentPhotos, onDismiss: {
+            if let item = pendingPhoto { pendingPhoto = nil; open(item) }
+        }) { group in
+            NavigationStack {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
+                        ForEach(group.markers) { marker in
+                            Button {
+                                FotomarcoHaptics.play(.gallery)
+                                pendingPhoto = marker.item
+                                coincidentPhotos = nil
+                            } label: {
+                                marker.item.mapThumbnail().aspectRatio(1, contentMode: .fill)
+                                    .frame(minWidth: 96, minHeight: 96).clipped()
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("gallery.map.photo.\(marker.id)")
+                            .accessibilityLabel("Abrir foto neste local")
+                        }
+                    }.padding()
+                }
+                .navigationTitle("Fotos neste local")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fechar") { coincidentPhotos = nil } } }
+            }
+        }
         .onChange(of: currentLocation.location?.timestamp) { _, _ in
             guard let location = currentLocation.location else { return }
-            guard pendingRecenter || (!centeredOnCurrentLocation && !position.positionedByUser) else { return }
+            guard pendingRecenter || (clusters.isEmpty && !store.loading && !centeredOnCurrentLocation && !position.positionedByUser) else { return }
             recenter(on: location)
         }
+    }
+
+    private func fit(_ markers: [GalleryMapMarker]) {
+        guard let region = GalleryMapFraming.region(for: markers.map(\.coordinate)) else { return }
+        position = .region(region)
     }
 
     private func recenter(on location: CLLocation) {

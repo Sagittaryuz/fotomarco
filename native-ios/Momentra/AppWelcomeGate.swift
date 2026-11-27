@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.67"
+    static let version = "0.1.68"
     static let items = [
-        "Mensagens mais claras para ajudar a identificar falhas ao conectar o OneDrive da organização."
+        "O mapa enquadra as fotos do período selecionado e mostra as miniaturas sem legendas ou faixa inferior."
     ]
 
     static func items(for version: String) -> [String] {

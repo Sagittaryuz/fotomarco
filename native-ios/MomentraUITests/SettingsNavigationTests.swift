@@ -16,9 +16,10 @@ final class SettingsNavigationTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--test-map-overlap"]
         app.launch()
-        let strip = app.scrollViews["gallery.map.photos"]
-        XCTAssertTrue(strip.waitForExistence(timeout: 15))
-        XCTAssertLessThan(strip.frame.height, 100)
+        let marker = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "gallery.map.marker.")).firstMatch
+        XCTAssertTrue(marker.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.scrollViews["gallery.map.photos"].exists)
+        marker.tap()
         let first = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000008"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         first.tap()
@@ -27,8 +28,8 @@ final class SettingsNavigationTests: XCTestCase {
         screenshot.name = "Fotos sobrepostas no mapa"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        marker.tap()
         let last = app.buttons["gallery.map.photo.00000000-0000-4000-8000-000000000001"]
-        strip.swipeLeft()
         XCTAssertTrue(last.waitForExistence(timeout: 5))
         XCTAssertTrue(last.isHittable)
         last.tap()
@@ -37,7 +38,7 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testSettingsRowsAndCameraSwitchRespond() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.67"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.68"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
@@ -102,7 +103,7 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testCameraOptionsTrayAndMap() {
         let app = XCUIApplication()
-        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.67"]
+        app.launchArguments += ["-welcomeCompletedV1", "YES", "-lastPresentedVersion", "0.1.68"]
         addUIInterruptionMonitor(withDescription: "Permissões do iOS") { alert in
             for title in ["Permitir", "Permitir ao Usar o App", "OK", "Allow", "Allow While Using App"] {
                 let button = alert.buttons[title]
