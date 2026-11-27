@@ -6,6 +6,11 @@ enum CloudBackgroundPolicy {
     static func shouldSchedule(_ phases: [CloudCapturePhase]) -> Bool {
         phases.contains { $0 == .awaitingPhoto || $0 == .ready || $0 == .verified || $0 == .cleaning }
     }
+
+    // An unreadable journal must never be mistaken for an empty queue.
+    static func mayCancel(personalPending: Bool?, businessPending: Bool?) -> Bool {
+        personalPending == false && businessPending == false
+    }
 }
 
 /// iOS decides when this task runs and can interrupt it. The durable journal
@@ -54,8 +59,13 @@ enum CloudBackgroundScheduler {
     }
 
     static func cancelPending() {
-        guard let journal = try? BusinessArchiveJournal.documents(), let ids = try? journal.ids(),
-              !ids.contains(where: { (try? journal.read($0).finished) != true }) else { return }
+        let personalPending: Bool? = (try? CloudArchiveJournal.documents()).flatMap { journal in
+            try? journal.ids().contains(where: { (try? journal.read($0).finished) != true })
+        }
+        let businessPending: Bool? = (try? BusinessArchiveJournal.documents()).flatMap { journal in
+            try? journal.ids().contains(where: { (try? journal.read($0).finished) != true })
+        }
+        guard CloudBackgroundPolicy.mayCancel(personalPending: personalPending, businessPending: businessPending) else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
     }
 }
