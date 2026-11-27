@@ -5,9 +5,11 @@ import UniformTypeIdentifiers
 
 /// A disposable cache for display thumbnails. The capture and archive stores own the originals.
 actor GalleryThumbnailCache {
+    static let gridDiskCountLimit = 400
     static let shared = GalleryThumbnailCache(directory: FileManager.default.urls(for: .cachesDirectory,
                                                                                   in: .userDomainMask).first?
-        .appendingPathComponent("MomentraGalleryThumbnails-v1", isDirectory: true))
+        .appendingPathComponent("MomentraGalleryThumbnails-v1", isDirectory: true),
+        diskCountLimit: gridDiskCountLimit)
 
     static let viewer = GalleryThumbnailCache(directory: FileManager.default.urls(for: .applicationSupportDirectory,
         in: .userDomainMask).first?.appendingPathComponent("MomentraGalleryPreviews-v1", isDirectory: true),

@@ -285,7 +285,11 @@ struct GalleryCloudItem: Identifiable {
                 }
             }
             if changed { NotificationCenter.default.post(name: CloudGalleryCatalog.deliveryChanged, object: nil) }
-            for item in warm.sorted(by: { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) {
+            // Do not fill the bounded cache with older items after preparing recent ones.
+            // Older thumbnails are still loaded on demand when the user browses them.
+            let recent = warm.sorted(by: { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) })
+                .prefix(GalleryThumbnailCache.gridDiskCountLimit)
+            for item in recent {
                 guard !Task.isCancelled else { return }
                 await item.warmThumbnail()
             }
