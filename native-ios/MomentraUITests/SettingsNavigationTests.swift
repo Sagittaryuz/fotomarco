@@ -116,7 +116,16 @@ final class SettingsNavigationTests: XCTestCase {
         XCTAssertTrue(options.waitForExistence(timeout: 30))
         options.tap()
         let grid = app.buttons["camera.options.grid"]
-        XCTAssertTrue(grid.waitForExistence(timeout: 5))
+        if !grid.waitForExistence(timeout: 5) {
+            // A simulator has no camera and can show this app alert after the
+            // initial tap; dismiss only that known alert and retry the action.
+            let cameraUnavailable = app.alerts["Photomark"]
+            if cameraUnavailable.staticTexts["Câmera indisponível neste aparelho."].exists {
+                cameraUnavailable.buttons["OK"].tap()
+                options.tap()
+            }
+        }
+        XCTAssertTrue(grid.waitForExistence(timeout: 10))
         let original = grid.value as? String
         XCTAssertTrue(original == "Ativada" || original == "Desativada")
         if original == "Ativada" {
