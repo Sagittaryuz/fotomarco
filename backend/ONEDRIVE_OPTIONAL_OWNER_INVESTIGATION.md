@@ -15,8 +15,11 @@ mudança deve assegurar que `/me`, `/me/drive`, as credenciais persistidas e o
 destino das pastas usem a mesma identidade. Não basta remover a comparação em
 um dos três pontos: o provisionamento e a verificação posterior devem concordar.
 
-Antes de alterar a política de segurança, obter a categoria sanitizada de erro
-do fluxo real, testar respostas com `owner` ausente, compatível e divergente,
-e verificar uma conta pessoal real. Não registrar IDs, tokens, e-mails, fotos
-ou respostas completas do provedor. Não modificar permissões existentes nem
-transferir fotos para testar.
+Uma correção experimental, ainda não implantada, confirma `/me` com o mesmo
+token sempre que `owner` está ausente. Quando `owner` está presente, uma
+identidade divergente continua sendo rejeitada. A pasta ainda passa pelas
+verificações de permissões anteriores. Os testes simulam respostas ausentes,
+compatíveis e divergentes; ainda é necessário obter a categoria sanitizada do
+erro real e verificar uma conta pessoal real antes da publicação. Não registrar
+IDs, tokens, e-mails, fotos ou respostas completas do provedor. Não modificar
+permissões existentes nem transferir fotos para testar.

@@ -52,6 +52,19 @@ test('refuses to create folders under a shared parent or for an unsafe name', as
   await assert.rejects(ensurePrivateMemberFolder({ ...config, memberName: '../X', fetchImpl: drive.fetch }), /invalid-member-name/);
 });
 
+test('checks the delegated user before creating folders when the optional owner field is missing', async () => {
+  const drive = fakeDrive();
+  const fetcher = user => async (url, options) => {
+    if (url.endsWith('/me?$select=id')) return { status: 200, json: async () => ({ id: user }) };
+    if (url.endsWith('/me/drive')) return { status: 200, json: async () => ({ id: 'drive' }) };
+    return drive.fetch(url, options);
+  };
+  await assert.rejects(ensurePrivateMemberFolder({ ...config, fetchImpl: fetcher('other') }), /wrong-owner-account/);
+  assert.equal(drive.count(), 0);
+  const result = await ensurePrivateMemberFolder({ ...config, fetchImpl: fetcher('owner') });
+  assert.equal(result.folderId, 'folder-3');
+});
+
 test('recovers an interrupted folder creation only with the original persisted marker', async () => {
   const drive = fakeDrive();
   const marker = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

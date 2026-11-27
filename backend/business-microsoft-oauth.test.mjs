@@ -25,6 +25,17 @@ test('validates the actual Microsoft owner and required folder access', async ()
   await assert.rejects(microsoftBusinessCredential({ clientId, fetchImpl: wrong.fetch })('refresh'), /provider-identity-mismatch/);
 });
 
+test('accepts optional missing drive owner when /me and /me/drive use the same delegated token', async () => {
+  const mock = provider();
+  const fetchImpl = async (url, options) => {
+    const response = await mock.fetch(url, options);
+    return url.endsWith('/me/drive') ? { status: 200, json: async () => ({ id: 'drive' }) } : response;
+  };
+  const verified = await microsoftBusinessCredential({ clientId, fetchImpl })('refresh');
+  assert.equal(verified.providerAccountId, 'owner');
+  assert.equal(verified.driveId, 'drive');
+});
+
 test('classifies token and Graph failures without returning provider responses', async () => {
   const tokenFailure = microsoftBusinessCredential({ clientId, fetchImpl: async () => ({
     status: 400, json: async () => ({ error_description: 'private-provider-details' })

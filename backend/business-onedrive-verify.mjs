@@ -1,4 +1,5 @@
 import { validateMemberFolderPermissions, validateOwnerFolderPermissions } from './business-onedrive-access.mjs';
+import { matchesDelegatedDriveOwner, readDelegatedUser } from './business-onedrive-identity.mjs';
 
 /** All IDs and the delegated owner token must come from trusted server records. */
 export async function verifyOneDriveMemberFolder({ ownerToken, expectedOwnerId, expectedDriveId,
@@ -12,7 +13,8 @@ export async function verifyOneDriveMemberFolder({ ownerToken, expectedOwnerId, 
     return response.json();
   }
   const drive = await get('');
-  if (drive.id !== expectedDriveId || drive.owner?.user?.id !== expectedOwnerId) throw new Error('wrong-owner-account');
+  const owner = drive?.owner == null ? await readDelegatedUser(ownerToken, fetchImpl) : { id: expectedOwnerId };
+  if (!matchesDelegatedDriveOwner({ user: owner, drive, expectedOwnerId, expectedDriveId })) throw new Error('wrong-owner-account');
   const path = `/items/${encodeURIComponent(folderId)}`;
   const folder = await get(path);
   if (folder.id !== folderId || !folder.folder || folder.file || folder.remoteItem ||
