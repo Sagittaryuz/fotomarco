@@ -17,17 +17,6 @@ struct PhotoStyleAdjustments: Equatable {
 enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     case disabled = "Desativado", natural = "Natural", brilliance = "Brilho", vivid = "Vibrante", soft = "Suave", dramatic = "Contraste", mono = "P&B", warm = "Quente"
     var id: String { rawValue }
-    var filterName: String? {
-        switch self {
-        case .disabled, .natural: return nil
-        case .brilliance: return "CIPhotoEffectInstant"
-        case .vivid: return "CIPhotoEffectChrome"
-        case .soft: return "CIPhotoEffectFade"
-        case .dramatic: return "CIPhotoEffectProcess"
-        case .mono: return "CIPhotoEffectNoir"
-        case .warm: return "CIPhotoEffectTransfer"
-        }
-    }
     var detail: String {
         switch self {
         case .disabled: return "Desativa os estilos e seus ajustes."
@@ -43,7 +32,7 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     private static let styleContext = CIContext(options: nil)
 
     func requiresRendering(adjustments: PhotoStyleAdjustments) -> Bool {
-        self != .disabled && (filterName != nil || !adjustments.isNeutral)
+        self != .disabled && (self != .natural || !adjustments.isNeutral)
     }
 
     func apply(to image: UIImage, adjustments: PhotoStyleAdjustments = .init()) -> UIImage {
@@ -58,9 +47,28 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
     func apply(to input: CIImage, adjustments: PhotoStyleAdjustments = .init()) -> CIImage {
         guard requiresRendering(adjustments: adjustments) else { return input }
         var output = input
-        if let filterName, let filter = CIFilter(name: filterName) {
-            filter.setValue(input, forKey: kCIInputImageKey)
-            output = filter.outputImage ?? input
+        // Small, predictable adjustments keep each look distinct without the
+        // strong contrast, color shifts and lifted blacks of photo-effect LUTs.
+        switch self {
+        case .disabled, .natural: break
+        case .brilliance:
+            output = output.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: 0.08])
+            output = output.applyingFilter("CITemperatureAndTint", parameters: [
+                "inputNeutral": CIVector(x: 6500, y: 0), "inputTargetNeutral": CIVector(x: 6590, y: 0)
+            ])
+        case .vivid:
+            output = output.applyingFilter("CIVibrance", parameters: ["inputAmount": 0.15])
+            output = output.applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 1.03])
+        case .soft:
+            output = output.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0.93])
+        case .dramatic:
+            output = output.applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 1.08])
+        case .mono:
+            output = output.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.02])
+        case .warm:
+            output = output.applyingFilter("CITemperatureAndTint", parameters: [
+                "inputNeutral": CIVector(x: 6500, y: 0), "inputTargetNeutral": CIVector(x: 6750, y: 0)
+            ])
         }
         let tone = adjustments.tone.isFinite ? max(-100, min(100, adjustments.tone)) : 0
         let color = adjustments.color.isFinite ? max(-100, min(100, adjustments.color)) : 0
@@ -77,7 +85,7 @@ enum MomentraPhotoStyle: String, CaseIterable, Identifiable {
             output = output.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: tone / 100])
         }
         output = output.applyingFilter("CIColorControls", parameters: [
-            kCIInputSaturationKey: (self == .vivid ? 0.9 : 1.0) * palette / 100
+            kCIInputSaturationKey: palette / 100
         ])
         return output.cropped(to: input.extent)
     }

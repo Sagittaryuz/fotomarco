@@ -5,6 +5,7 @@ import AVFoundation
 enum ReleaseNews {
     static let version = "0.1.72"
     static let items = [
+        "Os estilos fotográficos receberam ajustes mais suaves e equilibrados.",
         "O agendamento de envios em segundo plano preserva as filas pessoais e empresariais pendentes."
     ]
 

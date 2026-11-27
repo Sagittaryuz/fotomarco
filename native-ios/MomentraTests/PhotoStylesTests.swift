@@ -4,6 +4,35 @@ import CoreImage
 @testable import Momentra
 
 final class PhotoStylesTests: XCTestCase {
+    func testColorPresetsKeepBlackAndMakeBoundedChanges() {
+        let bounds = CGRect(x: 0, y: 0, width: 2, height: 1)
+        let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let color = CIImage(color: CIColor(red: 0.35, green: 0.23, blue: 0.15)).cropped(to: CGRect(x: 1, y: 0, width: 1, height: 1))
+        let source = color.composited(over: black)
+        let context = CIContext(options: [.cacheIntermediates: false])
+        func pixels(_ image: CIImage) -> [UInt8] {
+            var bytes = [UInt8](repeating: 0, count: 8)
+            bytes.withUnsafeMutableBytes { buffer in
+                guard let address = buffer.baseAddress else { return }
+                context.render(image, toBitmap: address, rowBytes: 8, bounds: bounds,
+                               format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+            }
+            return bytes
+        }
+        let baseline = pixels(source)
+        for style in [MomentraPhotoStyle.brilliance, .vivid, .soft, .dramatic, .warm] {
+            let result = pixels(style.apply(to: source))
+            for channel in 0..<3 {
+                XCTAssertLessThanOrEqual(result[channel], 3, "Black level: \(style.rawValue)")
+                XCTAssertLessThanOrEqual(abs(Int(result[4 + channel]) - Int(baseline[4 + channel])), 50, "Color: \(style.rawValue)")
+            }
+            XCTAssertNotEqual(Array(result[4..<7]), Array(baseline[4..<7]), "Style should remain visible: \(style.rawValue)")
+        }
+        let mono = pixels(MomentraPhotoStyle.mono.apply(to: source))
+        XCTAssertLessThanOrEqual(abs(Int(mono[4]) - Int(mono[5])), 1)
+        XCTAssertLessThanOrEqual(abs(Int(mono[5]) - Int(mono[6])), 1)
+    }
+
     func testLiveRecipeMatchesCapturedStyle() throws {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 10))
         let source = renderer.image { context in
