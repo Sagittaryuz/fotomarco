@@ -24,6 +24,15 @@ test('rejects a wrong owner, parent, or unexpected sharing', async () => {
   await assert.rejects(verifyOneDriveMemberFolder({ ...args, fetchImpl: mock((url, data) => url.endsWith('/permissions') ? { value: [...data.value, entry('other', ['read'])] } : data) }), /unsafe-folder-permissions/);
 });
 
+test('checks /me when optional drive owner is absent and rejects a different delegated account', async () => {
+  const fetcher = user => async (url, options) => {
+    if (url.endsWith('/me?$select=id')) return { status: 200, json: async () => ({ id: user }) };
+    return mock((path, data) => path.endsWith('/drive') ? { id: 'drive' } : data)(url, options);
+  };
+  assert.deepEqual(await verifyOneDriveMemberFolder({ ...args, fetchImpl: fetcher('owner') }), { driveId: 'drive', folderId: 'folder!1' });
+  await assert.rejects(verifyOneDriveMemberFolder({ ...args, fetchImpl: fetcher('other') }), /wrong-owner-account/);
+});
+
 test('the owner folder must remain private and cannot be treated as a member revocation', async () => {
   const ownerOnly = mock((url, data) => url.endsWith('/permissions') ? { value: [entry('owner', ['owner'])] } : data);
   assert.deepEqual(await verifyOneDriveMemberFolder({ ...args, memberIdentityId: 'owner', fetchImpl: ownerOnly }), { driveId: 'drive', folderId: 'folder!1' });

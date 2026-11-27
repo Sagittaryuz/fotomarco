@@ -1,3 +1,5 @@
+import { matchesDelegatedDriveOwner, readDelegatedUser } from './business-onedrive-identity.mjs';
+
 /** Prepare only private folders; never rename or change existing sharing. */
 export async function ensurePrivateMemberFolder({ ownerToken, expectedOwnerId, expectedDriveId, memberIdentityId, memberName, memberEmail, knownMemberFolderId, creationMarker, fetchImpl = fetch }) {
   const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x20/\\?#]/.test(value);
@@ -58,7 +60,8 @@ export async function ensurePrivateMemberFolder({ ownerToken, expectedOwnerId, e
     return folder.id;
   }
   const drive = await read('');
-  if (!drive || drive.id !== expectedDriveId || drive.owner?.user?.id !== expectedOwnerId) throw new Error('wrong-owner-account');
+  const owner = drive?.owner == null ? await readDelegatedUser(ownerToken, fetchImpl) : { id: expectedOwnerId };
+  if (!matchesDelegatedDriveOwner({ user: owner, drive, expectedOwnerId, expectedDriveId })) throw new Error('wrong-owner-account');
   const root = await read('/root');
   if (!root || !validId(root.id) || !root.folder || root.remoteItem) throw new Error('invalid-root');
   await privateOwnerFolder(root.id);

@@ -1,3 +1,5 @@
+import { matchesDelegatedDriveOwner } from './business-onedrive-identity.mjs';
+
 /** Validates the delegated account against Graph before a credential is retained. */
 export function microsoftBusinessCredential({ clientId, fetchImpl = fetch }) {
   if (typeof clientId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) throw new Error('invalid-microsoft-client');
@@ -37,8 +39,7 @@ export function microsoftBusinessCredential({ clientId, fetchImpl = fetch }) {
     };
     const user = await get('https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName');
     const drive = await get('https://graph.microsoft.com/v1.0/me/drive');
-    if (typeof user.id !== 'string' || !user.id || user.id.length > 256 || drive.owner?.user?.id !== user.id ||
-        typeof drive.id !== 'string' || !drive.id || drive.id.length > 256) throw new Error('provider-identity-mismatch');
+    if (!matchesDelegatedDriveOwner({ user, drive, expectedOwnerId: user.id, expectedDriveId: drive.id })) throw new Error('provider-identity-mismatch');
     return { refreshToken: rotatedRefresh, providerAccountId: user.id, driveId: drive.id, accessToken: token.access_token };
   };
 }
