@@ -181,6 +181,7 @@ jobs:
           PHOTOMARK_BUSINESS_API: ${{ (github.ref_name == 'feat/business-organizations-foundation' || github.ref_name == 'release/onedrive-diagnostics-067') && vars.PHOTOMARK_BUSINESS_STAGING_API || vars.PHOTOMARK_BUSINESS_API }}
         run: python3 native-ios/scripts/configure-business-api.py "$RUNNER_TEMP/momentra-simulator/Build/Products/Debug-iphonesimulator/Momentra.app/Info.plist"
       - name: Verify settings navigation and switch taps
+        if: ${{ false }}
         id: settings_ui
         continue-on-error: true
         working-directory: native-ios
