@@ -46,13 +46,25 @@ final class ProfileLocationRules: ObservableObject {
         areas.contains { $0.enabled && $0.isValid && ids.contains($0.profileID) }
     }
     func areas(for profileID: UUID) -> [ProfileArea] { areas.filter { $0.profileID == profileID } }
-    func save(_ profileID: UUID, areas edited: [ProfileArea], fallback: UUID?) {
+    func conflicts(for area: ProfileArea) -> [ProfileArea] {
+        guard area.isValid else { return [] }
+        let center = CLLocation(latitude: area.latitude, longitude: area.longitude)
+        return areas.filter { other in
+            guard other.profileID != area.profileID, other.isValid else { return false }
+            let otherCenter = CLLocation(latitude: other.latitude, longitude: other.longitude)
+            return center.distance(from: otherCenter) <= area.radius + other.radius
+        }
+    }
+    @discardableResult
+    func save(_ profileID: UUID, areas edited: [ProfileArea], fallback: UUID?) -> Bool {
         let valid = edited.filter { $0.profileID == profileID && $0.isValid }
+        guard valid.count == edited.count, valid.allSatisfy({ conflicts(for: $0).isEmpty }) else { return false }
         areas.removeAll { $0.profileID == profileID }
         areas.append(contentsOf: valid)
         if let data = try? JSONEncoder().encode(areas) { defaults.set(data, forKey: key) }
         fallbackID = fallback
         defaults.set(fallback?.uuidString, forKey: fallbackKey)
+        return true
     }
     func manualSelection() {
         if activeID != nil { manualOverride = true; clearActive() }
@@ -102,6 +114,7 @@ struct ProfileLocationSettingsView: View {
     @State private var areas: [ProfileArea]
     @State private var fallback: UUID?
     @State private var editing: ProfileArea?
+    @State private var hasConflict = false
 
     init(profile: StampProfile, profiles: [StampProfile], currentLocation: CLLocation?, rules: ProfileLocationRules = .shared) {
         self.profile = profile; self.profiles = profiles; self.currentLocation = currentLocation; self.rules = rules
@@ -137,11 +150,16 @@ struct ProfileLocationSettingsView: View {
         .navigationTitle("Ativação por localização").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) { Button("Salvar") { rules.save(profile.id, areas: areas, fallback: fallback); dismiss() } }
+            ToolbarItem(placement: .confirmationAction) { Button("Salvar") {
+                if rules.save(profile.id, areas: areas, fallback: fallback) { dismiss() } else { hasConflict = true }
+            } }
         }
+        .alert("Áreas sobrepostas", isPresented: $hasConflict) {
+            Button("OK", role: .cancel) {}
+        } message: { Text("Um local se sobrepõe à área de outro perfil. Ajuste a posição ou o raio para salvar.") }
         .sheet(item: $editing) { area in
             NavigationStack {
-                ProfileAreaEditor(area: area, locationKnown: currentLocation != nil || areas.contains(where: { $0.id == area.id })) { result in
+                ProfileAreaEditor(area: area, profiles: profiles, rules: rules, locationKnown: currentLocation != nil || areas.contains(where: { $0.id == area.id })) { result in
                     if let index = areas.firstIndex(where: { $0.id == result.id }) { areas[index] = result }
                     else { areas.append(result) }
                 }
@@ -155,14 +173,18 @@ private struct ProfileAreaEditor: View {
     @State private var area: ProfileArea
     @State private var position: MapCameraPosition
     @State private var locationKnown: Bool
+    let profiles: [StampProfile]
+    @ObservedObject var rules: ProfileLocationRules
     let save: (ProfileArea) -> Void
-    init(area: ProfileArea, locationKnown: Bool, save: @escaping (ProfileArea) -> Void) {
+    init(area: ProfileArea, profiles: [StampProfile], rules: ProfileLocationRules, locationKnown: Bool, save: @escaping (ProfileArea) -> Void) {
         _area = State(initialValue: area)
         _locationKnown = State(initialValue: locationKnown)
+        self.profiles = profiles; self.rules = rules
         let distance = locationKnown ? max(1000, area.radius * 4) : 5_000_000
         _position = State(initialValue: .region(MKCoordinateRegion(center: area.coordinate, latitudinalMeters: distance, longitudinalMeters: distance)))
         self.save = save
     }
+    private var conflicts: [ProfileArea] { rules.conflicts(for: area) }
     var body: some View {
         VStack(spacing: 12) {
             Text("Arraste o mapa para posicionar o centro da área.").font(.footnote).foregroundStyle(.secondary)
@@ -179,10 +201,15 @@ private struct ProfileAreaEditor: View {
             TextField("Nome do local", text: $area.name).textFieldStyle(.roundedBorder)
             HStack { Text("Raio"); Slider(value: $area.radius, in: 50...5000, step: 50).tint(.yellow); Text("\(Int(area.radius)) m").monospacedDigit().frame(width: 70, alignment: .trailing) }
             Toggle("Ativar neste local", isOn: $area.enabled)
+            if !conflicts.isEmpty {
+                let names = Set(conflicts.map { conflict in profiles.first(where: { $0.id == conflict.profileID })?.name ?? "Outro perfil" }).sorted()
+                Label("Esta área se sobrepõe a: \(names.joined(separator: ", ")). Ajuste a posição ou o raio.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote).foregroundStyle(.yellow)
+            }
         }.padding().navigationTitle("Local e raio").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) { Button("Salvar") { if area.isValid && locationKnown { save(area); dismiss() } }.disabled(!area.isValid || !locationKnown) }
+            ToolbarItem(placement: .confirmationAction) { Button("Salvar") { if area.isValid && locationKnown && conflicts.isEmpty { save(area); dismiss() } }.disabled(!area.isValid || !locationKnown || !conflicts.isEmpty) }
         }
     }
 }

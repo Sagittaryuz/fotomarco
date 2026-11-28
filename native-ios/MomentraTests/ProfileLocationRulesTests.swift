@@ -4,6 +4,21 @@ import CoreLocation
 
 @MainActor
 final class ProfileLocationRulesTests: XCTestCase {
+    func testOverlappingAreasFromDifferentProfilesCannotBeSaved() throws {
+        let suite = "ProfileLocationRulesTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let rules = ProfileLocationRules(defaults: defaults)
+        let first = UUID(), second = UUID()
+        let existing = ProfileArea(profileID: first, name: "Um", latitude: -17.88, longitude: -51.72, radius: 200)
+        let overlapping = ProfileArea(profileID: second, name: "Dois", latitude: -17.88, longitude: -51.72, radius: 50)
+        let sameProfile = ProfileArea(profileID: first, name: "Outro", latitude: -17.88, longitude: -51.72, radius: 50)
+        XCTAssertTrue(rules.save(first, areas: [existing], fallback: nil))
+        XCTAssertEqual(rules.conflicts(for: overlapping).count, 1)
+        XCTAssertFalse(rules.save(second, areas: [overlapping], fallback: nil))
+        XCTAssertTrue(rules.areas(for: second).isEmpty)
+        XCTAssertTrue(rules.save(first, areas: [existing, sameProfile], fallback: nil))
+    }
     private func location(_ latitude: Double, _ longitude: Double, accuracy: Double = 5) -> CLLocation {
         CLLocation(coordinate: .init(latitude: latitude, longitude: longitude), altitude: 0,
                    horizontalAccuracy: accuracy, verticalAccuracy: 5, timestamp: .now)
