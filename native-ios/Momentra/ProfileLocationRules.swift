@@ -192,6 +192,7 @@ private struct ProfileAreaEditor: View {
                 MapCircle(center: area.coordinate, radius: area.radius).foregroundStyle(.yellow.opacity(0.20))
                 Marker("Centro", coordinate: area.coordinate).tint(.yellow)
             }
+            .mapStyle(.imagery(elevation: .flat))
             .onMapCameraChange(frequency: .onEnd) { context in
                 area.latitude = context.region.center.latitude; area.longitude = context.region.center.longitude
                 if context.region.span.latitudeDelta < 0.25 { locationKnown = true }
