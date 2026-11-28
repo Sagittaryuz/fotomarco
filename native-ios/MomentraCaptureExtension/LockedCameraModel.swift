@@ -51,6 +51,10 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
                 self.session.sessionPreset = .photo
                 self.session.addInput(input)
                 self.session.addOutput(self.output)
+                if #available(iOS 18.0, *), self.session.supportsControls {
+                    let zoom = AVCaptureSystemZoomSlider(device: device)
+                    if self.session.canAddControl(zoom) { self.session.addControl(zoom) }
+                }
                 self.session.commitConfiguration()
                 self.device = device
                 let switches = device.virtualDeviceSwitchOverVideoZoomFactors
