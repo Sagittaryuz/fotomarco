@@ -5,7 +5,7 @@ import AVFoundation
 enum ReleaseNews {
     static let version = "0.1.79"
     static let items = [
-        "Seleção e compartilhamento por pressão mais rápidos na galeria."
+        "Pressão mais rápida e vibração mais forte ao selecionar fotos na galeria."
     ]
 
     static func items(for version: String) -> [String] {

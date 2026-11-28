@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 enum HapticEvent: String, CaseIterable, Identifiable {
-    case buttons, switches, focus, zoom, photo, mode, stopVideo, quickShare, cameraFlip, gallery, editor
+    case buttons, switches, focus, zoom, photo, mode, stopVideo, quickShare, cameraFlip, gallery, galleryHold, editor
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -16,10 +16,11 @@ enum HapticEvent: String, CaseIterable, Identifiable {
         case .quickShare: return "Compartilhar pela miniatura"
         case .cameraFlip: return "Alternar câmera"
         case .gallery: return "Ações da galeria"
+        case .galleryHold: return "Pressionar foto na galeria"
         case .editor: return "Edição e carimbos"
         }
     }
-    var defaultIntensity: Double { self == .quickShare ? 0.4 : 0.2 }
+    var defaultIntensity: Double { self == .galleryHold ? 0.65 : self == .quickShare ? 0.4 : 0.2 }
     var storageKey: String { "native.haptics." + rawValue }
 }
 
@@ -32,7 +33,7 @@ enum FotomarcoHaptics {
     static func play(_ event: HapticEvent, intensity: Double) {
         let amount = min(1, max(0, intensity))
         guard amount > 0 else { return }
-        UIImpactFeedbackGenerator(style: event == .quickShare ? .light : .soft)
+        UIImpactFeedbackGenerator(style: event == .galleryHold ? .medium : event == .quickShare ? .light : .soft)
             .impactOccurred(intensity: CGFloat(amount))
     }
 }

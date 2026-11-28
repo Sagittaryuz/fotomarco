@@ -8,6 +8,7 @@ final class HapticSettingsTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         XCTAssertEqual(FotomarcoHaptics.intensity(.photo, defaults: defaults), 0.2, accuracy: 0.001)
         XCTAssertEqual(FotomarcoHaptics.intensity(.quickShare, defaults: defaults), 0.4, accuracy: 0.001)
+        XCTAssertEqual(FotomarcoHaptics.intensity(.galleryHold, defaults: defaults), 0.65, accuracy: 0.001)
         defaults.set(0.0, forKey: HapticEvent.photo.storageKey)
         XCTAssertEqual(FotomarcoHaptics.intensity(.photo, defaults: defaults), 0)
         XCTAssertEqual(FotomarcoHaptics.intensity(.zoom, defaults: defaults), 0.2, accuracy: 0.001)

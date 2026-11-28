@@ -342,7 +342,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
                 synchronizeSelection()
                 dragOrigin = path; holdPoint = point; holdDragging = false
                 lastPoint = point
-                FotomarcoHaptics.play(.gallery)
+                FotomarcoHaptics.play(.galleryHold)
                 if parent.longPress != nil {
                     let work = DispatchWorkItem { [weak self] in
                         guard let self, self.parent.selecting, self.parent.selected.contains(item.id), !self.holdDragging else { return }
