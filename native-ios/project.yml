@@ -17,8 +17,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    MARKETING_VERSION: '0.1.73'
-    CURRENT_PROJECT_VERSION: '95'
+    MARKETING_VERSION: '0.1.74'
+    CURRENT_PROJECT_VERSION: '96'
 targets:
   Momentra:
     type: application
@@ -87,6 +87,7 @@ targets:
       properties:
         CFBundleShortVersionString: '$(MARKETING_VERSION)'
         CFBundleVersion: '$(CURRENT_PROJECT_VERSION)'
+        NSCameraUsageDescription: 'A câmera é usada para fotografar pelo Controle da Câmera, inclusive com o iPhone bloqueado.'
         NSLocationWhenInUseUsageDescription: 'A localização é usada no carimbo quando você ativa o GPS.'
         NSPhotoLibraryAddUsageDescription: 'Permite salvar fotos na biblioteca.'
         EXAppExtensionAttributes:

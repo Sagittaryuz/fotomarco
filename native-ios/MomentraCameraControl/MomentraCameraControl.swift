@@ -8,11 +8,11 @@ struct MomentraCameraControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind) {
             ControlWidgetButton(action: MomentraCaptureIntent()) {
-                Label("Fotomarco", systemImage: "camera.fill")
+                Label("Photomark", systemImage: "camera.fill")
             }
         }
-        .displayName("Abrir Fotomarco")
-        .description("Abrir a câmera do Fotomarco.")
+        .displayName("Abrir Photomark")
+        .description("Abrir a câmera do Photomark.")
     }
 }
 

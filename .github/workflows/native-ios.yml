@@ -103,6 +103,7 @@ jobs:
             test -f "$CONTROL/MomentraCameraControl"
             test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CAPTURE/Info.plist")" = 'br.com.momentra.camera.capture'
             test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CONTROL/Info.plist")" = 'br.com.momentra.camera.control'
+            python3 -c 'import plistlib,sys; assert all(plistlib.load(open(p,"rb")).get("NSCameraUsageDescription", "").strip() for p in sys.argv[1:])' "$APP/Info.plist" "$CAPTURE/Info.plist"
             for version in CFBundleVersion CFBundleShortVersionString; do
               APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :$version" "$APP/Info.plist")
               test "$(/usr/libexec/PlistBuddy -c "Print :$version" "$CAPTURE/Info.plist")" = "$APP_VERSION"
