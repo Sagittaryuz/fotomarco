@@ -67,7 +67,7 @@ final class SettingsNavigationTests: XCTestCase {
             add(submenuScreenshot)
             if title == "Sobre" {
                 XCTAssertTrue(app.staticTexts["Novidades desta versão"].waitForExistence(timeout: 5))
-                  XCTAssertTrue(app.staticTexts["1. Segure uma foto para selecionar e continue pressionando para compartilhar a seleção."].exists)
+                  XCTAssertTrue(app.staticTexts["1. Seleção e compartilhamento por pressão mais rápidos na galeria."].exists)
             }
             if title == "Câmera" {
                 let label = app.buttons["Grade"]

@@ -73,7 +73,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         pinch.delegate = context.coordinator
         view.addGestureRecognizer(pinch)
         let hold = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.preview(_:)))
-        hold.minimumPressDuration = 1.0
+        hold.minimumPressDuration = 0.55
         hold.numberOfTouchesRequired = 1
         hold.delegate = context.coordinator
         view.addGestureRecognizer(hold)
@@ -349,7 +349,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
                         self.parent.longPress?(item)
                     }
                     shareHold = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
                 }
             case .changed:
                 lastPoint = point
