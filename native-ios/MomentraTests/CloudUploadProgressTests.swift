@@ -4,6 +4,27 @@ import SwiftUI
 
 @MainActor
 final class CloudUploadProgressTests: XCTestCase {
+    func testDestinationProgressIsIndependentAndRequiresVerification() throws {
+        let tracker = CloudUploadProgress.shared
+        let id = UUID()
+        let google = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .googleDrive, accountHash: String(repeating: "a", count: 64)))
+        let oneDrive = try XCTUnwrap(CloudDeliveryPlan.Destination(provider: .oneDrive, accountHash: String(repeating: "b", count: 64)))
+        let googleKey = "google/" + google.accountHash
+        let oneDriveKey = "oneDrive/" + oneDrive.accountHash
+        defer { tracker.prepareDestinations([:]); tracker.discard(id) }
+        tracker.prepareDestinations([id: [.init(destination: google), .init(destination: oneDrive)]])
+        tracker.startDestination(id, destination: google)
+        tracker.setDestination(id, destination: google, fraction: 1)
+        XCTAssertEqual(tracker.destinations[id]?[googleKey]?.fraction, 0.99)
+        XCTAssertEqual(tracker.destinations[id]?[oneDriveKey]?.fraction, 0)
+        tracker.finishDestination(id, destination: google)
+        tracker.setDestination(id, destination: google, fraction: 0.3)
+        XCTAssertEqual(tracker.destinations[id]?[googleKey]?.fraction, 1)
+        tracker.startDestination(id, destination: oneDrive)
+        tracker.stopDestination(id, destination: oneDrive)
+        tracker.setDestination(id, destination: oneDrive, fraction: 0.7)
+        XCTAssertEqual(tracker.destinations[id]?[oneDriveKey]?.fraction, 0)
+    }
     func testPersonalAndOrganizationPendingQueuesDoNotEraseEachOther() {
         let tracker = CloudUploadProgress.shared
         let personal = UUID(), business = UUID()

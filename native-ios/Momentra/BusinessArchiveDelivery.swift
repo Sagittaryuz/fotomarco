@@ -33,7 +33,10 @@ actor BusinessArchiveDelivery {
             }
             captures.sort { $0.createdAt < $1.createdAt }
             let idsToDisplay = pendingIDs
-            await MainActor.run { CloudUploadProgress.shared.prepareBusinessPending(idsToDisplay) }
+            await MainActor.run {
+                CloudUploadProgress.shared.prepareBusinessPending(idsToDisplay)
+                CloudUploadProgress.shared.prepareBusinessDestinations(captures)
+            }
             for item in captures {
                 guard item.ready, let api = BusinessAPIClient.configured() else {
                     summary.pending += 1; continue
@@ -43,7 +46,10 @@ actor BusinessArchiveDelivery {
                     let token = try await BusinessIdentity.shared.verifiedToken(expectedUserID: item.userID)
                     await MainActor.run { CloudUploadProgress.shared.start(item.id) }
                     try await deliver(item, journal: journal, api: api, token: token)
-                    await MainActor.run { CloudUploadProgress.shared.finish(item.id) }
+                    await MainActor.run {
+                        CloudUploadProgress.shared.setBusinessDestination(item, fraction: 1, verified: true)
+                        CloudUploadProgress.shared.finish(item.id)
+                    }
                 } catch {
                     await MainActor.run { CloudUploadProgress.shared.stop(item.id) }
                     summary.pending += 1
@@ -117,7 +123,10 @@ actor BusinessArchiveDelivery {
                                                      offset: offset, bytes: data, token: token)
             guard status.nextOffset > offset, status.nextOffset <= fingerprint.byteCount else { throw BusinessAPIClient.Failure.invalidResponse }
             let fraction = Double(base + status.nextOffset) / Double(total)
-            await MainActor.run { CloudUploadProgress.shared.set(item.id, fraction: fraction) }
+            await MainActor.run {
+                CloudUploadProgress.shared.set(item.id, fraction: fraction)
+                CloudUploadProgress.shared.setBusinessDestination(item, fraction: fraction)
+            }
         }
         if status.state == "verifying" {
             try await requireUser(item.userID)

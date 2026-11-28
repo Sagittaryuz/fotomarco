@@ -67,7 +67,7 @@ final class SettingsNavigationTests: XCTestCase {
             add(submenuScreenshot)
             if title == "Sobre" {
                 XCTAssertTrue(app.staticTexts["Novidades desta versão"].waitForExistence(timeout: 5))
-                  XCTAssertTrue(app.staticTexts["1. Corrigida a ativação do zoom no Controle da Câmera."].exists)
+                  XCTAssertTrue(app.staticTexts["1. Envios à nuvem aparecem nos símbolos de armazenamento, sem escurecer as fotos."].exists)
             }
             if title == "Câmera" {
                 let label = app.buttons["Grade"]

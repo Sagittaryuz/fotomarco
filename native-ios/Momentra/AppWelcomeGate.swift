@@ -3,9 +3,10 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.76"
+    static let version = "0.1.77"
     static let items = [
-        "Corrigida a ativação do zoom no Controle da Câmera."
+        "Envios à nuvem aparecem nos símbolos de armazenamento, sem escurecer as fotos.",
+        "O armazenamento no iPhone usa o símbolo do Fotos."
     ]
 
     static func items(for version: String) -> [String] {

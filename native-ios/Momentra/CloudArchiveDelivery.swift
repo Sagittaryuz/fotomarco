@@ -22,8 +22,13 @@ actor CloudArchiveDelivery {
         do {
             let journal = try CloudArchiveJournal.documents()
             let ids = try journal.ids()
+            let pendingItems = ids.compactMap { try? journal.read($0) }.filter { !$0.finished }
             let pending = Set(ids.filter { (try? journal.read($0).finished) != true })
-            await MainActor.run { CloudUploadProgress.shared.preparePending(pending) }
+            let destinations = Dictionary(uniqueKeysWithValues: pendingItems.map { ($0.id, $0.plan.deliveries) })
+            await MainActor.run {
+                CloudUploadProgress.shared.preparePending(pending)
+                CloudUploadProgress.shared.prepareDestinations(destinations)
+            }
             for id in ids {
                 do {
                     var item = try journal.read(id)
@@ -79,15 +84,23 @@ actor CloudArchiveDelivery {
         var completedBytes = 0.0
         for delivery in item.plan.deliveries {
             let base = completedBytes
+            let destination = delivery.destination
             let originalProgress: @Sendable (Double) -> Void = { value in
                 let fraction = (base + value * originalBytes) / totalBytes
-                Task { @MainActor in CloudUploadProgress.shared.set(captureID, fraction: fraction) }
+                let destinationFraction = value * originalBytes / max(1, bytesPerDestination)
+                Task { @MainActor in
+                    CloudUploadProgress.shared.set(captureID, fraction: fraction)
+                    CloudUploadProgress.shared.setDestination(captureID, destination: destination, fraction: destinationFraction)
+                }
             }
             let stampedProgress: @Sendable (Double) -> Void = { value in
                 let fraction = (base + originalBytes + value * stampedBytes) / totalBytes
-                Task { @MainActor in CloudUploadProgress.shared.set(captureID, fraction: fraction) }
+                let destinationFraction = (originalBytes + value * stampedBytes) / max(1, bytesPerDestination)
+                Task { @MainActor in
+                    CloudUploadProgress.shared.set(captureID, fraction: fraction)
+                    CloudUploadProgress.shared.setDestination(captureID, destination: destination, fraction: destinationFraction)
+                }
             }
-            let destination = delivery.destination
             let originalName = item.remoteName(stamped: false, destination: destination)
             let stampedName = item.remoteName(stamped: true, destination: destination)
             do {
@@ -95,6 +108,9 @@ actor CloudArchiveDelivery {
                 if delivery.phase == .verified, item.plan.keepLocal {
                     completedBytes += bytesPerDestination
                     continue
+                }
+                if delivery.phase != .verified {
+                    await MainActor.run { CloudUploadProgress.shared.startDestination(captureID, destination: destination) }
                 }
                 let token = try await CloudArchiveAccounts.shared.accessToken(for: destination)
                 switch destination.provider {
@@ -149,8 +165,14 @@ actor CloudArchiveDelivery {
                         changedDestinations.insert(destination)
                     }
                 }
+                await MainActor.run { CloudUploadProgress.shared.finishDestination(captureID, destination: destination) }
                 completedBytes += bytesPerDestination
-            } catch { failures.append(error) }
+            } catch {
+                if delivery.phase != .verified {
+                    await MainActor.run { CloudUploadProgress.shared.stopDestination(captureID, destination: destination) }
+                }
+                failures.append(error)
+            }
         }
         if !failures.isEmpty {
             if failures.allSatisfy({ ($0 as? URLError)?.code == .notConnectedToInternet }) {

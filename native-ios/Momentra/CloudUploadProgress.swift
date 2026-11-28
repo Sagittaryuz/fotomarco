@@ -4,6 +4,92 @@ import SwiftUI
 final class CloudUploadProgress: ObservableObject {
     static let shared = CloudUploadProgress()
     @Published private(set) var values: [UUID: Double] = [:]
+    struct DestinationState: Equatable {
+        let id: String
+        let origin: GalleryOrigin
+        let label: String
+        var fraction: Double
+    }
+    @Published private(set) var destinations: [UUID: [String: DestinationState]] = [:]
+    private var personalDestinationIDs: [UUID: Set<String>] = [:]
+    private var activeDestinations: [UUID: Set<String>] = [:]
+    private var businessDestinationIDs: [UUID: Set<String>] = [:]
+
+    func prepareDestinations(_ entries: [UUID: [CloudDeliveryPlan.Delivery]]) {
+        var next: [UUID: Set<String>] = [:]
+        for (captureID, deliveries) in entries {
+            for delivery in deliveries {
+                let destination = delivery.destination
+                let origin: GalleryOrigin = destination.provider == .googleDrive ? .google : .oneDrive
+                let key = origin.rawValue + "/" + destination.accountHash
+                next[captureID, default: []].insert(key)
+                if destinations[captureID]?[key] == nil {
+                    destinations[captureID, default: [:]][key] = .init(id: key, origin: origin,
+                        label: origin.title, fraction: delivery.phase == .verified ? 1 : 0)
+                }
+                if delivery.phase == .verified { destinations[captureID]?[key]?.fraction = 1 }
+            }
+        }
+        for (captureID, keys) in personalDestinationIDs {
+            for key in keys.subtracting(next[captureID] ?? []) { destinations[captureID]?.removeValue(forKey: key) }
+            if destinations[captureID]?.isEmpty == true { destinations.removeValue(forKey: captureID) }
+        }
+        personalDestinationIDs = next
+    }
+
+    func setDestination(_ id: UUID, destination: CloudDeliveryPlan.Destination, fraction: Double) {
+        guard fraction.isFinite else { return }
+        let origin: GalleryOrigin = destination.provider == .googleDrive ? .google : .oneDrive
+        let key = origin.rawValue + "/" + destination.accountHash
+        guard activeDestinations[id]?.contains(key) == true, let old = destinations[id]?[key], old.fraction < 1 else { return }
+        let value = floor(min(0.99, max(0, fraction)) * 100) / 100
+        if old.fraction != value { destinations[id]?[key]?.fraction = value }
+    }
+
+    func finishDestination(_ id: UUID, destination: CloudDeliveryPlan.Destination) {
+        let origin: GalleryOrigin = destination.provider == .googleDrive ? .google : .oneDrive
+        let key = origin.rawValue + "/" + destination.accountHash
+        activeDestinations[id]?.remove(key)
+        if destinations[id]?[key] != nil { destinations[id]?[key]?.fraction = 1 }
+    }
+
+    func startDestination(_ id: UUID, destination: CloudDeliveryPlan.Destination) {
+        let origin: GalleryOrigin = destination.provider == .googleDrive ? .google : .oneDrive
+        let key = origin.rawValue + "/" + destination.accountHash
+        guard destinations[id]?[key] != nil else { return }
+        activeDestinations[id, default: []].insert(key)
+        destinations[id]?[key]?.fraction = 0
+    }
+
+    func stopDestination(_ id: UUID, destination: CloudDeliveryPlan.Destination) {
+        let origin: GalleryOrigin = destination.provider == .googleDrive ? .google : .oneDrive
+        let key = origin.rawValue + "/" + destination.accountHash
+        activeDestinations[id]?.remove(key)
+        if destinations[id]?[key] != nil { destinations[id]?[key]?.fraction = 0 }
+    }
+
+    func prepareBusinessDestinations(_ captures: [BusinessArchiveJournal.Capture]) {
+        var next: [UUID: Set<String>] = [:]
+        for capture in captures {
+            let key = "business/" + capture.organizationID.uuidString
+            next[capture.id, default: []].insert(key)
+            if destinations[capture.id]?[key] == nil {
+                destinations[capture.id, default: [:]][key] = .init(id: key, origin: .oneDrive,
+                    label: "OneDrive · organização", fraction: 0)
+            }
+        }
+        for (id, keys) in businessDestinationIDs {
+            for key in keys.subtracting(next[id] ?? []) { destinations[id]?.removeValue(forKey: key) }
+            if destinations[id]?.isEmpty == true { destinations.removeValue(forKey: id) }
+        }
+        businessDestinationIDs = next
+    }
+
+    func setBusinessDestination(_ capture: BusinessArchiveJournal.Capture, fraction: Double, verified: Bool = false) {
+        let key = "business/" + capture.organizationID.uuidString
+        guard fraction.isFinite, destinations[capture.id]?[key] != nil else { return }
+        destinations[capture.id]?[key]?.fraction = verified ? 1 : floor(min(0.99, max(0, fraction)) * 100) / 100
+    }
     private var active = Set<UUID>()
     private var pendingPersonal = Set<UUID>()
     private var pendingBusiness = Set<UUID>()
