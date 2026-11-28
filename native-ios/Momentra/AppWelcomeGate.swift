@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.79"
+    static let version = "0.1.80"
     static let items = [
-        "Pressão mais rápida e vibração mais forte ao selecionar fotos na galeria."
+        "Ativação automática de perfis por locais e raios configuráveis."
     ]
 
     static func items(for version: String) -> [String] {

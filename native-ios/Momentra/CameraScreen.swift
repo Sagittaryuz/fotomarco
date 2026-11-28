@@ -99,6 +99,8 @@ struct CameraScreen: View {
     @StateObject private var updates = UpdateService()
     @StateObject private var directUpdate = DirectUpdateAccess.shared
     @StateObject private var stampProfiles = StampProfilesStore()
+    @ObservedObject private var profileLocations = ProfileLocationRules.shared
+    @State private var locationProfile: StampProfile?
     @ObservedObject private var businessIdentity = BusinessIdentity.shared
     @State private var settingsOrganizations: [BusinessAPIClient.OrganizationSummary]?
     @AppStorage("native.camera.photoStyle") private var photoStyle = MomentraPhotoStyle.natural.rawValue
@@ -617,7 +619,7 @@ struct CameraScreen: View {
                         Menu {
                             Picker("Perfil", selection: Binding(
                                 get: { stampProfiles.selectedID },
-                                set: { stampProfiles.select($0) }
+                                set: { profileLocations.manualSelection(); stampProfiles.select($0) }
                             )) {
                                 Section("Espaço pessoal") {
                                     ForEach(stampProfiles.profiles) { item in
@@ -633,6 +635,9 @@ struct CameraScreen: View {
                                 }
                             }
                             .pickerStyle(.inline)
+                            Button { FotomarcoHaptics.play(.buttons); locationProfile = stampProfiles.selected } label: {
+                                Label("Ativação por localização", systemImage: "location.circle")
+                            }
                         } label: {
                             ProfileLayoutIcon()
                                 .frame(width: 29, height: 29)
@@ -919,7 +924,7 @@ struct CameraScreen: View {
                 addressPreviewMigrated = true
             }
             refreshGalleryThumbnail()
-            location.setEnabled(gpsEnabled)
+            location.setEnabled(gpsEnabled || profileLocations.hasEnabledAreas(for: Set(stampProfiles.availableProfiles.map(\.id))))
             pressure.setEnabled(wantsPressure)
             refreshLogo()
             refreshAddress()
@@ -939,7 +944,7 @@ struct CameraScreen: View {
                     didEnterBackground = false
                     returnToCamera()
                 }
-                camera.start(); location.setEnabled(gpsEnabled); refreshAddress(); retryCloudCaptures()
+                camera.start(); location.setEnabled(gpsEnabled || profileLocations.hasEnabledAreas(for: Set(stampProfiles.availableProfiles.map(\.id)))); refreshAddress(); retryCloudCaptures()
             } else {
                 if phase == .background {
                     didEnterBackground = true
@@ -962,6 +967,11 @@ struct CameraScreen: View {
         .onReceive(location.$location) { fix in
             addressPreview.update(location: fix, enabled: canPreviewAddress)
             if canConsultForecast { weather.refresh(location: fix) }
+            if scenePhase == .active && !showSettings && stampEditorSection == nil && locationProfile == nil &&
+                !camera.isCapturing && !camera.isRecording && !camera.isFinishingRecording && countdown == 0,
+               let selected = profileLocations.selection(for: fix, available: Set(stampProfiles.availableProfiles.map(\.id)), current: stampProfiles.selectedID) {
+                stampProfiles.select(selected)
+            }
         }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             if canPreviewAddress { refreshAddress() }
@@ -1003,7 +1013,13 @@ struct CameraScreen: View {
             camera.setRecognition(qr: demand.qr, text: demand.text)
         }
         .onChange(of: wantsPressure) { _, enabled in pressure.setEnabled(enabled) }
-        .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled); refreshAddress() }
+        .onChange(of: gpsEnabled) { _, enabled in location.setEnabled(enabled || profileLocations.hasEnabledAreas(for: Set(stampProfiles.availableProfiles.map(\.id)))); refreshAddress() }
+        .onChange(of: profileLocations.areas) { _, _ in
+            if scenePhase == .active { location.setEnabled(gpsEnabled || profileLocations.hasEnabledAreas(for: Set(stampProfiles.availableProfiles.map(\.id)))) }
+        }
+        .onChange(of: stampProfiles.organizationProfiles) { _, _ in
+            if scenePhase == .active { location.setEnabled(gpsEnabled || profileLocations.hasEnabledAreas(for: Set(stampProfiles.availableProfiles.map(\.id)))) }
+        }
         .onChange(of: stampProfiles.selected.layout.showsAddress) { _, _ in refreshAddress() }
         .onChange(of: stampEnabled) { _, _ in refreshAddress() }
         .onChange(of: mode) { _, _ in
@@ -1090,6 +1106,9 @@ struct CameraScreen: View {
             Task { await BusinessProfileSync.refresh(into: stampProfiles, identity: businessIdentity) }
         }
         .sheet(item: $selectedRecognizedText) { item in RecognizedTextSheet(text: item.text) }
+        .sheet(item: $locationProfile) { profile in
+            NavigationStack { ProfileLocationSettingsView(profile: profile, profiles: stampProfiles.availableProfiles, currentLocation: location.location, rules: profileLocations) }
+        }
         .fullScreenCover(isPresented: $showOriginals) { OriginalsView(stampProfiles: stampProfiles) }
         .overlay { if let cameraShareProgress { GalleryShareProgressOverlay(progress: cameraShareProgress) } }
         .sheet(item: $cameraShare) { batch in

@@ -21,6 +21,7 @@ struct StampLayoutEditor: View {
     @State private var editNote = false
     @State private var draftName = ""
     @State private var draftNote = ""
+    @State private var locationProfile: StampProfile?
     @State private var editingElement: Element
     enum Element: String, CaseIterable, Identifiable {
         case combined = "Carimbo", map = "Mapa", information = "Informações", logo = "Logotipo", locationQR = "QR Code"
@@ -152,6 +153,9 @@ struct StampLayoutEditor: View {
                     }
                     Divider()
                     Button("Renomear perfil") { FotomarcoHaptics.play(.editor); draftName = store.selected.name; renameProfile = true }
+                    if originalStore.availableProfiles.contains(where: { $0.id == store.selectedID }) {
+                        Button("Ativação por localização") { FotomarcoHaptics.play(.editor); locationProfile = store.selected }
+                    }
                     if store.profiles.count > 1 { Button("Apagar perfil", role: .destructive) { FotomarcoHaptics.play(.editor); confirmRemove = true } }
                 } label: {
                     Label(store.selected.name.isEmpty ? "Sem nome" : store.selected.name, systemImage: "square.on.square")
@@ -360,6 +364,9 @@ struct StampLayoutEditor: View {
 
     var body: some View {
         editorWithToolbar
+        .sheet(item: $locationProfile) { profile in
+            NavigationStack { ProfileLocationSettingsView(profile: profile, profiles: originalStore.availableProfiles, currentLocation: nil) }
+        }
         .alert("Photomark", isPresented: importAlertPresented) {
             Button("OK", role: .cancel) { FotomarcoHaptics.play(.editor); importMessage = nil }
         } message: { Text(importMessage ?? "") }
