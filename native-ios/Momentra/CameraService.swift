@@ -311,6 +311,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     // controls the device directly; the callback only synchronizes our zoom UI.
     private func configureCameraControl(for device: AVCaptureDevice) {
         guard #available(iOS 18.0, *), session.supportsControls else { return }
+        session.setControlsDelegate(self, queue: queue)
         for control in session.controls { session.removeControl(control) }
         let wideFactor = zoomScale(for: device).wideFactor
         let zoom = AVCaptureSystemZoomSlider(device: device) { [weak self, weak device] factor in
@@ -718,6 +719,14 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             }
         }
     }
+}
+
+@available(iOS 18.0, *)
+extension CameraService: AVCaptureSessionControlsDelegate {
+    func sessionControlsDidBecomeActive(_ session: AVCaptureSession) {}
+    func sessionControlsWillEnterFullscreenAppearance(_ session: AVCaptureSession) {}
+    func sessionControlsWillExitFullscreenAppearance(_ session: AVCaptureSession) {}
+    func sessionControlsDidBecomeInactive(_ session: AVCaptureSession) {}
 }
 
 extension Notification.Name { static let momentraCloudCaptureStaged = Notification.Name("MomentraCloudCaptureStaged") }

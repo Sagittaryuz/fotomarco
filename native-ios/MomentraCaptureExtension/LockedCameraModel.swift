@@ -52,6 +52,7 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
                 self.session.addInput(input)
                 self.session.addOutput(self.output)
                 if #available(iOS 18.0, *), self.session.supportsControls {
+                    self.session.setControlsDelegate(self, queue: self.queue)
                     let zoom = AVCaptureSystemZoomSlider(device: device)
                     if self.session.canAddControl(zoom) { self.session.addControl(zoom) }
                 }
@@ -208,4 +209,12 @@ final class LockedCameraModel: NSObject, ObservableObject, AVCapturePhotoCapture
             if !success { DispatchQueue.main.async { self.error = "A foto está em Capturas, mas não foi possível salvá-la no Fotos." } }
         }
     }
+}
+
+@available(iOS 18.0, *)
+extension LockedCameraModel: AVCaptureSessionControlsDelegate {
+    func sessionControlsDidBecomeActive(_ session: AVCaptureSession) {}
+    func sessionControlsWillEnterFullscreenAppearance(_ session: AVCaptureSession) {}
+    func sessionControlsWillExitFullscreenAppearance(_ session: AVCaptureSession) {}
+    func sessionControlsDidBecomeInactive(_ session: AVCaptureSession) {}
 }
