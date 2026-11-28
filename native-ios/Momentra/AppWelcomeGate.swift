@@ -3,10 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.77"
+    static let version = "0.1.78"
     static let items = [
-        "Envios à nuvem aparecem nos símbolos de armazenamento, sem escurecer as fotos.",
-        "O armazenamento no iPhone usa o símbolo do Fotos."
+        "Segure uma foto para selecionar e continue pressionando para compartilhar a seleção."
     ]
 
     static func items(for version: String) -> [String] {

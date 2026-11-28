@@ -73,7 +73,7 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         pinch.delegate = context.coordinator
         view.addGestureRecognizer(pinch)
         let hold = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.preview(_:)))
-        hold.minimumPressDuration = 0.46
+        hold.minimumPressDuration = 1.0
         hold.numberOfTouchesRequired = 1
         hold.delegate = context.coordinator
         view.addGestureRecognizer(hold)
@@ -126,6 +126,9 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         private var dragAdds = true
         private var lastPoint: CGPoint?
         private var timer: CADisplayLink?
+        private var shareHold: DispatchWorkItem?
+        private var holdPoint: CGPoint?
+        private var holdDragging = false
         private var positions: [Item.ID: IndexPath] = [:]
         private var orderedPaths: [IndexPath] = []
         private var orderedIDs: [Item.ID] = []
@@ -214,9 +217,16 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             cell.contentConfiguration = UIHostingConfiguration { parent.tile(item) }.margins(.all, 0)
             cell.selectionMode = parent.selecting
             cell.showSelected(parent.selected.contains(item.id))
-            if !parent.selecting, let longPress = parent.longPress {
+            if parent.longPress != nil {
                 cell.accessibilityCustomActions = [
-                    UIAccessibilityCustomAction(name: "Compartilhar foto") { _ in longPress(item); return true }
+                    UIAccessibilityCustomAction(name: "Selecionar foto") { [weak self] _ in
+                        self?.parent.selecting = true; self?.parent.selected.insert(item.id)
+                        self?.synchronizeSelection(); return true
+                    },
+                    UIAccessibilityCustomAction(name: "Compartilhar seleção") { [weak self] _ in
+                        guard let self, self.parent.selected.contains(item.id) else { return false }
+                        self.parent.longPress?(item); return true
+                    }
                 ]
             } else {
                 cell.accessibilityCustomActions = nil
@@ -274,10 +284,16 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
                 if let path = collection.indexPath(for: cell) {
                     let item = parent.groups[path.section].items[path.item]
                     cell.showSelected(parent.selected.contains(item.id))
-                    if parent.selecting { cell.accessibilityCustomActions = nil }
-                    else if let longPress = parent.longPress {
+                    if parent.longPress != nil {
                         cell.accessibilityCustomActions = [
-                            UIAccessibilityCustomAction(name: "Compartilhar foto") { _ in longPress(item); return true }
+                            UIAccessibilityCustomAction(name: "Selecionar foto") { [weak self] _ in
+                                self?.parent.selecting = true; self?.parent.selected.insert(item.id)
+                                self?.synchronizeSelection(); return true
+                            },
+                            UIAccessibilityCustomAction(name: "Compartilhar seleção") { [weak self] _ in
+                                guard let self, self.parent.selected.contains(item.id) else { return false }
+                                self.parent.longPress?(item); return true
+                            }
                         ]
                     }
                 }
@@ -314,25 +330,40 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
         @objc func preview(_ gesture: UILongPressGestureRecognizer) {
             guard let collection else { return }
             let point = gesture.location(in: collection)
-            if !parent.selecting {
-                guard gesture.state == .began, let path = collection.indexPathForItem(at: point) else { return }
-                parent.longPress?(parent.groups[path.section].items[path.item])
-                return
-            }
             switch gesture.state {
             case .began:
                 guard let path = collection.indexPathForItem(at: point) else { return }
-                dragOrigin = path; dragInitial = parent.selected
-                dragAdds = !dragInitial.contains(parent.groups[path.section].items[path.item].id)
+                let item = parent.groups[path.section].items[path.item]
+                let wasSelecting = parent.selecting
+                dragInitial = parent.selected
+                dragAdds = !dragInitial.contains(item.id)
+                if !wasSelecting { parent.selecting = true; parent.selected.insert(item.id) }
+                else if dragAdds { parent.selected.insert(item.id) }
+                synchronizeSelection()
+                dragOrigin = path; holdPoint = point; holdDragging = false
                 lastPoint = point
                 FotomarcoHaptics.play(.gallery)
-                let displayLink = CADisplayLink(target: self, selector: #selector(autoScroll))
-                displayLink.add(to: .main, forMode: .common); timer = displayLink
-                applyRange(to: path)
+                if parent.longPress != nil {
+                    let work = DispatchWorkItem { [weak self] in
+                        guard let self, self.parent.selecting, self.parent.selected.contains(item.id), !self.holdDragging else { return }
+                        self.parent.longPress?(item)
+                    }
+                    shareHold = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
+                }
             case .changed:
                 lastPoint = point
-                if let path = collection.indexPathForItem(at: point) { applyRange(to: path) }
+                if let start = holdPoint, hypot(point.x - start.x, point.y - start.y) > 12 {
+                    shareHold?.cancel(); shareHold = nil
+                    if !holdDragging {
+                        holdDragging = true
+                        let displayLink = CADisplayLink(target: self, selector: #selector(autoScroll))
+                        displayLink.add(to: .main, forMode: .common); timer = displayLink
+                    }
+                }
+                if holdDragging, let path = collection.indexPathForItem(at: point) { applyRange(to: path) }
             default:
+                shareHold?.cancel(); shareHold = nil; holdPoint = nil
                 timer?.invalidate(); timer = nil; dragOrigin = nil; lastPoint = nil
             }
         }
@@ -356,8 +387,8 @@ struct GalleryGrid<Item: Identifiable, Tile: View>: UIViewRepresentable where It
             lastPoint = CGPoint(x: point.x, y: point.y + delta)
             if let next = lastPoint, let path = collection.indexPathForItem(at: next) { applyRange(to: path) }
         }
-        func stopAutoScroll() { timer?.invalidate(); timer = nil; dragOrigin = nil; lastPoint = nil }
-        deinit { timer?.invalidate() }
+        func stopAutoScroll() { shareHold?.cancel(); shareHold = nil; timer?.invalidate(); timer = nil; dragOrigin = nil; lastPoint = nil }
+        deinit { shareHold?.cancel(); timer?.invalidate() }
     }
 }
 

@@ -147,7 +147,7 @@ struct OriginalsView: View {
                     GalleryGrid(groups: projection.sections, selecting: $selecting, selected: $selected, columns: $columns,
                                 contentVersion: projectionVersion, newestScrollRequest: scrollRequest,
                                 bottomInset: galleryFooterHeight,
-                                tile: tile, open: open, longPress: tab == .trash ? nil : { shareItems([$0]) },
+                                tile: tile, open: open, longPress: { _ in shareSelection(items) },
                                 reachedEnd: tab == .captures && !archive.accounts.isEmpty ? refreshFromEnd : nil,
                                 dragToCamera: { distance, ended in trackSwipe(distance, toward: .right, ended: ended) },
                                 userStartedScrolling: { openedAtNewest = false })
