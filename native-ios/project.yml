@@ -17,8 +17,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    MARKETING_VERSION: '0.1.74'
-    CURRENT_PROJECT_VERSION: '96'
+    MARKETING_VERSION: '0.1.75'
+    CURRENT_PROJECT_VERSION: '97'
 targets:
   Momentra:
     type: application

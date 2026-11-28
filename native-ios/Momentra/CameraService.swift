@@ -130,6 +130,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             session.addOutput(recognitionOutput)
         } else { recognition.setUnavailable() }
         input = candidate
+        configureCameraControl(for: device)
         configured = true
         DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.videoAvailable = supportsVideo; self.activeDevice = device }
         resetZoom(for: device)
@@ -245,6 +246,7 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 self.session.addInput(replacement)
                 self.input = replacement
                 self.configureLowLight(for: device)
+                self.configureCameraControl(for: device)
                 self.session.commitConfiguration()
                 DispatchQueue.main.async { self.hasFlash = device.hasFlash; self.activeDevice = device }
                 self.resetZoom(for: device)
@@ -303,6 +305,19 @@ final class CameraService: NSObject, ObservableObject, AVCapturePhotoCaptureDele
             wideFactor = 1
         }
         return ZoomScale(wideFactor: wideFactor, minimum: device.minAvailableVideoZoomFactor, maximum: device.maxAvailableVideoZoomFactor)
+    }
+
+    // Called on the session queue inside a configuration transaction. The system
+    // controls the device directly; the callback only synchronizes our zoom UI.
+    private func configureCameraControl(for device: AVCaptureDevice) {
+        guard #available(iOS 18.0, *), session.supportsControls else { return }
+        for control in session.controls { session.removeControl(control) }
+        let wideFactor = zoomScale(for: device).wideFactor
+        let zoom = AVCaptureSystemZoomSlider(device: device) { [weak self, weak device] factor in
+            guard let self, let device, self.activeDevice === device else { return }
+            self.zoomFactor = factor / wideFactor
+        }
+        if session.canAddControl(zoom) { session.addControl(zoom) }
     }
 
     private func resetZoom(for device: AVCaptureDevice) {

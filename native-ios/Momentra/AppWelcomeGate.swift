@@ -3,9 +3,9 @@ import GoogleSignIn
 import AVFoundation
 
 enum ReleaseNews {
-    static let version = "0.1.74"
+    static let version = "0.1.75"
     static let items = [
-        "Ajustada a configuração da câmera para integração com o Controle da Câmera."
+        "Ajuste o zoom deslizando no Controle da Câmera."
     ]
 
     static func items(for version: String) -> [String] {
